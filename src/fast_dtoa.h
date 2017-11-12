@@ -791,18 +791,23 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, Fp 
 #endif
 
     // We now have
+    //  (B = buffer, L = length = k - n)
     //
     //      10^(k-1) <= p1 < 10^k
     //
     //      p1 = (p1 div 10^(k-1)) * 10^(k-1) + (p1 mod 10^(k-1))
-    //         = (d[k-1]         ) * 10^(k-1) + (p1 mod 10^(k-1))
+    //         = (B[0]           ) * 10^(k-1) + (p1 mod 10^(k-1))
     //
     //      w+ = p1 + p2 * 2^e
-    //         = d[k-1] * 10^(k-1) + (p1 mod 10^(k-1)) + p2 * 2^e
-    //         = d[k-1] * 10^(k-1) + ((p1 mod 10^(k-1)) * 2^-e + p2) * 2^e
-    //         = d[k-1] * 10^(k-1) + (                         rest) * 2^e
+    //         = B[0] * 10^(k-1) + (p1 mod 10^(k-1)) + p2 * 2^e
+    //         = B[0] * 10^(k-1) + ((p1 mod 10^(k-1)) * 2^-e + p2) * 2^e
+    //         = B[0] * 10^(k-1) + (                         rest) * 2^e
     //
-    // and generate the digits d of p1 from left to right.
+    // and generate the digits d of p1 from left to right:
+    //
+    //      p1 = (B[0]B[1]...B[L  -1]B[L]B[L+1] ...B[k-2]B[k-1])_10
+    //         = (B[0]B[1]...B[L  -1])_10 * 10^(k-L) + (B[L    ]...B[k-2]B[k-1])_10  (L = 1...k)
+    //         = (B[0]B[1]...B[k-n-1])_10 * 10^(n  ) + (B[k-n  ]...B[k-2]B[k-1])_10  (n = k...1)
 
     int n = k;
     while (n > 0)
@@ -821,16 +826,16 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, Fp 
         uint32_t pow10;
 
         switch (n) {
-        case 10: d = p1 / 1000000000; r = p1 % 1000000000; pow10 =  1000000000; break;
-        case  9: d = p1 /  100000000; r = p1 %  100000000; pow10 =   100000000; break;
-        case  8: d = p1 /   10000000; r = p1 %   10000000; pow10 =    10000000; break;
-        case  7: d = p1 /    1000000; r = p1 %    1000000; pow10 =     1000000; break;
-        case  6: d = p1 /     100000; r = p1 %     100000; pow10 =      100000; break;
-        case  5: d = p1 /      10000; r = p1 %      10000; pow10 =       10000; break;
-        case  4: d = p1 /       1000; r = p1 %       1000; pow10 =        1000; break;
-        case  3: d = p1 /        100; r = p1 %        100; pow10 =         100; break;
-        case  2: d = p1 /         10; r = p1 %         10; pow10 =          10; break;
-        case  1: d = p1 /          1; r = p1 %          1; pow10 =           1; break;
+        case 10: d = p1 / 1000000000; r = p1 % 1000000000; pow10 = 1000000000; break;
+        case  9: d = p1 /  100000000; r = p1 %  100000000; pow10 =  100000000; break;
+        case  8: d = p1 /   10000000; r = p1 %   10000000; pow10 =   10000000; break;
+        case  7: d = p1 /    1000000; r = p1 %    1000000; pow10 =    1000000; break;
+        case  6: d = p1 /     100000; r = p1 %     100000; pow10 =     100000; break;
+        case  5: d = p1 /      10000; r = p1 %      10000; pow10 =      10000; break;
+        case  4: d = p1 /       1000; r = p1 %       1000; pow10 =       1000; break;
+        case  3: d = p1 /        100; r = p1 %        100; pow10 =        100; break;
+        case  2: d = p1 /         10; r = p1 %         10; pow10 =         10; break;
+        case  1: d = p1 /          1; r = p1 %          1; pow10 =          1; break;
         default:
             FAST_DTOA_UNREACHABLE();
             break;
@@ -840,8 +845,8 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, Fp 
         uint32_t const r = p1 % pow10;  // r = p1 mod 10^(n-1)
 #endif
 
-        // w+ = buffer * 10^n + ((p1        ) + p2 * 2^e)
-        //    = buffer * 10^n + ((d * 10 + r) + p2 * 2^e)
+        // w+ = buffer * 10^n + ((p1              ) + p2 * 2^e)
+        //    = buffer * 10^n + ((d * 10^(n-1) + r) + p2 * 2^e)
         //    = (buffer * 10 + d) * 10^(n-1) + (r + p2 * 2^e)
 
         assert(d <= 9);
