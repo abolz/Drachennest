@@ -82,7 +82,7 @@ struct IEEEFloat
     static constexpr int  const kExponentBias    = Traits::Bias;
     static constexpr Uint const kHiddenBit       = Uint{1} << Traits::P;
     static constexpr Uint const kSignMask        = Uint{1} << (Traits::N - 1);
-    static constexpr Uint const kExponentMask    = Uint{(1 << Traits::E) - 1} << Traits::P;
+    static constexpr Uint const kExponentMask    = (Uint{(1 << Traits::E) - 1}) << Traits::P;
     static constexpr Uint const kSignificandMask = kHiddenBit - 1;
 
     union { // XXX: memcpy?
