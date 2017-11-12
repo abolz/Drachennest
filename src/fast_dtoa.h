@@ -1,8 +1,7 @@
 // Implements the Grisu2 algorithm for binary to decimal floating-point
 // conversion.
-// The implementation is based on the reference implementation and google's
-// double-conversion library. The original licences can be found at the end of
-// this file.
+// The implementation is based on the reference implementation. The original
+// licence can be found at the end of this file.
 //
 // References:
 //
@@ -542,15 +541,8 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
     // NB:
     // Actually this function returns c, such that -60 <= e_c + e + 64 <= -34.
 
-    // This table is from the double-conversion library.
     static constexpr CachedPower const kCachedPowers[] = {
-//      { 0xFA8FD5A0081C0288, -1220, -348 }, // unused
-//      { 0xBAAEE17FA23EBF76, -1193, -340 }, // unused
-//      { 0x8B16FB203055AC76, -1166, -332 }, // unused
-//      { 0xCF42894A5DCE35EA, -1140, -324 }, // unused
-//      { 0x9A6BB0AA55653B2D, -1113, -316 }, // unused
-//      { 0xE61ACF033D1A45DF, -1087, -308 }, // unused
-        { 0xAB70FE17C79AC6CA, -1060, -300 },
+        { 0xAB70FE17C79AC6CA, -1060, -300 }, // -1060 + 960 + 64 = -36
         { 0xFF77B1FCBEBCDC4F, -1034, -292 },
         { 0xBE5691EF416BD60C, -1007, -284 },
         { 0x8DD01FAD907FFC3C,  -980, -276 },
@@ -583,7 +575,7 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
         { 0xCDB02555653131B6,  -263,  -60 },
         { 0x993FE2C6D07B7FAC,  -236,  -52 },
         { 0xE45C10C42A2B3B06,  -210,  -44 },
-        { 0xAA242499697392D3,  -183,  -36 }, // single -->
+        { 0xAA242499697392D3,  -183,  -36 }, // -183 + 80 + 64 = -39
         { 0xFD87B5F28300CA0E,  -157,  -28 }, //
         { 0xBCE5086492111AEB,  -130,  -20 }, //
         { 0x8CBCCC096F5088CC,  -103,  -12 }, //
@@ -593,7 +585,7 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
         { 0xAD78EBC5AC620000,     3,   20 }, //
         { 0x813F3978F8940984,    30,   28 }, //
         { 0xC097CE7BC90715B3,    56,   36 }, //
-        { 0x8F7E32CE7BEA5C70,    83,   44 }, // <-- single
+        { 0x8F7E32CE7BEA5C70,    83,   44 }, // 83 - 196 + 64 = -49
         { 0xD5D238A4ABE98068,   109,   52 },
         { 0x9F4F2726179A2245,   136,   60 },
         { 0xED63A231D4C4FB27,   162,   68 },
@@ -628,28 +620,24 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
         { 0xBF21E44003ACDD2D,   933,  300 },
         { 0x8E679C2F5E44FF8F,   960,  308 },
         { 0xD433179D9C8CB841,   986,  316 },
-        { 0x9E19DB92B4E31BA9,  1013,  324 },
-//      { 0xEB96BF6EBADF77D9,  1039,  332 }, // unused (1013 + 28 = 1041)
-//      { 0xAF87023B9BF0EE6B,  1066,  340 }, // unused
+        { 0x9E19DB92B4E31BA9,  1013,  324 }, // 1013 - 1137 + 64 = -60
     };
 
     constexpr int const kCachedPowersSize = 79;
-    constexpr int const kCachedPowersMinDecExp = -348;
+    constexpr int const kCachedPowersMinDecExp = -300;
 
-#if 0
-    auto const k = std::ceil((kAlpha - e - 1) * 0.30102999566398114);
-#else
-    // This computation gives exactly the same results for k as the computation
-    // above for |e| <= 1500, but doesn't require floating-point operations.
+    // This computation gives exactly the same results for k as
+    //
+    //      k = ceil((kAlpha - e - 1) * 0.30102999566398114)
+    //
+    // for |e| <= 1500, but doesn't require floating-point operations.
     // NB: log_10(2) ~= 78913 / 2^18
     assert(e >= -1500);
     assert(e <=  1500);
     auto const f = kAlpha - e - 1;
     auto const k = (f * 78913) / (1 << 18) + (f > 0);
-#endif
 
-    auto index = (-kCachedPowersMinDecExp + k - 1) / 8 + 1;
-    index -= 6; // because the first six entries have been removed from the table
+    auto index = (-kCachedPowersMinDecExp + k + (8 - 1)) / 8;
     assert(index >= 0);
     assert(index < kCachedPowersSize);
     static_cast<void>(kCachedPowersSize); // Fix warning.
@@ -657,6 +645,7 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
     auto const cached = kCachedPowers[index];
     assert(kAlpha <= cached.e + e + 64);
     assert(kGamma >= cached.e + e + 64);
+    assert(cached.e + e + 64 <= -34);
 
     // XXX:
     // cached.k = kCachedPowersMinDecExp + 8*(index + 6)
@@ -1423,32 +1412,3 @@ inline char* ToString(char* next, char* last, Float value)
 //   WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 //   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 //   OTHER DEALINGS IN THE SOFTWARE.
-
-// https://github.com/google/double-conversion
-//
-// Copyright 2006-2011, the V8 project authors. All rights reserved.
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions are
-// met:
-//
-//     * Redistributions of source code must retain the above copyright
-//       notice, this list of conditions and the following disclaimer.
-//     * Redistributions in binary form must reproduce the above
-//       copyright notice, this list of conditions and the following
-//       disclaimer in the documentation and/or other materials provided
-//       with the distribution.
-//     * Neither the name of Google Inc. nor the names of its
-//       contributors may be used to endorse or promote products derived
-//       from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-// "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-// LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-// A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-// OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-// LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-// DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-// THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
