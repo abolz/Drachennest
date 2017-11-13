@@ -44,7 +44,7 @@ workspace "Grisu"
 
     configuration { "gmake" }
         buildoptions {
-            "-std=c++14",
+            "-std=c++11",
             "-march=native",
             "-Wformat",
             -- "-Wsign-compare",

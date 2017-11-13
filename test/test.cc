@@ -81,7 +81,7 @@ static float MakeSingle(uint32_t sign_bit, uint32_t biased_exponent, uint32_t si
 {
     assert(sign_bit == 0 || sign_bit == 1);
     assert(biased_exponent <= 0xFF);
-    assert(significand <= 0x007F'FFFF);
+    assert(significand <= 0x007FFFFF);
 
     uint32_t bits = 0;
 
@@ -96,8 +96,8 @@ static float MakeSingle(uint32_t sign_bit, uint32_t biased_exponent, uint32_t si
 #if 1
 static float MakeSingle(uint64_t f, int e)
 {
-    constexpr uint64_t kHiddenBit = 0x0080'0000;
-    constexpr uint64_t kSignificandMask = 0x007F'FFFF;
+    constexpr uint64_t kHiddenBit = 0x00800000;
+    constexpr uint64_t kSignificandMask = 0x007FFFFF;
     constexpr int kPhysicalSignificandSize = 23;  // Excludes the hidden bit.
     // constexpr int kSignificandSize = 24;
     constexpr int kExponentBias = 0x7F + kPhysicalSignificandSize;
@@ -138,7 +138,7 @@ static double MakeDouble(uint64_t sign_bit, uint64_t biased_exponent, uint64_t s
 {
     assert(sign_bit == 0 || sign_bit == 1);
     assert(biased_exponent <= 0x7FF);
-    assert(significand <= 0x000F'FFFF'FFFF'FFFF);
+    assert(significand <= 0x000FFFFFFFFFFFFF);
 
     uint64_t bits = 0;
 
@@ -153,8 +153,8 @@ static double MakeDouble(uint64_t sign_bit, uint64_t biased_exponent, uint64_t s
 #if 1
 static double MakeDouble(uint64_t f, int e)
 {
-    constexpr uint64_t kHiddenBit = 0x0010'0000'0000'0000;
-    constexpr uint64_t kSignificandMask = 0x000F'FFFF'FFFF'FFFF;
+    constexpr uint64_t kHiddenBit = 0x0010000000000000;
+    constexpr uint64_t kSignificandMask = 0x000FFFFFFFFFFFFF;
     constexpr int kPhysicalSignificandSize = 52;  // Excludes the hidden bit.
     // constexpr int kSignificandSize = 53;
     constexpr int kExponentBias = 0x3FF + kPhysicalSignificandSize;
@@ -270,26 +270,26 @@ static void VerifySingle()
 {
     printf("Check single precision...\n");
 
-    CheckFloat(MakeSingle(0,   0, 0x0000'0000)); // +0
-    CheckFloat(MakeSingle(0,   0, 0x0000'0001)); // min denormal
-    CheckFloat(MakeSingle(0,   0, 0x007F'FFFF)); // max denormal
-    CheckFloat(MakeSingle(0,   1, 0x0000'0000)); // min normal
-    CheckFloat(MakeSingle(0,   1, 0x0000'0001));
-    CheckFloat(MakeSingle(0,   1, 0x007F'FFFF));
-    CheckFloat(MakeSingle(0,   2, 0x0000'0000));
-    CheckFloat(MakeSingle(0,   2, 0x0000'0001));
-    CheckFloat(MakeSingle(0,  24, 0x0000'0000)); // fail if no special case in normalized boundaries
-    CheckFloat(MakeSingle(0,  30, 0x0000'0000)); // fail if no special case in normalized boundaries
-    CheckFloat(MakeSingle(0,  31, 0x0000'0000)); // fail if no special case in normalized boundaries
-    CheckFloat(MakeSingle(0,  57, 0x0000'0000)); // fail if no special case in normalized boundaries
-    CheckFloat(MakeSingle(0, 254, 0x007F'FFFE));
-    CheckFloat(MakeSingle(0, 254, 0x007F'FFFF)); // max normal
+    CheckFloat(MakeSingle(0,   0, 0x00000000)); // +0
+    CheckFloat(MakeSingle(0,   0, 0x00000001)); // min denormal
+    CheckFloat(MakeSingle(0,   0, 0x007FFFFF)); // max denormal
+    CheckFloat(MakeSingle(0,   1, 0x00000000)); // min normal
+    CheckFloat(MakeSingle(0,   1, 0x00000001));
+    CheckFloat(MakeSingle(0,   1, 0x007FFFFF));
+    CheckFloat(MakeSingle(0,   2, 0x00000000));
+    CheckFloat(MakeSingle(0,   2, 0x00000001));
+    CheckFloat(MakeSingle(0,  24, 0x00000000)); // fail if no special case in normalized boundaries
+    CheckFloat(MakeSingle(0,  30, 0x00000000)); // fail if no special case in normalized boundaries
+    CheckFloat(MakeSingle(0,  31, 0x00000000)); // fail if no special case in normalized boundaries
+    CheckFloat(MakeSingle(0,  57, 0x00000000)); // fail if no special case in normalized boundaries
+    CheckFloat(MakeSingle(0, 254, 0x007FFFFE));
+    CheckFloat(MakeSingle(0, 254, 0x007FFFFF)); // max normal
 
     for (int e = 2; e < 254; ++e)
     {
-        CheckFloat(MakeSingle(0, e-1, 0x007F'FFFF));
-        CheckFloat(MakeSingle(0, e,   0x0000'0000));
-        CheckFloat(MakeSingle(0, e,   0x0000'0001));
+        CheckFloat(MakeSingle(0, e-1, 0x007FFFFF));
+        CheckFloat(MakeSingle(0, e,   0x00000000));
+        CheckFloat(MakeSingle(0, e,   0x00000001));
     }
 
     // V. Paxson and W. Kahan, "A Program for Testing IEEE Binary-Decimal Conversion", manuscript, May 1991,
@@ -329,26 +329,26 @@ static void VerifyDouble()
 {
     printf("Check double precision...\n");
 
-    CheckFloat(MakeDouble(0,    0, 0x0000'0000'0000'0000)); // +0
-    CheckFloat(MakeDouble(0,    0, 0x0000'0000'0000'0001)); // min denormal
-    CheckFloat(MakeDouble(0,    0, 0x000F'FFFF'FFFF'FFFF)); // max denormal
-    CheckFloat(MakeDouble(0,    1, 0x0000'0000'0000'0000)); // min normal
-    CheckFloat(MakeDouble(0,    1, 0x0000'0000'0000'0001));
-    CheckFloat(MakeDouble(0,    1, 0x000F'FFFF'FFFF'FFFF));
-    CheckFloat(MakeDouble(0,    2, 0x0000'0000'0000'0000));
-    CheckFloat(MakeDouble(0,    2, 0x0000'0000'0000'0001));
-    CheckFloat(MakeDouble(0,    4, 0x0000'0000'0000'0000)); // fail if no special case in normalized boundaries
-    CheckFloat(MakeDouble(0,    5, 0x0000'0000'0000'0000)); // fail if no special case in normalized boundaries
-    CheckFloat(MakeDouble(0,    6, 0x0000'0000'0000'0000)); // fail if no special case in normalized boundaries
-    CheckFloat(MakeDouble(0,   10, 0x0000'0000'0000'0000)); // fail if no special case in normalized boundaries
-    CheckFloat(MakeDouble(0, 2046, 0x000F'FFFF'FFFF'FFFE));
-    CheckFloat(MakeDouble(0, 2046, 0x000F'FFFF'FFFF'FFFF)); // max normal
+    CheckFloat(MakeDouble(0,    0, 0x0000000000000000)); // +0
+    CheckFloat(MakeDouble(0,    0, 0x0000000000000001)); // min denormal
+    CheckFloat(MakeDouble(0,    0, 0x000FFFFFFFFFFFFF)); // max denormal
+    CheckFloat(MakeDouble(0,    1, 0x0000000000000000)); // min normal
+    CheckFloat(MakeDouble(0,    1, 0x0000000000000001));
+    CheckFloat(MakeDouble(0,    1, 0x000FFFFFFFFFFFFF));
+    CheckFloat(MakeDouble(0,    2, 0x0000000000000000));
+    CheckFloat(MakeDouble(0,    2, 0x0000000000000001));
+    CheckFloat(MakeDouble(0,    4, 0x0000000000000000)); // fail if no special case in normalized boundaries
+    CheckFloat(MakeDouble(0,    5, 0x0000000000000000)); // fail if no special case in normalized boundaries
+    CheckFloat(MakeDouble(0,    6, 0x0000000000000000)); // fail if no special case in normalized boundaries
+    CheckFloat(MakeDouble(0,   10, 0x0000000000000000)); // fail if no special case in normalized boundaries
+    CheckFloat(MakeDouble(0, 2046, 0x000FFFFFFFFFFFFE));
+    CheckFloat(MakeDouble(0, 2046, 0x000FFFFFFFFFFFFF)); // max normal
 
     for (int e = 2; e < 2046; ++e)
     {
-        CheckFloat(MakeDouble(0, e-1, 0x000F'FFFF'FFFF'FFFF));
-        CheckFloat(MakeDouble(0, e,   0x0000'0000'0000'0000));
-        CheckFloat(MakeDouble(0, e,   0x0000'0000'0000'0001));
+        CheckFloat(MakeDouble(0, e-1, 0x000FFFFFFFFFFFFF));
+        CheckFloat(MakeDouble(0, e,   0x0000000000000000));
+        CheckFloat(MakeDouble(0, e,   0x0000000000000001));
     }
 
     // Some numbers to check different code paths in fast_dtoa
