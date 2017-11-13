@@ -18,11 +18,11 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <type_traits>
 
 #define FAST_DTOA_USE_INTRINSICS    1
 #define FAST_DTOA_DIV_CONST         1
 #define FAST_DTOA_ROUND             1
-#define FAST_DTOA_ECMA_FORMAT       1
 
 #if FAST_DTOA_USE_INTRINSICS && defined(_MSC_VER)
 #include <intrin.h>
@@ -42,46 +42,26 @@ namespace fast_dtoa {
 //
 //------------------------------------------------------------------------------
 
-// XXX: Everything but the underlying unsigned int type could be computed from
-//      numeric_limits::digits and sizeof(T)
-template <typename Float> struct IEEETraits;
-
-template <>
-struct IEEETraits<float>
-{
-    using Uint = uint32_t;
-    static constexpr int const N = 32;
-    static constexpr int const E = 8;
-    static constexpr int const P = 23; // excludes the hidden bit!
-    static constexpr int const Bias = 0x7F;
-};
-
-template <>
-struct IEEETraits<double>
-{
-    using Uint = uint64_t;
-    static constexpr int const N = 64;
-    static constexpr int const E = 11;
-    static constexpr int const P = 52; // excludes the hidden bit!
-    static constexpr int const Bias = 0x3FF;
-};
-
 template <typename Float>
 struct IEEEFloat
 {
-    using Traits = IEEETraits<Float>;
+    static constexpr bool const is_single
+        = std::numeric_limits<Float>::digits == 24 && std::numeric_limits<Float>::max_exponent == 128;
+    static constexpr bool const is_double
+        = std::numeric_limits<Float>::digits == 53 && std::numeric_limits<Float>::max_exponent == 1024;
 
-    static_assert(std::numeric_limits<Float>::is_iec559 &&
-                  std::numeric_limits<Float>::digits == Traits::P + 1,
-        "requires an IEEE-754 implementation");
+    static_assert(std::numeric_limits<Float>::is_iec559 && (is_single || is_double),
+        "IEEE-754 implementation required");
 
-    using Uint = typename Traits::Uint;
+    using Uint = typename std::conditional<is_single, uint32_t, uint64_t>::type;
 
-    static constexpr int  const kPrecision       = Traits::P + 1; // = p (includes the hidden bit!)
-    static constexpr int  const kExponentBias    = Traits::Bias;
-    static constexpr Uint const kHiddenBit       = Uint{1} << Traits::P;
-    static constexpr Uint const kSignMask        = Uint{1} << (Traits::N - 1);
-    static constexpr Uint const kExponentMask    = (Uint{(1 << Traits::E) - 1}) << Traits::P;
+    static_assert(sizeof(Float) == sizeof(Uint), "Size mismatch");
+
+    static constexpr int  const kPrecision       = is_single ? 24 : 53; // = p (includes the hidden bit!)
+    static constexpr int  const kExponentBias    = is_single ? 0x7F : 0x3FF;
+    static constexpr Uint const kHiddenBit       = Uint{1} << (kPrecision - 1);
+    static constexpr Uint const kSignMask        = Uint{1} << (is_single ? 31 : 63);
+    static constexpr Uint const kExponentMask    = Uint{is_single ? 0xFF : 0x7FF} << (kPrecision - 1);
     static constexpr Uint const kSignificandMask = kHiddenBit - 1;
 
     union { // XXX: memcpy?
