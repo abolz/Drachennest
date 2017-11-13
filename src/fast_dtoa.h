@@ -645,7 +645,6 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
     auto const cached = kCachedPowers[index];
     assert(kAlpha <= cached.e + e + 64);
     assert(kGamma >= cached.e + e + 64);
-    assert(cached.e + e + 64 <= -34);
 
     // XXX:
     // cached.k = kCachedPowersMinDecExp + 8*(index + 6)
@@ -710,7 +709,7 @@ inline void Grisu2Round(char* buf, int len, uint64_t dist, uint64_t delta, uint6
     //               w-                 w                   w+
     //
     //                                  10^k
-    //                                 <----->
+    //                                <------>
     //                                       <---- rest ---->
     // --------------[------------------+----+--------------]--------------
     //                                  w    V
@@ -1158,102 +1157,9 @@ inline char* AppendExponent(char* buf, int e)
 
 inline char* FormatBuffer(char* buf, int n, int k)
 {
-    assert(k >= 1);
-    assert(k <= 17);
+    // https://tc39.github.io/ecma262/#sec-tostring-applied-to-the-number-type
 
-#if FAST_DTOA_ECMA_FORMAT
-    // Like JavaScript's ToString applied to number type
-    // https://tc39.github.io/ecma262/#sec-tonumber-applied-to-the-string-type
-
-    // Numbers in the range [10^exponent_low, 10^exponent_high) will be printed
-    // in fixed-point notation.
-    int const exponent_low  = -6;
-    int const exponent_high = 21;
-
-    int const exponent = n - 1;
-    if (exponent_low <= exponent && exponent < exponent_high)
-    {
-        if (n <= 0)
-        {
-            // 0.[000]digits
-
-            std::memmove(buf + (2 + -n), buf, static_cast<size_t>(k));
-            buf[0] = '0';
-            buf[1] = '.';
-            std::memset(buf + 2, '0', static_cast<size_t>(-n));
-            return buf + (2 + (-n) + k);    // (len <= k + 6)
-        }
-        else if (n >= k)
-        {
-            // digits[000]
-
-            std::memset(buf + k, '0', static_cast<size_t>(n - k));
-            //if (trailing_dot_zero)
-            //{
-            //    buf[n++] = '.';
-            //    buf[n++] = '0';           // (XXX: len <= k + 6 + 2)
-            //}
-            return buf + n;                 // (len <= k + 6)
-        }
-        else
-        {
-            // dig.its
-            // 0 < n < k implies k >= 2
-
-            std::memmove(buf + (n + 1), buf + n, static_cast<size_t>(k - n));
-            buf[n] = '.';
-            return buf + (k + 1);           // (len <= k + 6)
-        }
-    }
-    else
-    {
-        if (k == 1)
-        {
-            // dE+123
-
-            buf += 1;                       // (len == k + 5)
-        }
-        else
-        {
-            // d.igitsE+123
-
-            std::memmove(buf + 2, buf + 1, static_cast<size_t>(k - 1));
-            buf[1] = '.';
-            buf += 1 + k;                   // (len == k + 6)
-        }
-
-        *buf++ = 'e';
-        return AppendExponent(buf, n - 1);
-    }
-#else
-    // Provide the shortest representation.
-    // Looks quite nice for single-precision, too.
-    //
-    // Note:
-    // 1e+4   = 10000   is displayed in exponential form...
-    // 1.2e+6 = 1200000 is displayed in exponential form...
-
-#if 0
-    int const exponent_length = 3; // Assume 3 digits in exponent.
-#else
-    int const X = (n - 1 < 0) ? -(n - 1) : n - 1;
-//  int const exponent_length = 2 + (X >= 100);
-    int const exponent_length = 1 + (X >= 10) + (X >= 100);
-#endif
-    int const exponential_length = k + (k > 1)/*.*/ + 1/*E*/ + 1/*+*/ + exponent_length;
-
-    if (n <= 0 && 2 + (-n) + k <= exponential_length /*( = k + (k>1) + 2 + exponent_length )*/)
-    {
-        // 0.[000]digits
-
-        std::memmove(buf + (2 + -n), buf, static_cast<size_t>(k));
-        buf[0] = '0';
-        buf[1] = '.';
-        std::memset(buf + 2, '0', static_cast<size_t>(-n));
-        return buf + (2 + (-n) + k);    // (len <= k + 6)
-    }
-
-    if (n >= k && n /* + (trailing_dot_zero ? 2 : 0)*/ <= exponential_length)
+    if (k <= n && n <= 21)
     {
         // digits[000]
 
@@ -1261,26 +1167,37 @@ inline char* FormatBuffer(char* buf, int n, int k)
         //if (trailing_dot_zero)
         //{
         //    buf[n++] = '.';
-        //    buf[n++] = '0';           // (XXX: len <= k + 6 + 2)
+        //    buf[n++] = '0';
         //}
-        return buf + n;                 // (len <= k + 6)
+        return buf + n;                 // (len <= 21 + 2 = 23)
     }
 
-    if (0 < n && n < k /* && 1 + k <= exponential_length (always true) */)
+    if (0 < n && n <= 21)
     {
         // dig.its
-        // 0 < n < k implies k >= 2
+        assert(k > n);
 
         std::memmove(buf + (n + 1), buf + n, static_cast<size_t>(k - n));
         buf[n] = '.';
-        return buf + (k + 1);           // (len <= k + 6)
+        return buf + (k + 1);           // (len == k + 1 <= 18)
+    }
+
+    if (-6 < n && n <= 0)
+    {
+        // 0.[000]digits
+
+        std::memmove(buf + (2 + -n), buf, static_cast<size_t>(k));
+        buf[0] = '0';
+        buf[1] = '.';
+        std::memset(buf + 2, '0', static_cast<size_t>(-n));
+        return buf + (2 + (-n) + k);    // (len <= k + 7 <= 24)
     }
 
     if (k == 1)
     {
         // dE+123
 
-        buf += 1;                       // (len == k + 5)
+        buf += 1;                       // (len <= 1 + 5 = 6)
     }
     else
     {
@@ -1288,12 +1205,11 @@ inline char* FormatBuffer(char* buf, int n, int k)
 
         std::memmove(buf + 2, buf + 1, static_cast<size_t>(k - 1));
         buf[1] = '.';
-        buf += 1 + k;                   // (len == k + 6)
+        buf += 1 + k;                   // (len <= k + 6 = 23)
     }
 
     *buf++ = 'e';
     return AppendExponent(buf, n - 1);
-#endif
 }
 
 inline char* StrCopy_unsafe(char* dst, char const* src)
@@ -1323,8 +1239,8 @@ inline char* StrCopy_unsafe(char* dst, char const* src)
 template <typename Float>
 inline char* ToString(char* next, char* last, Float value)
 {
-    static constexpr char const* const kNaNString = "NaN";      // assert len <= 17 (25)
-    static constexpr char const* const kInfString = "Infinity"; // assert len <= 16 (24)
+    static constexpr char const* const kNaNString = "NaN";      // assert len <= 25
+    static constexpr char const* const kInfString = "Infinity"; // assert len <= 24
 
     using IEEEType = IEEEFloat<Float>;
     static_assert(Fp::kPrecision >= IEEEType::kPrecision + 3, "insufficient precision");
@@ -1339,6 +1255,7 @@ inline char* ToString(char* next, char* last, Float value)
     if (v.IsNaN())
     {
         next = StrCopy_unsafe(next, kNaNString);
+        // (len <= 25)
     }
     else
     {
@@ -1356,11 +1273,12 @@ inline char* ToString(char* next, char* last, Float value)
             //    *next++ = '.';
             //    *next++ = '0';
             //}
+            // (len <= 1 + 3 = 4)
         }
         else if (v.IsInf())
         {
             next = StrCopy_unsafe(next, kInfString);
-            // (len <= 25)
+            // (len <= 1 + 24 = 25)
         }
         else
         {
@@ -1377,11 +1295,9 @@ inline char* ToString(char* next, char* last, Float value)
             int const n = k + n_minus_k;
 
             next = FormatBuffer(next, n, k);
-            // (len <= 25)
+            // (len <= 1 + 24 = 25)
         }
     }
-
-    //*next = '\0'; // (len <= 26)
 
     return next;
 }
