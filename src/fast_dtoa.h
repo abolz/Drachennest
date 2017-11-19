@@ -123,7 +123,7 @@ struct Fp // f * 2^e
     int e;
 
     constexpr Fp() : f(0), e(0) {}
-    constexpr Fp(uint64_t f, int e) : f(f), e(e) {}
+    constexpr Fp(uint64_t f_, int e_) : f(f_), e(e_) {}
 
     // Returns x - y.
     // Requires: x.e == y.e and x.f >= y.f
@@ -160,7 +160,7 @@ inline Fp Fp::Mul(Fp x, Fp y)
 
     uint64_t h = 0;
     uint64_t l = _umul128(x.f, y.f, &h);
-    h += l >> 63; // round to nearest: [h, l] += 2^q / 2
+    h += l >> 63; // round, ties up: [h, l] += 2^q / 2
 
     return Fp(h, x.e + y.e + 64);
 
@@ -172,7 +172,7 @@ inline Fp Fp::Mul(Fp x, Fp y)
 
     uint64_t h = static_cast<uint64_t>(p >> 64);
     uint64_t l = static_cast<uint64_t>(p);
-    h += l >> 63; // round to nearest: [h, l] += 2^q / 2
+    h += l >> 63; // round, ties up: [h, l] += 2^q / 2
 
     return Fp(h, x.e + y.e + 64);
 
@@ -215,7 +215,7 @@ inline Fp Fp::Mul(Fp x, Fp y)
 
     uint64_t Q = p0_hi + p1_lo + p2_lo;
 
-    // The full product might now be comuted as
+    // The full product might now be computed as
     //
     // p_hi = p3 + p2_hi + p1_hi + (Q >> 32)
     // p_lo = p0_lo + (Q << 32)
@@ -224,7 +224,7 @@ inline Fp Fp::Mul(Fp x, Fp y)
     // Effectively we only need to add the highest bit in p_lo to p_hi (and
     // Q_hi + 1 does not overflow).
 
-    Q += uint64_t{1} << (63 - 32); // round to nearest
+    Q += uint64_t{1} << (63 - 32); // round, ties up
 
     uint64_t const h = p3 + p2_hi + p1_hi + (Q >> 32);
 
@@ -287,6 +287,9 @@ struct BoundedFp {
     Fp plus;
 };
 
+//
+// Computes the boundaries m- and m+ of the floating-point value v.
+//
 // Determine v- and v+, the floating-point predecessor and successor if v,
 // respectively.
 //
@@ -313,13 +316,7 @@ inline BoundedFp ComputeBoundedFp(Float v_ieee)
 {
     using IEEEType = IEEEFloat<Float>;
 
-    IEEEType const v_ieee_bits(v_ieee);
-
-    uint64_t const E = v_ieee_bits.ExponentBits(); // biased exponent
-    uint64_t const F = v_ieee_bits.SignificandBits();
-
-    constexpr int const kBias = IEEEType::kExponentBias + (IEEEType::kPrecision - 1);
-
+    //
     // Convert the IEEE representation into a DiyFp.
     //
     // If v is denormal:
@@ -327,10 +324,19 @@ inline BoundedFp ComputeBoundedFp(Float v_ieee)
     // If v is normalized:
     //      value = 1.F * 2^(E - E_bias) = (2^(p-1) + F) * 2^(E - E_bias - (p-1))
     //
+
+    IEEEType const v_ieee_bits(v_ieee);
+
+    uint64_t const E = v_ieee_bits.ExponentBits(); // biased exponent
+    uint64_t const F = v_ieee_bits.SignificandBits();
+
+    constexpr int const kBias = IEEEType::kExponentBias + (IEEEType::kPrecision - 1);
+
     Fp const v = (E == 0) // denormal?
         ? Fp(F, 1 - kBias)
         : Fp(IEEEType::kHiddenBit + F, static_cast<int>(E) - kBias);
 
+    //
     // v+ = v + 2^e = (f + 1) * 2^e and therefore
     //
     //      m+ = (v + v+) / 2
@@ -338,6 +344,7 @@ inline BoundedFp ComputeBoundedFp(Float v_ieee)
     //
     Fp const m_plus = Fp(2*v.f + 1, v.e - 1);
 
+    //
     // If f != 2^(p-1), then v- = v - 2^e = (f - 1) * 2^e and
     //
     //      m- = (v- + v) / 2
@@ -370,24 +377,24 @@ inline BoundedFp ComputeBoundedFp(Float v_ieee)
         ? Fp(4*v.f - 1, v.e - 2)
         : Fp(2*v.f - 1, v.e - 1);
 
+    //
     // Determine the normalized w+ = m+.
+    //
     Fp const plus = Fp::Normalize(m_plus);
 
+    //
     // Determine w- = m- such that e_(w-) = e_(w+).
+    //
     Fp const minus = Fp::NormalizeTo(m_minus, plus.e);
 
     //assert(plus.f > minus.f);
     //assert(plus.f - minus.f >= 3 * (uint64_t{1} << (Fp::kPrecision - IEEEType::kPrecision - 2)));
 
-    Fp const w = Fp::Normalize(v);
-
-    assert(w.e == plus.e);
-    assert(w.e == minus.e);
-
-    return {w, minus, plus};
+    return {Fp::Normalize(v), minus, plus};
 }
 
-// We now have
+//
+// Given a (normalized) floating-point number v and its neighbors m- and m+
 //
 //      ---+---------------------------+---------------------------+---
 //         m-                          v                           m+
@@ -465,8 +472,10 @@ inline BoundedFp ComputeBoundedFp(Float v_ieee)
 constexpr int const kAlpha = -60;
 constexpr int const kGamma = -32;
 
-// Now that alpha and gamma are fixed, one needs to figure how many (and which)
-// powers-of-ten need to be stored in the table.
+// Grisu needs to find a(normalized) cached power-of-ten c, such that the
+// exponent of the product c * w = f * 2^e satisfies (Definition 3.2)
+//
+//      alpha <= e = e_c + e_w + q <= gamma
 //
 // For IEEE double precision floating-point numbers v converted into a DiyFp's
 // w = f * 2^e,
@@ -614,20 +623,20 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
     // NB: log_10(2) ~= 78913 / 2^18
     assert(e >= -1500);
     assert(e <=  1500);
-    auto const f = kAlpha - e - 1;
-    auto const k = (f * 78913) / (1 << 18) + (f > 0);
+    int const f = kAlpha - e - 1;
+    int const k = (f * 78913) / (1 << 18) + (f > 0);
 
-    auto index = (-kCachedPowersMinDecExp + k + (8 - 1)) / 8;
+    int const index = (-kCachedPowersMinDecExp + k + (8 - 1)) / 8;
     assert(index >= 0);
     assert(index < kCachedPowersSize);
     static_cast<void>(kCachedPowersSize); // Fix warning.
 
-    auto const cached = kCachedPowers[index];
+    CachedPower const cached = kCachedPowers[index];
     assert(kAlpha <= cached.e + e + 64);
     assert(kGamma >= cached.e + e + 64);
 
     // XXX:
-    // cached.k = kCachedPowersMinDecExp + 8*(index + 6)
+    // cached.k = kCachedPowersMinDecExp + 8*index
 
     return cached;
 }
@@ -719,13 +728,9 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, Fp 
 
     assert(M_plus.e >= kAlpha);
     assert(M_plus.e <= kGamma);
-    assert(M_plus.e == M_minus.e);
-    assert(M_plus.e == w.e);
-    assert(M_plus.f >= M_minus.f);
-    assert(M_plus.f >= w.f);
 
-    uint64_t delta = M_plus.f - M_minus.f;  // (significand of (w+ - w-), implicit exponent is e)
-    uint64_t dist  = M_plus.f - w.f;        // (significand of (w+ - w ), implicit exponent is e)
+    uint64_t delta = Fp::Sub(M_plus, M_minus).f; // (significand of (w+ - w-), implicit exponent is e)
+    uint64_t dist  = Fp::Sub(M_plus, w      ).f; // (significand of (w+ - w ), implicit exponent is e)
 
     //               <--------------------------- delta ---->
     //                                  <---- dist --------->
@@ -882,9 +887,8 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, Fp 
         // Invariant (2) has been restored.
     }
 
-    // assert: n = 0
-    // assert: rest = p2 != 0 (otherwise the loop above would have been exited
-    //                         with rest <= delta)
+    assert(p2 != 0);
+    // (otherwise the loop above would have been exited with rest <= delta)
 
     //
     // 2.
@@ -912,8 +916,6 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, Fp 
     //      (10 * p2) div 2^-e = d[-1]
     //      (10 * p2) mod 2^-e = d[-2] / 10^1 + ... + d[-m] / 10^(m-1)
     //
-
-    assert(p2 > 0);
 
     int m = 0;
     for (;;)
@@ -986,7 +988,7 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, Fp 
     // number (Loitsch, Theorem 6.2) which rounds back to w.
     // For an input number of precision p, at least
     //
-    //      N = 2 + floor(p * log_10(2))
+    //      N = 1 + ceil(p * log_10(2))
     //
     // decimal digits are sufficient to identify all binary floating-point
     // numbers (Matula, "In-and-Out conversions").
@@ -997,6 +999,8 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, Fp 
     //      N = 9  for p = 24 (IEEE single precision)
 }
 
+// v = buf * 10^decimal_exponent
+// len is the length of the buffer (number of decimal digits)
 inline void Grisu2(char* buf, int& len, int& decimal_exponent, Fp m_minus, Fp v, Fp m_plus)
 {
     assert(v.e == m_minus.e);
@@ -1081,7 +1085,7 @@ inline char* AppendExponent(char* buf, int e)
     else
         *buf++ = '+';
 
-    auto const k = static_cast<uint32_t>(e);
+    uint32_t const k = static_cast<uint32_t>(e);
     if (k < 10)
     {
 //      *buf++ = kDigits[0];
@@ -1094,8 +1098,8 @@ inline char* AppendExponent(char* buf, int e)
     }
     else
     {
-        auto const q = k / 100;
-        auto const r = k % 100;
+        uint32_t const q = k / 100;
+        uint32_t const r = k % 100;
         *buf++ = kDigits[q];
         *buf++ = kDigits100[2*r + 0];
         *buf++ = kDigits100[2*r + 1];
@@ -1113,7 +1117,7 @@ inline char* AppendExponent(char* buf, int e)
     else
         *buf++ = '+';
 
-    auto k = static_cast<uint32_t>(e);
+    uint32_t k = static_cast<uint32_t>(e);
     if (k < 10)
     {
 //      *buf++ = kDigits[0];
@@ -1135,8 +1139,16 @@ inline char* AppendExponent(char* buf, int e)
 #endif
 }
 
-inline char* FormatBuffer(char* buf, int n, int k)
+inline char* FormatBuffer(char* buf, int k, int n)
 {
+    // v = digits * 10^(n-k)
+    // k is the length of the buffer (number of decimal digits)
+    // n is the position of the decimal point relative to the start of the buffer.
+    //
+    // Format the decimal floating-number v in the same way as JavaScript's ToString
+    // applied to number type.
+    //
+    // See:
     // https://tc39.github.io/ecma262/#sec-tostring-applied-to-the-number-type
 
     if (k <= n && n <= 21)
@@ -1264,17 +1276,16 @@ inline char* ToString(char* next, char* last, Float value)
         {
             BoundedFp w = ComputeBoundedFp(v.Abs());
 
-            // w = buf * 10^(n-k)
-            //
-            // k is the number of decimal digits in buf.
-            // n is the position of the decimal point relative to the start of buf.
-            int n_minus_k = 0;
-            int k = 0;
-            Grisu2(next, k, n_minus_k, w.minus, w.w, w.plus);
+            // Compute the decimal digits of v = digits * 10^decimal_exponent.
+            // len is the length of the buffer, i.e. the number of decimal digits
+            int len = 0;
+            int decimal_exponent = 0;
+            Grisu2(next, len, decimal_exponent, w.minus, w.w, w.plus);
 
-            int const n = k + n_minus_k;
+            // Compute the position of the decimal point relative to the start of the buffer.
+            int n = decimal_exponent + len;
 
-            next = FormatBuffer(next, n, k);
+            next = FormatBuffer(next, len, n);
             // (len <= 1 + 24 = 25)
         }
     }
