@@ -668,7 +668,7 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
 
 // For n != 0, returns k, such that 10^(k-1) <= n < 10^k.
 // For n == 0, returns 1.
-inline int InitKappa(uint32_t n)
+inline int FindLargestPow10(uint32_t n)
 {
     if (n >= 1000000000) return 10;
     if (n >=  100000000) return  9;
@@ -687,7 +687,7 @@ inline int InitKappa(uint32_t n)
 
 // For n != 0, returns k, such that pow10 := 10^(k-1) <= n < 10^k.
 // For n == 0, returns 1 and sets pow10 := 1.
-inline int InitKappa(uint32_t n, uint32_t& pow10)
+inline int FindLargestPow10(uint32_t n, uint32_t& pow10)
 {
     if (n >= 1000000000) { pow10 = 1000000000; return 10; }
     if (n >=  100000000) { pow10 =  100000000; return  9; }
@@ -780,10 +780,10 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, Fp 
     //
 
 #if FAST_DTOA_DIV_CONST
-    int const k = InitKappa(p1);
+    int const k = FindLargestPow10(p1);
 #else
     uint32_t pow10;
-    int const k = InitKappa(p1, pow10);
+    int const k = FindLargestPow10(p1, pow10);
 #endif
 
     // We now have
@@ -1037,7 +1037,7 @@ inline void Grisu2(char* buf, int& len, int& decimal_exponent, Fp m_minus, Fp v,
     //                      m-          v                       m+
     //
     // First scale v (and m- and m+) such that the exponent is in the range
-    // [alpha, beta].
+    // [alpha, gamma].
     //
 
     CachedPower const cached = GetCachedPowerForBinaryExponent(m_plus.e);
@@ -1297,7 +1297,7 @@ inline char* ToString(char* next, char* last, Float value)
         }
         else
         {
-            BoundedFp w = ComputeBoundedFp(v.Abs());
+            BoundedFp const w = ComputeBoundedFp(v.Abs());
 
             // Compute the decimal digits of v = digits * 10^decimal_exponent.
             // len is the length of the buffer, i.e. the number of decimal digits
@@ -1306,7 +1306,7 @@ inline char* ToString(char* next, char* last, Float value)
             Grisu2(next, len, decimal_exponent, w.minus, w.w, w.plus);
 
             // Compute the position of the decimal point relative to the start of the buffer.
-            int n = decimal_exponent + len;
+            int const n = decimal_exponent + len;
 
             next = FormatBuffer(next, len, n);
             // (len <= 1 + 24 = 25)
