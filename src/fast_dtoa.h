@@ -76,6 +76,7 @@ struct IEEEFloat
     static constexpr Uint const kSignMask        = Uint{1} << (is_single ? 31 : 63);
     static constexpr Uint const kExponentMask    = Uint{is_single ? 0xFF : 0x7FF} << (kPrecision - 1);
     static constexpr Uint const kSignificandMask = kHiddenBit - 1;
+    static constexpr int  const kMaxDigits10     = is_single ? 9 : 17;
 
     union { // XXX: memcpy?
         Float value;
@@ -479,10 +480,14 @@ inline BoundedFp ComputeBoundedFp(Float v_ieee)
 //
 //      -e <= 60   or   e >= -60 := alpha
 //
-// Different considerations may lead to different digit generation procedures
-// and different values of alpha and gamma...
+// On the other hand, if multiplication by 100 does not overflow, two digits of
+// p2 might be generated at a time. This requires
 //
-constexpr int const kAlpha = -60;
+//      -e <= 64-7   or   e >= -64+7 =: alpha.
+//
+// This choice requires a slightly larger table of cached powers.
+//
+constexpr int const kAlpha = -57;
 constexpr int const kGamma = -32;
 
 // Grisu needs to find a(normalized) cached power-of-ten c, such that the
@@ -529,7 +534,7 @@ constexpr int const kGamma = -32;
 // simple function is sufficient."
 //
 // The difference of the decimal exponents of adjacent table entries must be
-// <= floor( (gamma - alpha) * log_10(2) ) = 8.
+// <= floor( (gamma - alpha) * log_10(2) ) = 7.
 
 struct CachedPower { // c = f * 2^e ~= 10^k
     uint64_t f;
@@ -541,93 +546,105 @@ struct CachedPower { // c = f * 2^e ~= 10^k
 inline CachedPower GetCachedPowerForBinaryExponent(int e)
 {
     // NB:
-    // Actually this function returns c, such that -60 <= e_c + e + 64 <= -34.
+    // Actually this function returns c, such that -57 <= e_c + e + 64 <= -34.
+
+    constexpr int const kCachedPowersSize = 91;
+    constexpr int const kCachedPowersMinDecExp = -300;
+    constexpr int const kCachedPowersDecStep = 7;
 
     static constexpr CachedPower const kCachedPowers[] = {
-        { 0xAB70FE17C79AC6CA, -1060, -300 }, // -1060 + 960 + 64 = -36
-        { 0xFF77B1FCBEBCDC4F, -1034, -292 },
-        { 0xBE5691EF416BD60C, -1007, -284 },
-        { 0x8DD01FAD907FFC3C,  -980, -276 },
-        { 0xD3515C2831559A83,  -954, -268 },
-        { 0x9D71AC8FADA6C9B5,  -927, -260 },
-        { 0xEA9C227723EE8BCB,  -901, -252 },
+        { 0xAB70FE17C79AC6CA, -1060, -300 },
+        { 0xCC5FC196FEFD7D0C, -1037, -293 },
+        { 0xF3A20279ED56D48A, -1014, -286 },
+        { 0x91376C36D99995BE,  -990, -279 },
+        { 0xAD1C8EAB5EE43B67,  -967, -272 },
+        { 0xCE5D73FF402D98E4,  -944, -265 },
+        { 0xF6019DA07F549B2B,  -921, -258 },
+        { 0x92A1958A7675175F,  -897, -251 },
         { 0xAECC49914078536D,  -874, -244 },
-        { 0x823C12795DB6CE57,  -847, -236 },
-        { 0xC21094364DFB5637,  -821, -228 },
-        { 0x9096EA6F3848984F,  -794, -220 },
-        { 0xD77485CB25823AC7,  -768, -212 },
-        { 0xA086CFCD97BF97F4,  -741, -204 },
-        { 0xEF340A98172AACE5,  -715, -196 },
+        { 0xD0601D8EFC57B08C,  -851, -237 },
+        { 0xF867241C8CC6D4C1,  -828, -230 },
+        { 0x940F4613AE5ED137,  -804, -223 },
+        { 0xB080392CC4349DED,  -781, -216 },
+        { 0xD267CAA862A12D67,  -758, -209 },
+        { 0xFAD2A4B13D1B5D6C,  -735, -202 },
+        { 0x9580869F0E7AAC0F,  -711, -195 },
         { 0xB23867FB2A35B28E,  -688, -188 },
-        { 0x84C8D4DFD2C63F3B,  -661, -180 },
-        { 0xC5DD44271AD3CDBA,  -635, -172 },
-        { 0x936B9FCEBB25C996,  -608, -164 },
-        { 0xDBAC6C247D62A584,  -582, -156 },
-        { 0xA3AB66580D5FDAF6,  -555, -148 },
-        { 0xF3E2F893DEC3F126,  -529, -140 },
+        { 0xD47487CC8470652B,  -665, -181 },
+        { 0xFD442E4688BD304B,  -642, -174 },
+        { 0x96F5600F15A7B7E5,  -618, -167 },
+        { 0xB3F4E093DB73A093,  -595, -160 },
+        { 0xD686619BA27255A3,  -572, -153 },
+        { 0xFFBBCFE994E5C620,  -549, -146 },
+        { 0x986DDB5C6B3A76B8,  -525, -139 },
         { 0xB5B5ADA8AAFF80B8,  -502, -132 },
-        { 0x87625F056C7C4A8B,  -475, -124 },
-        { 0xC9BCFF6034C13053,  -449, -116 },
-        { 0x964E858C91BA2655,  -422, -108 },
-        { 0xDFF9772470297EBD,  -396, -100 },
-        { 0xA6DFBD9FB8E5B88F,  -369,  -92 },
-        { 0xF8A95FCF88747D94,  -343,  -84 },
+        { 0xD89D64D57A607745,  -479, -125 },
+        { 0x811CCC668829B887,  -455, -118 },
+        { 0x99EA0196163FA42E,  -432, -111 },
+        { 0xB77ADA0617E3BBCB,  -409, -104 },
+        { 0xDAB99E59958885C5,  -386,  -97 },
+        { 0x825ECC24C8737830,  -362,  -90 },
+        { 0x9B69DBE1B548CE7D,  -339,  -83 },
         { 0xB94470938FA89BCF,  -316,  -76 },
-        { 0x8A08F0F8BF0F156B,  -289,  -68 },
-        { 0xCDB02555653131B6,  -263,  -60 },
-        { 0x993FE2C6D07B7FAC,  -236,  -52 },
-        { 0xE45C10C42A2B3B06,  -210,  -44 },
-        { 0xAA242499697392D3,  -183,  -36 }, // -183 + 80 + 64 = -39
-        { 0xFD87B5F28300CA0E,  -157,  -28 }, //
+        { 0xDCDB1B2798182245,  -293,  -69 },
+        { 0x83A3EEEEF9153E89,  -269,  -62 },
+        { 0x9CED737BB6C4183D,  -246,  -55 },
+        { 0xBB127C53B17EC159,  -223,  -48 },
+        { 0xDF01E85F912E37A3,  -200,  -41 }, // single --->
+        { 0x84EC3C97DA624AB5,  -176,  -34 }, //
+        { 0x9E74D1B791E07E48,  -153,  -27 }, //
         { 0xBCE5086492111AEB,  -130,  -20 }, //
-        { 0x8CBCCC096F5088CC,  -103,  -12 }, //
-        { 0xD1B71758E219652C,   -77,   -4 }, //
-        { 0x9C40000000000000,   -50,    4 }, //
-        { 0xE8D4A51000000000,   -24,   12 }, //
-        { 0xAD78EBC5AC620000,     3,   20 }, //
-        { 0x813F3978F8940984,    30,   28 }, //
+        { 0xE12E13424BB40E13,  -107,  -13 }, //
+        { 0x8637BD05AF6C69B6,   -83,   -6 }, //
+        { 0xA000000000000000,   -60,    1 }, //
+        { 0xBEBC200000000000,   -37,    8 }, //
+        { 0xE35FA931A0000000,   -14,   15 }, //
+        { 0x878678326EAC9000,    10,   22 }, //
+        { 0xA18F07D736B90BE5,    33,   29 }, //
         { 0xC097CE7BC90715B3,    56,   36 }, //
-        { 0x8F7E32CE7BEA5C70,    83,   44 }, // 83 - 196 + 64 = -49
-        { 0xD5D238A4ABE98068,   109,   52 },
-        { 0x9F4F2726179A2245,   136,   60 },
-        { 0xED63A231D4C4FB27,   162,   68 },
-        { 0xB0DE65388CC8ADA8,   189,   76 },
-        { 0x83C7088E1AAB65DB,   216,   84 },
+        { 0xE596B7B0C643C719,    79,   43 }, // <--- single
+        { 0x88D8762BF324CD10,   103,   50 },
+        { 0xA321F2D7226895C8,   126,   57 },
+        { 0xC2781F49FFCFA6D5,   149,   64 },
+        { 0xE7D34C64A9C85D44,   172,   71 },
+        { 0x8A2DBF142DFCC7AB,   196,   78 },
+        { 0xA4B8CAB1A1563F52,   219,   85 },
         { 0xC45D1DF942711D9A,   242,   92 },
-        { 0x924D692CA61BE758,   269,  100 },
-        { 0xDA01EE641A708DEA,   295,  108 },
-        { 0xA26DA3999AEF774A,   322,  116 },
-        { 0xF209787BB47D6B85,   348,  124 },
-        { 0xB454E4A179DD1877,   375,  132 },
-        { 0x865B86925B9BC5C2,   402,  140 },
+        { 0xEA1575143CF97227,   265,   99 },
+        { 0x8B865B215899F46D,   289,  106 },
+        { 0xA6539930BF6BFF46,   312,  113 },
+        { 0xC646D63501A1511E,   335,  120 },
+        { 0xEC5D3FA8CE427B00,   358,  127 },
+        { 0x8CE2529E2734BB1D,   382,  134 },
+        { 0xA7F26836F282B733,   405,  141 },
         { 0xC83553C5C8965D3D,   428,  148 },
-        { 0x952AB45CFA97A0B3,   455,  156 },
-        { 0xDE469FBD99A05FE3,   481,  164 },
-        { 0xA59BC234DB398C25,   508,  172 },
-        { 0xF6C69A72A3989F5C,   534,  180 },
-        { 0xB7DCBF5354E9BECE,   561,  188 },
-        { 0x88FCF317F22241E2,   588,  196 },
+        { 0xEEAABA2E5DBF6785,   451,  155 },
+        { 0x8E41ADE9FBEBC27D,   475,  162 },
+        { 0xA99541BF57452B28,   498,  169 },
+        { 0xCA28A291859BBF93,   521,  176 },
+        { 0xF0FDF2D3F3C30B9F,   544,  183 },
+        { 0x8FA475791A569D11,   568,  190 },
+        { 0xAB3C2FDDEEAAD25B,   591,  197 },
         { 0xCC20CE9BD35C78A5,   614,  204 },
-        { 0x98165AF37B2153DF,   641,  212 },
-        { 0xE2A0B5DC971F303A,   667,  220 },
-        { 0xA8D9D1535CE3B396,   694,  228 },
-        { 0xFB9B7CD9A4A7443C,   720,  236 },
-        { 0xBB764C4CA7A44410,   747,  244 },
-        { 0x8BAB8EEFB6409C1A,   774,  252 },
+        { 0xF356F7EBF83552FE,   637,  211 },
+        { 0x910AB1D4DB9914A0,   661,  218 },
+        { 0xACE73CBFDC0BFB7B,   684,  225 },
+        { 0xCE1DE40642E3F4B9,   707,  232 },
+        { 0xF5B5D7EC8ACB58A3,   730,  239 },
+        { 0x92746B9BE2F8552C,   754,  246 },
+        { 0xAE9672ABA3D0C321,   777,  253 },
         { 0xD01FEF10A657842C,   800,  260 },
-        { 0x9B10A4E5E9913129,   827,  268 },
-        { 0xE7109BFBA19C0C9D,   853,  276 },
-        { 0xAC2820D9623BF429,   880,  284 },
-        { 0x80444B5E7AA7CF85,   907,  292 },
-        { 0xBF21E44003ACDD2D,   933,  300 },
-        { 0x8E679C2F5E44FF8F,   960,  308 },
+        { 0xF81AA16FDC1B81DB,   823,  267 },
+        { 0x93E1AB8252F33B46,   847,  274 },
+        { 0xB049DC016ABC5E60,   870,  281 },
+        { 0xD226FC195C6A2F8C,   893,  288 },
+        { 0xFA856334878FC151,   916,  295 },
+        { 0x95527A5202DF0CCB,   940,  302 },
+        { 0xB201833B35D63F73,   963,  309 },
         { 0xD433179D9C8CB841,   986,  316 },
-        { 0x9E19DB92B4E31BA9,  1013,  324 }, // 1013 - 1137 + 64 = -60
+        { 0xFCF62C1DEE382C42,  1009,  323 },
+        { 0x96C6E0EAB509E64D,  1033,  330 },
     };
-
-    constexpr int const kCachedPowersSize = 79;
-    constexpr int const kCachedPowersMinDecExp = -300;
-    constexpr int const kCachedPowersDecStep = 8;
 
     // This computation gives exactly the same results for k as
     //
@@ -820,20 +837,7 @@ struct Grisu2Result {
 
 inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
 {
-    static constexpr uint32_t const kPow10[] = {
-        1,
-        10,
-        100,
-        1000,
-        10000,
-        100000,
-        1000000,
-        10000000,
-        100000000,
-        1000000000, // 10^9
-    };
-
-    static_assert(kAlpha >= -60, "invalid parameter");
+    static_assert(kAlpha >= -57, "invalid parameter");
     static_assert(kGamma <= -32, "invalid parameter");
 
     assert(M_plus.e >= kAlpha);
@@ -888,113 +892,76 @@ inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
     //         = (B[0]B[1]...B[L  -1])_10 * 10^(k-L) + (B[L    ]...B[k-2]B[k-1])_10  (L = 1...k)
     //         = (B[0]B[1]...B[k-n-1])_10 * 10^(n  ) + (B[k-n  ]...B[k-2]B[k-1])_10  (n = k...1)
 
-    if (p2 > delta)
-    {
-        // Generate all the digits of p1 and some of the digits of p2 (below).
+    // Generate _all_ the digits of p1.
+    // The common case is that all these digits are needed.
+    char const* last = Itoa_32(buffer, p1);
+    length = static_cast<int>(last - buffer);
 
-        char const* last = Itoa_32(buffer, p1);
-        length = static_cast<int>(last - buffer);
-    }
-    else
+    if (p2 <= delta)
     {
-        // In this case: No need to generate any of the digits of p2,
-        // but still need to figure how many digits of p1 must be generated.
-
+        // In this case: Too many digits of p1 might have been generated.
+        //
         // Find the largest 0 <= n < k, such that
         //
         //      w+ = (p1 div 10^n) * 10^n + ((p1 mod 10^n) * 2^-e + p2) * 2^e
         //         = (p1 div 10^n) * 10^n + (                     rest) * 2^e
         //
         // and rest <= delta.
-
-        int const k = CountDecimalDigits(p1);
-        assert(k >= 1);
-        assert(k <= 10);
-
-        uint32_t d;
-        uint32_t r;
-
+        //
+        // Compute rest * 2^e = w+ mod 10^n = p1 + p2 * 2^e = (p1 * 2^-e + p2) * 2^e
+        // and check if enough digits have been generated:
+        //
+        //      rest * 2^e <= delta * 2^e
+        //
+        // This test can be slightly simplified, since
+        //
+        //      rest = (p1 mod 10^n) * 2^-e + p2 <= delta
+        //      <==>    r * 2^-e + p2 <= delta
+        //      <==>    r * 2^-e      <= delta - p2 = D = D1 * 2^-e + D2
+        //      <==>    r < D1 or (r == D1 and 0 <= D2)
+        //      <==>    r <= D1
+        //
         //  rest = (p1 mod 10^n) * 2^-e + p2 <= delta
         //  <==>    r * 2^-e + p2 <= delta
         //  <==>    r * 2^-e      <= delta - p2 = D = D1 * 2^-e + D2
         //  <==>    r < D1 or (r == D1 and 0 <= D2)
         //  <==>    r <= D1
-        //
+
         uint32_t const D1 = static_cast<uint32_t>((delta - p2) >> -one.e);
 
-        uint32_t const digits = p1;
-        int n = k;
+        int k = length;
+        int n = 0;
+
+        uint32_t r = 0;
+        uint32_t pow10 = 1; // 10^n
         for (;;)
         {
-            // Invariants:
-            //  1.  w+ = (w+ div 10^n) * 10^n + (w+ mod 10^n  )
-            //         = (buffer     ) * 10^n + (p1 + p2 * 2^e)  (buffer = 0, if length = 0)
-            //  2.  p1 >= pow10 = 10^(n-1)
+            assert(k >= n + 1);
+            assert(r <= D1);
+            assert(n <= 9);
+            assert(static_cast<uint32_t>(buffer[k - (n + 1)] - '0') <= UINT32_MAX / pow10);
 
-            assert(n >= 1);
-            d = p1 / kPow10[n-1];  // d = p1 div 10^(n-1)
-            r = p1 % kPow10[n-1];  // r = p1 mod 10^(n-1)
-
-            // w+ = buffer * 10^n + ((p1              ) + p2 * 2^e)
-            //    = buffer * 10^n + ((d * 10^(n-1) + r) + p2 * 2^e)
-            //    = (buffer * 10 + d) * 10^(n-1) + (r + p2 * 2^e)
-
-            assert(d <= 9);
-            buffer[length++] = static_cast<char>('0' + d); // buffer := buffer * 10 + d
-
-            // w+ = buffer * 10^(n-1) + (r + p2 * 2^e)
-
-            p1 = r;         // p1 := p1 mod 10^(n-1) = r
-            n--;
-
-            // w+ = (buffer     ) * 10^n + (p1 + p2 * 2^e)
-            //    = (w+ div 10^n) * 10^n + (w+ mod 10^n  )
-            //
-            // Invariant (1) has been restored.
-
-            // Compute rest * 2^e = w+ mod 10^n = p1 + p2 * 2^e = (p1 * 2^-e + p2) * 2^e
-            // and check if enough digits have been generated:
-            //
-            //      rest * 2^e <= delta * 2^e
-            //
-            // This test can be slightly simplified, since
-            //
-            //      rest = (p1 mod 10^n) * 2^-e + p2 <= delta
-            //      <==>    r * 2^-e + p2 <= delta
-            //      <==>    r * 2^-e      <= delta - p2 = D = D1 * 2^-e + D2
-            //      <==>    r < D1 or (r == D1 and 0 <= D2)
-            //      <==>    r <= D1
-            //
-            if (r <= D1)
-            {
-                assert(          (uint64_t{digits % kPow10[n    ]} << -one.e) + p2 <= delta);
-                assert(n == 9 || (uint64_t{digits % kPow10[n + 1]} << -one.e) + p2 >  delta);
-                static_cast<void>(digits);
+            uint32_t r_next = pow10 * static_cast<uint32_t>(buffer[k - (n + 1)] - '0') + r;
+            if (r_next > D1)
                 break;
-            }
+            r = r_next;
+            n++;
+            pow10 *= 10;
         }
+        length = k - n;
 
         uint64_t const rest = (uint64_t{r} << -one.e) + p2;
 
         // Found V = buffer * 10^n, with w- <= V <= w+.
-        // And V is correctly rounded.
-        //
         decimal_exponent += n;
 
-        // We may now just stop. But instead look if the buffer could be
-        // decremented to bring V closer to w.
-        //
         // 10^n is now 1 ulp in the decimal representation V.
-        //
         // The rounding procedure works with DiyFp's with an implicit
         // exponent e.
         //
         //      10^n = ten_n * 2^e = (10^n * 2^-e) * 2^e
         //
-        // Note:
-        // n has been decremented above, i.e. pow10 = 10^n
-        //
-        uint64_t const ten_n = uint64_t{kPow10[n]} << -one.e;
+        uint64_t const ten_n = uint64_t{pow10} << -one.e;
         Grisu2Round(buffer, length, dist, delta, rest, ten_n);
 
         return { length, decimal_exponent };
@@ -1033,41 +1000,57 @@ inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
         // Invariant:
         //  1.  w+ = buffer * 10^m + 10^m * p2 * 2^e  (Note: m <= 0)
 
-        // p2 * 10 < 2^60 * 10 < 2^60 * 2^4 = 2^64,
-        // so the multiplication by 10 does not overflow.
-        assert(p2 <= UINT64_MAX / 10);
-        p2 *= 10;
+        // alpha >= -57 guarantees that the multiplication does not overflow.
+        assert(p2 <= UINT64_MAX / 100);
+        uint64_t const p2_0 = p2;
+        p2 *= 100;
 
-        uint64_t const d = p2 >> -one.e;     // = p2 div 2^-e
-        uint64_t const r = p2 & (one.f - 1); // = p2 mod 2^-e
+        uint32_t const d = static_cast<uint32_t>(p2 >> -one.e); // = (100 * p2) div 2^-e = d[-1] * 10^1 + d[-2]
+        uint64_t const r = p2 & (one.f - 1);                    // = (100 * p2) mod 2^-e = d[-3] / 10^1 + ... + d[-m] / 10^(m-2)
 
         // w+ = buffer * 10^m + 10^m * p2 * 2^e
-        //    = buffer * 10^m + 10^(m-1) * (10 * p2     ) * 2^e
-        //    = buffer * 10^m + 10^(m-1) * (d * 2^-e + r) * 2^e
-        //    = buffer * 10^m + 10^(m-1) * d + 10^(m-1) * r * 2^e
-        //    = (buffer * 10 + d) * 10^(m-1) + 10^(m-1) * r * 2^e
+        //    = buffer * 10^m + 10^(m-2) * (100 * p2    ) * 2^e
+        //    = buffer * 10^m + 10^(m-2) * (d * 2^-e + r) * 2^e
+        //    = (buffer * 100 + d) * 10^(m-2) + 10^(m-2) * r * 2^e
 
-        assert(d <= 9);
-        buffer[length++] = static_cast<char>('0' + d); // buffer := buffer * 10 + d
+        Itoa100(buffer + length, d); // buffer := buffer * 100 + d
+        length += 2;
 
-        // w+ = buffer * 10^(m-1) + 10^(m-1) * r * 2^e
+        // w+ = buffer * 10^(m-2) + 10^(m-2) * r * 2^e
 
         p2 = r;
-        m--;
+        m -= 2;
 
         // w+ = buffer * 10^m + 10^m * p2 * 2^e
-        //
         // Invariant (1) restored.
 
-        // p2 is now scaled by 10^(-m) since it repeatedly is multiplied by 10.
+        // p2 is now scaled by 10^(-m) since it repeatedly is multiplied by 100.
         // To keep the units in sync, delta and dist need to be scaled too.
-        delta *= 10;
-        dist  *= 10;
+        delta *= 100;
+        dist *= 100;
 
-        // Check if enough digits have been generated
-        if (p2 <= delta)
+        if (r <= delta)
+        {
+            // Almost done.
+            // Check if we have generated one digit too much.
+
+            uint64_t const r10 = (10 * p2_0) & (one.f - 1);
+            uint64_t const delta10 = delta / 10;
+
+            if (r10 <= delta10) // Only one digit required.
+            {
+                length--;
+                p2 = r10;
+                m++;
+                delta = delta10;
+                dist /= 10;
+            }
+
             break;
+        }
     }
+
+    assert(p2 <= delta);
 
     decimal_exponent += m;
 
@@ -1332,6 +1315,7 @@ inline char* ToString(char* next, char* last, Float value)
             // Compute the decimal digits of v = digits * 10^decimal_exponent.
             // len is the length of the buffer, i.e. the number of decimal digits
             Grisu2Result const res = Grisu2(next, w.minus, w.w, w.plus);
+            assert(res.length <= IEEEType::kMaxDigits10);
 
             // Compute the position of the decimal point relative to the start of the buffer.
             int const n = res.length + res.decimal_exponent;
