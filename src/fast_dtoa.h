@@ -43,7 +43,8 @@
 #include <limits>
 #include <type_traits>
 
-#define FAST_DTOA_USE_INTRINSICS 1
+#define FAST_DTOA_USE_INTRINSICS    1
+#define FAST_DTOA_ROUND             1
 
 #if FAST_DTOA_USE_INTRINSICS && defined(_MSC_VER)
 #include <intrin.h>
@@ -295,11 +296,18 @@ inline Fp Fp::NormalizeTo(Fp x, int e)
 //
 //------------------------------------------------------------------------------
 
+#if FAST_DTOA_ROUND
 struct BoundedFp {
     Fp w;
     Fp minus;
     Fp plus;
 };
+#else
+struct BoundedFp {
+    Fp minus;
+    Fp plus;
+};
+#endif
 
 //
 // Computes the boundaries m- and m+ of the floating-point value v.
@@ -404,7 +412,11 @@ inline BoundedFp ComputeBoundedFp(Float v_ieee)
     //assert(plus.f > minus.f);
     //assert(plus.f - minus.f >= 3 * (uint64_t{1} << (Fp::kPrecision - IEEEType::kPrecision - 2)));
 
+#if FAST_DTOA_ROUND
     return {Fp::Normalize(v), minus, plus};
+#else
+    return {minus, plus};
+#endif
 }
 
 //
@@ -792,6 +804,7 @@ L_3_digits:
     }
 }
 
+#if FAST_DTOA_ROUND
 inline void Grisu2Round(char* buf, int len, uint64_t dist, uint64_t delta, uint64_t rest, uint64_t ten_k)
 {
     // dist, delta, rest and ten_k all are the significands of
@@ -829,13 +842,18 @@ inline void Grisu2Round(char* buf, int len, uint64_t dist, uint64_t delta, uint6
         rest += ten_k;
     }
 }
+#endif
 
 struct Grisu2Result {
     int length;
     int decimal_exponent;
 };
 
+#if FAST_DTOA_ROUND
 inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
+#else
+inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp M_plus)
+#endif
 {
     static_assert(kAlpha >= -57, "invalid parameter");
     static_assert(kGamma <= -32, "invalid parameter");
@@ -844,7 +862,9 @@ inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
     assert(M_plus.e <= kGamma);
 
     uint64_t delta = Fp::Sub(M_plus, M_minus).f; // (significand of (w+ - w-), implicit exponent is e)
+#if FAST_DTOA_ROUND
     uint64_t dist  = Fp::Sub(M_plus, w      ).f; // (significand of (w+ - w ), implicit exponent is e)
+#endif
 
     //               <--------------------------- delta ---->
     //                                  <---- dist --------->
@@ -950,10 +970,11 @@ inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
         }
         length = k - n;
 
-        uint64_t const rest = (uint64_t{r} << -one.e) + p2;
-
         // Found V = buffer * 10^n, with w- <= V <= w+.
         decimal_exponent += n;
+
+#if FAST_DTOA_ROUND
+        uint64_t const rest = (uint64_t{r} << -one.e) + p2;
 
         // 10^n is now 1 ulp in the decimal representation V.
         // The rounding procedure works with DiyFp's with an implicit
@@ -963,6 +984,7 @@ inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
         //
         uint64_t const ten_n = uint64_t{pow10} << -one.e;
         Grisu2Round(buffer, length, dist, delta, rest, ten_n);
+#endif
 
         return { length, decimal_exponent };
     }
@@ -1027,7 +1049,9 @@ inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
         // p2 is now scaled by 10^(-m) since it repeatedly is multiplied by 100.
         // To keep the units in sync, delta and dist need to be scaled too.
         delta *= 100;
+#if FAST_DTOA_ROUND
         dist *= 100;
+#endif
 
         if (r <= delta)
         {
@@ -1043,7 +1067,9 @@ inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
                 p2 = r10;
                 m++;
                 delta = delta10;
+#if FAST_DTOA_ROUND
                 dist /= 10;
+#endif
             }
 
             break;
@@ -1054,6 +1080,7 @@ inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
 
     decimal_exponent += m;
 
+#if FAST_DTOA_ROUND
     // ten_m represents 10^m as a Fp with an exponent e.
     //
     // Note: m < 0
@@ -1070,6 +1097,7 @@ inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
     //
     uint64_t const ten_m = one.f;
     Grisu2Round(buffer, length, dist, delta, p2, ten_m);
+#endif
 
     // By construction this algorithm generates the shortest possible decimal
     // number (Loitsch, Theorem 6.2) which rounds back to w.
@@ -1092,10 +1120,18 @@ inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
 
 // v = buf * 10^decimal_exponent
 // len is the length of the buffer (number of decimal digits)
+#if FAST_DTOA_ROUND
 inline Grisu2Result Grisu2(char* buffer, Fp m_minus, Fp v, Fp m_plus)
+#else
+inline Grisu2Result Grisu2(char* buffer, Fp m_minus, Fp m_plus)
+#endif
 {
+#if FAST_DTOA_ROUND
     assert(v.e == m_minus.e);
     assert(v.e == m_plus.e);
+#else
+    assert(m_minus.e == m_plus.e);
+#endif
 
     //
     //  --------(-----------------------+-----------------------)--------    (A)
@@ -1112,7 +1148,9 @@ inline Grisu2Result Grisu2(char* buffer, Fp m_minus, Fp v, Fp m_plus)
 
     Fp const c_minus_k(cached.f, cached.e); // = c ~= 10^k
 
+#if FAST_DTOA_ROUND
     Fp const w       = Fp::Mul(v,       c_minus_k); // Exponent of the products is v.e + c_minus_k.e + q
+#endif
     Fp const w_minus = Fp::Mul(m_minus, c_minus_k);
     Fp const w_plus  = Fp::Mul(m_plus,  c_minus_k);
 
@@ -1142,7 +1180,11 @@ inline Grisu2Result Grisu2(char* buffer, Fp m_minus, Fp v, Fp m_plus)
     Fp const M_minus = Fp(w_minus.f + 1, w_minus.e);
     Fp const M_plus  = Fp(w_plus.f  - 1, w_plus.e );
 
+#if FAST_DTOA_ROUND
     Grisu2Result res = Grisu2DigitGen(buffer, M_minus, w, M_plus);
+#else
+    Grisu2Result res = Grisu2DigitGen(buffer, M_minus, M_plus);
+#endif
 
     res.decimal_exponent += -cached.k; // = -(-k) = k
 
@@ -1314,7 +1356,11 @@ inline char* ToString(char* next, char* last, Float value)
 
             // Compute the decimal digits of v = digits * 10^decimal_exponent.
             // len is the length of the buffer, i.e. the number of decimal digits
+#if FAST_DTOA_ROUND
             Grisu2Result const res = Grisu2(next, w.minus, w.w, w.plus);
+#else
+            Grisu2Result const res = Grisu2(next, w.minus, w.plus);
+#endif
             assert(res.length <= IEEEType::kMaxDigits10);
 
             // Compute the position of the decimal point relative to the start of the buffer.
