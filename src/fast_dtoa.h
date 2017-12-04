@@ -50,6 +50,12 @@
 #include <intrin.h>
 #endif
 
+#if 1 && defined(_MSC_VER)
+#define FAST_DTOA_INLINE __forceinline
+#else
+#define FAST_DTOA_INLINE inline
+#endif
+
 namespace fast_dtoa {
 
 //------------------------------------------------------------------------------
@@ -334,7 +340,7 @@ struct BoundedFp {
 // and we therefore need some extra bits of precision.
 //
 template <typename Float>
-inline BoundedFp ComputeBoundedFp(Float v_ieee)
+FAST_DTOA_INLINE BoundedFp ComputeBoundedFp(Float v_ieee)
 {
     using IEEEType = IEEEFloat<Float>;
 
@@ -684,27 +690,6 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
     return cached;
 }
 
-// For n != 0, returns k, such that 10^(k-1) <= n < 10^k.
-// For n == 0, returns 1.
-inline int CountDecimalDigits(uint32_t n)
-{
-#if 0
-    if (n >= 1000000000) return 10;
-    if (n <         100) return n >=        10 ? 2 : 1;
-    if (n <       10000) return n >=      1000 ? 4 : 3;
-    if (n <     1000000) return n >=    100000 ? 6 : 5;
-    if (n <   100000000) return n >=  10000000 ? 8 : 7;
-    return 9;
-#else
-    if (n >= 1000000000) return 10;
-    if (n >=   10000000) return n <  100000000 ? 8 : 9;
-    if (n <         100) return n >=        10 ? 2 : 1;
-    if (n <       10000) return n >=      1000 ? 4 : 3;
-    if (n <     1000000) return n >=    100000 ? 6 : 5;
-    return 7;
-#endif
-}
-
 inline char* Itoa100(char* buf, uint32_t digits)
 {
     static constexpr char const* const kDigits100 =
@@ -724,7 +709,7 @@ inline char* Itoa100(char* buf, uint32_t digits)
     return buf + 2;
 }
 
-inline char* Itoa_32(char* buf, uint32_t n)
+FAST_DTOA_INLINE char* Itoa_32(char* buf, uint32_t n)
 {
     uint32_t q;
 
@@ -805,7 +790,7 @@ L_3_digits:
 }
 
 #if FAST_DTOA_ROUND
-inline void Grisu2Round(char* buf, int len, uint64_t dist, uint64_t delta, uint64_t rest, uint64_t ten_k)
+FAST_DTOA_INLINE void Grisu2Round(char* buf, int len, uint64_t dist, uint64_t delta, uint64_t rest, uint64_t ten_k)
 {
     // dist, delta, rest and ten_k all are the significands of
     // floating-point numbers with an exponent e.
@@ -850,9 +835,9 @@ struct Grisu2Result {
 };
 
 #if FAST_DTOA_ROUND
-inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
+FAST_DTOA_INLINE Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
 #else
-inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp M_plus)
+FAST_DTOA_INLINE Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp M_plus)
 #endif
 {
     static_assert(kAlpha >= -57, "invalid parameter");
@@ -1121,9 +1106,9 @@ inline Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp M_plus)
 // v = buf * 10^decimal_exponent
 // len is the length of the buffer (number of decimal digits)
 #if FAST_DTOA_ROUND
-inline Grisu2Result Grisu2(char* buffer, Fp m_minus, Fp v, Fp m_plus)
+FAST_DTOA_INLINE Grisu2Result Grisu2(char* buffer, Fp m_minus, Fp v, Fp m_plus)
 #else
-inline Grisu2Result Grisu2(char* buffer, Fp m_minus, Fp m_plus)
+FAST_DTOA_INLINE Grisu2Result Grisu2(char* buffer, Fp m_minus, Fp m_plus)
 #endif
 {
 #if FAST_DTOA_ROUND
@@ -1195,7 +1180,7 @@ inline Grisu2Result Grisu2(char* buffer, Fp m_minus, Fp m_plus)
 //
 //------------------------------------------------------------------------------
 
-inline char* FormatBuffer(char* buf, int k, int n)
+FAST_DTOA_INLINE char* FormatBuffer(char* buf, int k, int n)
 {
     // v = digits * 10^(n-k)
     // k is the length of the buffer (number of decimal digits)
