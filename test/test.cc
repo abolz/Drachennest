@@ -603,7 +603,11 @@ static void TestDoubles()
         {
             auto const w = fast_dtoa::ComputeBoundaries(value);
             int k = 0;
+#if GRISU2_ROUND
             fast_dtoa::Grisu2(buf1, len1, k, w.minus, w.w, w.plus);
+#else
+            fast_dtoa::Grisu2(buf1, len1, k, w.minus, w.plus);
+#endif
         }
         {
             using double_conversion::DoubleToStringConverter;
