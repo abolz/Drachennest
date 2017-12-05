@@ -18,23 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Implements the Grisu2 algorithm for binary to decimal floating-point
-// conversion.
-//
-// This implementation is a slightly modified version of the reference
-// implementation by Florian Loitsch which can be obtained from
-// http://florian.loitsch.com/publications (bench.tar.gz)
-// The original license can be found at the end of this file.
-//
-// References:
-//
-// [1]  Loitsch, "Printing Floating-Point Numbers Quickly and Accurately with Integers",
-//      Proceedings of the ACM SIGPLAN 2010 Conference on Programming Language Design and Implementation, PLDI 2010
-// [2]  Burger, Dybvig, "Printing Floating-Point Numbers Quickly and Accurately",
-//      Proceedings of the ACM SIGPLAN 1996 Conference on Programming Language Design and Implementation, PLDI 1996
-
-// Header-only U+1F926 U+1F937
-
 #pragma once
 
 #include <cassert>
@@ -43,24 +26,36 @@
 #include <limits>
 #include <type_traits>
 
-#define FAST_DTOA_USE_INTRINSICS    1
-#define FAST_DTOA_ROUND             1
-
-#if FAST_DTOA_USE_INTRINSICS && defined(_MSC_VER)
+#if defined(_MSC_VER)
 #include <intrin.h>
 #endif
 
-#if 1 && defined(_MSC_VER)
-#define FAST_DTOA_INLINE __forceinline
+#if defined(_MSC_VER)
+#define GRISU2_UNREACHABLE() __assume(false)
+#elif defined(__GNUC__)
+#define GRISU2_UNREACHABLE() __builtin_unreachable();
 #else
-#define FAST_DTOA_INLINE inline
+#define GRISU2_UNREACHABLE() assert(false && "unreachable");
 #endif
 
-namespace fast_dtoa {
+#define GRISU2_ROUND 1
 
-//------------------------------------------------------------------------------
 //
-//------------------------------------------------------------------------------
+// Implements the Grisu2 algorithm for binary to decimal floating-point
+// conversion.
+//
+// This implementation is a slightly modified version of the reference
+// implementation by Florian Loitsch which can be obtained from
+// http://florian.loitsch.com/publications (bench.tar.gz)
+//
+// References:
+//
+// [1]  Loitsch, "Printing Floating-Point Numbers Quickly and Accurately with Integers",
+//      Proceedings of the ACM SIGPLAN 2010 Conference on Programming Language Design and Implementation, PLDI 2010
+// [2]  Burger, Dybvig, "Printing Floating-Point Numbers Quickly and Accurately",
+//      Proceedings of the ACM SIGPLAN 1996 Conference on Programming Language Design and Implementation, PLDI 1996
+//
+namespace dtoa {
 
 template <typename Float>
 struct IEEEFloat
@@ -71,7 +66,7 @@ struct IEEEFloat
         = std::numeric_limits<Float>::digits == 53 && std::numeric_limits<Float>::max_exponent == 1024;
 
     static_assert(std::numeric_limits<Float>::is_iec559 && (is_single || is_double),
-        "IEEE-754 implementation required");
+        "IEEE-754 single or double precision implementation required");
 
     using Uint = typename std::conditional<is_single, uint32_t, uint64_t>::type;
 
@@ -83,9 +78,9 @@ struct IEEEFloat
     static constexpr Uint const kSignMask        = Uint{1} << (is_single ? 31 : 63);
     static constexpr Uint const kExponentMask    = Uint{is_single ? 0xFF : 0x7FF} << (kPrecision - 1);
     static constexpr Uint const kSignificandMask = kHiddenBit - 1;
-    static constexpr int  const kMaxDigits10     = is_single ? 9 : 17;
 
-    union { // XXX: memcpy?
+    union
+    {
         Float value;
         Uint bits;
     };
@@ -132,10 +127,6 @@ struct IEEEFloat
     }
 };
 
-//------------------------------------------------------------------------------
-//
-//------------------------------------------------------------------------------
-
 struct Fp // f * 2^e
 {
     static constexpr int const kPrecision = 64; // = q
@@ -177,7 +168,7 @@ inline Fp Fp::Mul(Fp x, Fp y)
     //  f = round((x.f * y.f) / 2^q)
     //  e = x.e + y.e + q
 
-#if FAST_DTOA_USE_INTRINSICS && defined(_MSC_VER) && defined(_M_X64)
+#if defined(_MSC_VER) && defined(_M_X64)
 
     uint64_t h = 0;
     uint64_t l = _umul128(x.f, y.f, &h);
@@ -185,7 +176,7 @@ inline Fp Fp::Mul(Fp x, Fp y)
 
     return Fp(h, x.e + y.e + 64);
 
-#elif FAST_DTOA_USE_INTRINSICS && defined(__GNUC__) && defined(__SIZEOF_INT128__)
+#elif defined(__GNUC__) && defined(__SIZEOF_INT128__)
 
     __extension__ using Uint128 = unsigned __int128;
 
@@ -260,23 +251,25 @@ inline int CountLeadingZeros_64(uint64_t n)
 {
     assert(n != 0);
 
-#if FAST_DTOA_USE_INTRINSICS && defined(_MSC_VER) && defined(_M_X64)
+#if defined(_MSC_VER) && defined(_M_X64)
 
     unsigned long high = 0; // index of most significant 1-bit
     _BitScanReverse64(&high, n);
     return 63 - static_cast<int>(high);
 
-#elif FAST_DTOA_USE_INTRINSICS && defined(__GNUC__)
+#elif defined(__GNUC__)
 
     return __builtin_clzll(static_cast<unsigned long long>(n));
 
 #else
 
     int z = 0;
-    while ((n >> 63) == 0) {
+    while ((n >> 63) == 0)
+    {
         z++;
         n <<= 1;
     }
+
     return z;
 
 #endif
@@ -298,18 +291,14 @@ inline Fp Fp::NormalizeTo(Fp x, int e)
     return Fp(x.f << delta, e);
 }
 
-//------------------------------------------------------------------------------
-//
-//------------------------------------------------------------------------------
-
-#if FAST_DTOA_ROUND
-struct BoundedFp {
+#if GRISU2_ROUND
+struct FpBoundaries {
     Fp w;
     Fp minus;
     Fp plus;
 };
 #else
-struct BoundedFp {
+struct FpBoundaries {
     Fp minus;
     Fp plus;
 };
@@ -340,7 +329,7 @@ struct BoundedFp {
 // and we therefore need some extra bits of precision.
 //
 template <typename Float>
-FAST_DTOA_INLINE BoundedFp ComputeBoundedFp(Float v_ieee)
+FpBoundaries ComputeBoundaries(Float v_ieee)
 {
     using IEEEType = IEEEFloat<Float>;
 
@@ -415,10 +404,7 @@ FAST_DTOA_INLINE BoundedFp ComputeBoundedFp(Float v_ieee)
     //
     Fp const minus = Fp::NormalizeTo(m_minus, plus.e);
 
-    //assert(plus.f > minus.f);
-    //assert(plus.f - minus.f >= 3 * (uint64_t{1} << (Fp::kPrecision - IEEEType::kPrecision - 2)));
-
-#if FAST_DTOA_ROUND
+#if GRISU2_ROUND
     return {Fp::Normalize(v), minus, plus};
 #else
     return {minus, plus};
@@ -435,16 +421,15 @@ FAST_DTOA_INLINE BoundedFp ComputeBoundedFp(Float v_ieee)
 // approximate power-of-ten c ~= 10^-k (which needs to be precomputed using
 // high-precision arithmetic and stored in a table) such that the exponent of
 // the products lies within a certain range [alpha, gamma]. It then remains to
-// produce the decimal digits of a DiyFp number M = f * 2^e, where
-// alpha <= e <= gamma.
+// produce the decimal digits of the number M = f * 2^e, where alpha <= e <= gamma.
 //
 // The choice of alpha and gamma determines the digit generation procedure and
-// the size of the look-up table (or vice versa...) and depends on the
-// extended precision q.
+// the size of the look-up table (and/or vice versa...) and depends on the
+// extended precision q of the DiyFp's.
 //
 // In other words, given normalized w, Grisu needs to find a (normalized) cached
 // power-of-ten c, such that the exponent of the product c * w = f * 2^e
-// satisfies (Definition 3.2)
+// satisfies (Definition 3.2 from [1])
 //
 //      alpha <= e = e_c + e_w + q <= gamma
 //
@@ -473,48 +458,41 @@ FAST_DTOA_INLINE BoundedFp ComputeBoundedFp(Float v_ieee)
 //              = (f div 2^-e) + (f mod 2^-e) * 2^e
 //              = p1 + p2 * 2^e
 //
-// The conversion of p1 into decimal form requires some divisions and modulos by
-// a power-of-ten. These operations are faster for 32-bit than for 64-bit
-// integers, so p1 should ideally fit into a 32-bit integer. This be achieved by
-// choosing
+// The conversion of p1 into decimal form requires a series of divisions and
+// modulos by (a power of) 10. These operations are faster for 32-bit than for
+// 64-bit integers, so p1 should ideally fit into a 32-bit integer. This can be
+// achieved by choosing
 //
 //      -e >= 32   or   e <= -32 := gamma
 //
 // In order to convert the fractional part
 //
-//      p2 * 2^e = d[-1] / 10^1 + d[-2] / 10^2 + ... + d[-k] / 10^k
+//      p2 * 2^e = d[-1] / 10^1 + d[-2] / 10^2 + ... + d[-k] / 10^k + ...
 //
 // into decimal form, the fraction is repeatedly multiplied by 10 and the digits
 // d[-i] are extracted in order:
 //
 //      (10 * p2) div 2^-e = d[-1]
-//      (10 * p2) mod 2^-e = d[-2] / 10^1 + ... + d[-k] / 10^(k-1)
+//      (10 * p2) mod 2^-e = d[-2] / 10^1 + ... + d[-k] / 10^(k-1) + ...
 //
-// The multiplication by 10 must not overflow. For this it is sufficient to have
+// The multiplication by 10 must not overflow. It is sufficient to choose
 //
 //      10 * p2 < 16 * p2 = 2^4 * p2 <= 2^64.
 //
-// Since p2 = f mod 2^-e < 2^-e one may choose
+// Since p2 = f mod 2^-e < 2^-e,
 //
 //      -e <= 60   or   e >= -60 := alpha
 //
-// On the other hand, if multiplication by 100 does not overflow, two digits of
-// p2 might be generated at a time. This requires
+// These choices for alpha and gamma work out well in practice. Different
+// considerations may lead to different digit generation procedures and
+// different values of alpha and gamma...
 //
-//      -e <= 64-7   or   e >= -64+7 =: alpha.
-//
-// This choice requires a slightly larger table of cached powers.
-//
-constexpr int const kAlpha = -57;
+constexpr int const kAlpha = -60;
 constexpr int const kGamma = -32;
 
-// Grisu needs to find a(normalized) cached power-of-ten c, such that the
-// exponent of the product c * w = f * 2^e satisfies (Definition 3.2)
 //
-//      alpha <= e = e_c + e_w + q <= gamma
-//
-// For IEEE double precision floating-point numbers v converted into a DiyFp's
-// w = f * 2^e,
+// For IEEE double precision floating-point numbers v converted into
+// normalized DiyFp's w = f * 2^e, still assuming q = 64,
 //
 //      e >= -1022      (min IEEE exponent)
 //           -52        (IEEE significand size)
@@ -546,13 +524,17 @@ constexpr int const kGamma = -32;
 //      k = ceil( log_10( 2^(alpha - e - 1) ) )
 //        = ceil( (alpha - e - 1) * log_10(2) )
 //
-// (From the paper)
-// "In theory the result of the procedure could be wrong since c is rounded, and
-// the computation itself is approximated [...]. In practice, however, this
+// (From the paper:)
+// "In theory the result of the procedure could be wrong since c is rounded,
+// and the computation itself is approximated [...]. In practice, however, this
 // simple function is sufficient."
 //
-// The difference of the decimal exponents of adjacent table entries must be
-// <= floor( (gamma - alpha) * log_10(2) ) = 7.
+// The difference gamma - alpha determines the size of the table of precomputed
+// powers: The difference of the decimal exponents of adjacent table entries
+// must be less than or equal to
+//
+//      floor( (gamma - alpha) * log_10(2) ) = 8.
+//
 
 struct CachedPower { // c = f * 2^e ~= 10^k
     uint64_t f;
@@ -560,116 +542,106 @@ struct CachedPower { // c = f * 2^e ~= 10^k
     int k;
 };
 
-// Returns a cached power-of-ten c, such that alpha <= e_c + e + q <= gamma.
 inline CachedPower GetCachedPowerForBinaryExponent(int e)
 {
     // NB:
-    // Actually this function returns c, such that -57 <= e_c + e + 64 <= -34.
+    // Actually this function returns c, such that -60 <= e_c + e + 64 <= -34.
 
-    constexpr int const kCachedPowersSize = 91;
+    constexpr int const kCachedPowersSize = 79;
     constexpr int const kCachedPowersMinDecExp = -300;
-    constexpr int const kCachedPowersDecStep = 7;
+    constexpr int const kCachedPowersDecStep = 8;
 
     static constexpr CachedPower const kCachedPowers[] = {
         { 0xAB70FE17C79AC6CA, -1060, -300 },
-        { 0xCC5FC196FEFD7D0C, -1037, -293 },
-        { 0xF3A20279ED56D48A, -1014, -286 },
-        { 0x91376C36D99995BE,  -990, -279 },
-        { 0xAD1C8EAB5EE43B67,  -967, -272 },
-        { 0xCE5D73FF402D98E4,  -944, -265 },
-        { 0xF6019DA07F549B2B,  -921, -258 },
-        { 0x92A1958A7675175F,  -897, -251 },
+        { 0xFF77B1FCBEBCDC4F, -1034, -292 },
+        { 0xBE5691EF416BD60C, -1007, -284 },
+        { 0x8DD01FAD907FFC3C,  -980, -276 },
+        { 0xD3515C2831559A83,  -954, -268 },
+        { 0x9D71AC8FADA6C9B5,  -927, -260 },
+        { 0xEA9C227723EE8BCB,  -901, -252 },
         { 0xAECC49914078536D,  -874, -244 },
-        { 0xD0601D8EFC57B08C,  -851, -237 },
-        { 0xF867241C8CC6D4C1,  -828, -230 },
-        { 0x940F4613AE5ED137,  -804, -223 },
-        { 0xB080392CC4349DED,  -781, -216 },
-        { 0xD267CAA862A12D67,  -758, -209 },
-        { 0xFAD2A4B13D1B5D6C,  -735, -202 },
-        { 0x9580869F0E7AAC0F,  -711, -195 },
+        { 0x823C12795DB6CE57,  -847, -236 },
+        { 0xC21094364DFB5637,  -821, -228 },
+        { 0x9096EA6F3848984F,  -794, -220 },
+        { 0xD77485CB25823AC7,  -768, -212 },
+        { 0xA086CFCD97BF97F4,  -741, -204 },
+        { 0xEF340A98172AACE5,  -715, -196 },
         { 0xB23867FB2A35B28E,  -688, -188 },
-        { 0xD47487CC8470652B,  -665, -181 },
-        { 0xFD442E4688BD304B,  -642, -174 },
-        { 0x96F5600F15A7B7E5,  -618, -167 },
-        { 0xB3F4E093DB73A093,  -595, -160 },
-        { 0xD686619BA27255A3,  -572, -153 },
-        { 0xFFBBCFE994E5C620,  -549, -146 },
-        { 0x986DDB5C6B3A76B8,  -525, -139 },
+        { 0x84C8D4DFD2C63F3B,  -661, -180 },
+        { 0xC5DD44271AD3CDBA,  -635, -172 },
+        { 0x936B9FCEBB25C996,  -608, -164 },
+        { 0xDBAC6C247D62A584,  -582, -156 },
+        { 0xA3AB66580D5FDAF6,  -555, -148 },
+        { 0xF3E2F893DEC3F126,  -529, -140 },
         { 0xB5B5ADA8AAFF80B8,  -502, -132 },
-        { 0xD89D64D57A607745,  -479, -125 },
-        { 0x811CCC668829B887,  -455, -118 },
-        { 0x99EA0196163FA42E,  -432, -111 },
-        { 0xB77ADA0617E3BBCB,  -409, -104 },
-        { 0xDAB99E59958885C5,  -386,  -97 },
-        { 0x825ECC24C8737830,  -362,  -90 },
-        { 0x9B69DBE1B548CE7D,  -339,  -83 },
+        { 0x87625F056C7C4A8B,  -475, -124 },
+        { 0xC9BCFF6034C13053,  -449, -116 },
+        { 0x964E858C91BA2655,  -422, -108 },
+        { 0xDFF9772470297EBD,  -396, -100 },
+        { 0xA6DFBD9FB8E5B88F,  -369,  -92 },
+        { 0xF8A95FCF88747D94,  -343,  -84 },
         { 0xB94470938FA89BCF,  -316,  -76 },
-        { 0xDCDB1B2798182245,  -293,  -69 },
-        { 0x83A3EEEEF9153E89,  -269,  -62 },
-        { 0x9CED737BB6C4183D,  -246,  -55 },
-        { 0xBB127C53B17EC159,  -223,  -48 },
-        { 0xDF01E85F912E37A3,  -200,  -41 }, // single --->
-        { 0x84EC3C97DA624AB5,  -176,  -34 }, //
-        { 0x9E74D1B791E07E48,  -153,  -27 }, //
+        { 0x8A08F0F8BF0F156B,  -289,  -68 },
+        { 0xCDB02555653131B6,  -263,  -60 },
+        { 0x993FE2C6D07B7FAC,  -236,  -52 },
+        { 0xE45C10C42A2B3B06,  -210,  -44 },
+        { 0xAA242499697392D3,  -183,  -36 }, // ---> single precision
+        { 0xFD87B5F28300CA0E,  -157,  -28 }, //
         { 0xBCE5086492111AEB,  -130,  -20 }, //
-        { 0xE12E13424BB40E13,  -107,  -13 }, //
-        { 0x8637BD05AF6C69B6,   -83,   -6 }, //
-        { 0xA000000000000000,   -60,    1 }, //
-        { 0xBEBC200000000000,   -37,    8 }, //
-        { 0xE35FA931A0000000,   -14,   15 }, //
-        { 0x878678326EAC9000,    10,   22 }, //
-        { 0xA18F07D736B90BE5,    33,   29 }, //
+        { 0x8CBCCC096F5088CC,  -103,  -12 }, //
+        { 0xD1B71758E219652C,   -77,   -4 }, //
+        { 0x9C40000000000000,   -50,    4 }, //
+        { 0xE8D4A51000000000,   -24,   12 }, //
+        { 0xAD78EBC5AC620000,     3,   20 }, //
+        { 0x813F3978F8940984,    30,   28 }, //
         { 0xC097CE7BC90715B3,    56,   36 }, //
-        { 0xE596B7B0C643C719,    79,   43 }, // <--- single
-        { 0x88D8762BF324CD10,   103,   50 },
-        { 0xA321F2D7226895C8,   126,   57 },
-        { 0xC2781F49FFCFA6D5,   149,   64 },
-        { 0xE7D34C64A9C85D44,   172,   71 },
-        { 0x8A2DBF142DFCC7AB,   196,   78 },
-        { 0xA4B8CAB1A1563F52,   219,   85 },
+        { 0x8F7E32CE7BEA5C70,    83,   44 }, // <--- single precision
+        { 0xD5D238A4ABE98068,   109,   52 },
+        { 0x9F4F2726179A2245,   136,   60 },
+        { 0xED63A231D4C4FB27,   162,   68 },
+        { 0xB0DE65388CC8ADA8,   189,   76 },
+        { 0x83C7088E1AAB65DB,   216,   84 },
         { 0xC45D1DF942711D9A,   242,   92 },
-        { 0xEA1575143CF97227,   265,   99 },
-        { 0x8B865B215899F46D,   289,  106 },
-        { 0xA6539930BF6BFF46,   312,  113 },
-        { 0xC646D63501A1511E,   335,  120 },
-        { 0xEC5D3FA8CE427B00,   358,  127 },
-        { 0x8CE2529E2734BB1D,   382,  134 },
-        { 0xA7F26836F282B733,   405,  141 },
+        { 0x924D692CA61BE758,   269,  100 },
+        { 0xDA01EE641A708DEA,   295,  108 },
+        { 0xA26DA3999AEF774A,   322,  116 },
+        { 0xF209787BB47D6B85,   348,  124 },
+        { 0xB454E4A179DD1877,   375,  132 },
+        { 0x865B86925B9BC5C2,   402,  140 },
         { 0xC83553C5C8965D3D,   428,  148 },
-        { 0xEEAABA2E5DBF6785,   451,  155 },
-        { 0x8E41ADE9FBEBC27D,   475,  162 },
-        { 0xA99541BF57452B28,   498,  169 },
-        { 0xCA28A291859BBF93,   521,  176 },
-        { 0xF0FDF2D3F3C30B9F,   544,  183 },
-        { 0x8FA475791A569D11,   568,  190 },
-        { 0xAB3C2FDDEEAAD25B,   591,  197 },
+        { 0x952AB45CFA97A0B3,   455,  156 },
+        { 0xDE469FBD99A05FE3,   481,  164 },
+        { 0xA59BC234DB398C25,   508,  172 },
+        { 0xF6C69A72A3989F5C,   534,  180 },
+        { 0xB7DCBF5354E9BECE,   561,  188 },
+        { 0x88FCF317F22241E2,   588,  196 },
         { 0xCC20CE9BD35C78A5,   614,  204 },
-        { 0xF356F7EBF83552FE,   637,  211 },
-        { 0x910AB1D4DB9914A0,   661,  218 },
-        { 0xACE73CBFDC0BFB7B,   684,  225 },
-        { 0xCE1DE40642E3F4B9,   707,  232 },
-        { 0xF5B5D7EC8ACB58A3,   730,  239 },
-        { 0x92746B9BE2F8552C,   754,  246 },
-        { 0xAE9672ABA3D0C321,   777,  253 },
+        { 0x98165AF37B2153DF,   641,  212 },
+        { 0xE2A0B5DC971F303A,   667,  220 },
+        { 0xA8D9D1535CE3B396,   694,  228 },
+        { 0xFB9B7CD9A4A7443C,   720,  236 },
+        { 0xBB764C4CA7A44410,   747,  244 },
+        { 0x8BAB8EEFB6409C1A,   774,  252 },
         { 0xD01FEF10A657842C,   800,  260 },
-        { 0xF81AA16FDC1B81DB,   823,  267 },
-        { 0x93E1AB8252F33B46,   847,  274 },
-        { 0xB049DC016ABC5E60,   870,  281 },
-        { 0xD226FC195C6A2F8C,   893,  288 },
-        { 0xFA856334878FC151,   916,  295 },
-        { 0x95527A5202DF0CCB,   940,  302 },
-        { 0xB201833B35D63F73,   963,  309 },
+        { 0x9B10A4E5E9913129,   827,  268 },
+        { 0xE7109BFBA19C0C9D,   853,  276 },
+        { 0xAC2820D9623BF429,   880,  284 },
+        { 0x80444B5E7AA7CF85,   907,  292 },
+        { 0xBF21E44003ACDD2D,   933,  300 },
+        { 0x8E679C2F5E44FF8F,   960,  308 },
         { 0xD433179D9C8CB841,   986,  316 },
-        { 0xFCF62C1DEE382C42,  1009,  323 },
-        { 0x96C6E0EAB509E64D,  1033,  330 },
+        { 0x9E19DB92B4E31BA9,  1013,  324 },
     };
 
+    //
     // This computation gives exactly the same results for k as
     //
     //      k = ceil((kAlpha - e - 1) * 0.30102999566398114)
     //
     // for |e| <= 1500, but doesn't require floating-point operations.
+    //
     // NB: log_10(2) ~= 78913 / 2^18
+    //
     assert(e >= -1500);
     assert(e <=  1500);
     int const f = kAlpha - e - 1;
@@ -684,10 +656,436 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
     assert(kAlpha <= cached.e + e + 64);
     assert(kGamma >= cached.e + e + 64);
 
-    // XXX:
-    // cached.k = kCachedPowersMinDecExp + 8*index
-
     return cached;
+}
+
+// For n != 0, returns k, such that 10^(k-1) <= n < 10^k.
+// For n == 0, returns 1.
+inline int FindLargestPow10(uint32_t n)
+{
+    if (n >= 1000000000) return 10;
+    if (n >=  100000000) return  9;
+    if (n >=   10000000) return  8;
+    if (n >=    1000000) return  7;
+    if (n >=     100000) return  6;
+    if (n >=      10000) return  5;
+    if (n >=       1000) return  4;
+    if (n >=        100) return  3;
+    if (n >=         10) return  2;
+
+    return 1;
+}
+
+#if GRISU2_ROUND
+inline void Grisu2Round(char* buf, int len, uint64_t dist, uint64_t delta, uint64_t rest, uint64_t ten_k)
+{
+    assert(len >= 1);
+    assert(dist <= delta);
+    assert(rest <= delta);
+    assert(ten_k > 0);
+
+    //
+    //               <--------------------------- delta ---->
+    //                                  <---- dist --------->
+    // --------------[------------------+-------------------]--------------
+    //               w-                 w                   w+
+    //
+    //                                  ten_k
+    //                                <------>
+    //                                       <---- rest ---->
+    // --------------[------------------+----+--------------]--------------
+    //                                  w    V
+    //                                       = buf * 10^k
+    //
+    // ulp represents a unit-in-the-last-place in the decimal representation
+    // stored in buf.
+    // Decrement buf by ulp while this takes buf closer to w.
+    //
+    // The tests are written in this order to avoid overflow in unsigned
+    // integer arithmetic.
+    //
+
+    while (rest < dist
+        && delta - rest >= ten_k
+        && (rest + ten_k < dist || dist - rest > rest + ten_k - dist))
+    {
+        assert(buf[len - 1] != '0');
+        buf[len - 1]--;
+        rest += ten_k;
+    }
+}
+#endif
+
+#if GRISU2_ROUND
+inline void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, Fp M_minus, Fp w, Fp M_plus)
+#else
+inline void Grisu2DigitGen(char* buffer, int& length, int& decimal_exponent, Fp M_minus, Fp M_plus)
+#endif
+{
+    //
+    // Generates the digits (and the exponent) of a decimal floating-point
+    // number V in the range [w-, w+].
+    //
+    //               <--------------------------- delta ---->
+    //                                  <---- dist --------->
+    // --------------[------------------+-------------------]--------------
+    //               w-                 w                   w+
+    //
+    // Instead of generating the digits of w, Grisu2 generates the digits
+    // of w+ from left to right and stops as soon as V is in [w-,w+].
+    //
+
+    static_assert(Fp::kPrecision == 64, "invalid configuration");
+
+    static_assert(kAlpha >= -60, "invalid parameter");
+    static_assert(kGamma <= -32, "invalid parameter");
+
+    assert(M_plus.e >= kAlpha);
+    assert(M_plus.e <= kGamma);
+
+    uint64_t delta = Fp::Sub(M_plus, M_minus).f; // (significand of (w+ - w-), implicit exponent is e)
+#if GRISU2_ROUND
+    uint64_t dist  = Fp::Sub(M_plus, w      ).f; // (significand of (w+ - w ), implicit exponent is e)
+#endif
+
+    //
+    // Split w+ = f * 2^e into two parts p1 and p2 (note: e < 0):
+    //
+    //      w+ = f * 2^e
+    //         = ((f div 2^-e) * 2^-e + (f mod 2^-e)) * 2^e
+    //         = ((p1        ) * 2^-e + (p2        )) * 2^e
+    //         = p1 + p2 * 2^e
+    //
+
+    int      const neg_e = -M_plus.e;
+    uint64_t const mod_e = (uint64_t{1} << -M_plus.e) - 1;
+
+    uint32_t p1 = static_cast<uint32_t>(M_plus.f >> neg_e); // p1 = f div 2^-e (Since -e >= 32, p1 fits into a 32-bit int.)
+    uint64_t p2 = M_plus.f & mod_e;                         // p2 = f mod 2^-e
+
+    //
+    // 1.
+    // Generate the digits of the integral part p1 = d[n-1]...d[1]d[0]
+    //
+
+    // Since w+ is normalized (f >= 2^(64-1)) and e >= -60, p1 > 0.
+    assert(p1 > 0);
+
+    int const k = FindLargestPow10(p1);
+
+    //
+    // Now
+    //
+    //      10^(k-1) <= p1 < 10^k, pow10 = 10^(k-1)
+    //
+    //      p1 = (p1 div 10^(k-1)) * 10^(k-1) + (p1 mod 10^(k-1))
+    //         = (d[k-1]         ) * 10^(k-1) + (p1 mod 10^(k-1))
+    //
+    //      w+ = p1                                             + p2 * 2^e
+    //         = d[k-1] * 10^(k-1) + (p1 mod 10^(k-1))          + p2 * 2^e
+    //         = d[k-1] * 10^(k-1) + ((p1 mod 10^(k-1)) * 2^-e + p2) * 2^e
+    //         = d[k-1] * 10^(k-1) + (                         rest) * 2^e
+    //
+    // Now generate the digits d[n] of p1 from left to right (n = k-1,...,0)
+    //
+    //      p1 = d[k-1]...d[n] * 10^n + d[n-1]...d[0]
+    //
+    // but stop as soon as
+    //
+    //      rest * 2^e = (d[n-1]...d[0] * 2^-e + p2) * 2^e <= delta * 2^e
+    //
+
+    int n = k;
+    while (n > 0)
+    {
+        //
+        // (1)  w+ = buffer * 10^n + (p1 + p2 * 2^e)    (buffer = 0 for n = k)
+        // (2)  pow10 = 10^(n-1) <= p1 < 10^n
+        //
+
+        uint32_t d;
+        uint32_t r;
+#if GRISU2_ROUND
+        uint32_t pow10;
+
+        switch (n) {
+        case 10: d = p1 / 1000000000; r = p1 % 1000000000; pow10 = 1000000000; break;
+        case  9: d = p1 /  100000000; r = p1 %  100000000; pow10 =  100000000; break;
+        case  8: d = p1 /   10000000; r = p1 %   10000000; pow10 =   10000000; break;
+        case  7: d = p1 /    1000000; r = p1 %    1000000; pow10 =    1000000; break;
+        case  6: d = p1 /     100000; r = p1 %     100000; pow10 =     100000; break;
+        case  5: d = p1 /      10000; r = p1 %      10000; pow10 =      10000; break;
+        case  4: d = p1 /       1000; r = p1 %       1000; pow10 =       1000; break;
+        case  3: d = p1 /        100; r = p1 %        100; pow10 =        100; break;
+        case  2: d = p1 /         10; r = p1 %         10; pow10 =         10; break;
+        case  1: d = p1 /          1; r = p1 %          1; pow10 =          1; break;
+        default:
+            GRISU2_UNREACHABLE();
+            break;
+        }
+#else
+        switch (n) {
+        case 10: d = p1 / 1000000000; r = p1 % 1000000000; break;
+        case  9: d = p1 /  100000000; r = p1 %  100000000; break;
+        case  8: d = p1 /   10000000; r = p1 %   10000000; break;
+        case  7: d = p1 /    1000000; r = p1 %    1000000; break;
+        case  6: d = p1 /     100000; r = p1 %     100000; break;
+        case  5: d = p1 /      10000; r = p1 %      10000; break;
+        case  4: d = p1 /       1000; r = p1 %       1000; break;
+        case  3: d = p1 /        100; r = p1 %        100; break;
+        case  2: d = p1 /         10; r = p1 %         10; break;
+        case  1: d = p1 /          1; r = p1 %          1; break;
+        default:
+            GRISU2_UNREACHABLE();
+            break;
+        }
+#endif
+        //
+        //      w+ = buffer * 10^n + (d * 10^(n-1) + r) + p2 * 2^e
+        //         = (buffer * 10 + d) * 10^(n-1) + (r + p2 * 2^e)
+        //
+        assert(d <= 9);
+        buffer[length++] = static_cast<char>('0' + d); // buffer := buffer * 10 + d
+        //
+        //      w+ = buffer * 10^(n-1) + (r + p2 * 2^e)
+        //
+        p1 = r;
+        n--;
+        //
+        //      w+ = buffer * 10^n + (p1 + p2 * 2^e)
+        //      pow10 = 10^n
+        //
+
+        //
+        // Now check if enough digits have been generated.
+        // Compute
+        //
+        //      p1 + p2 * 2^e = (p1 * 2^-e + p2) * 2^e = rest * 2^e
+        //
+        // Note:
+        // Since rest and delta share the same exponent e, it suffices to
+        // compare the significands.
+        //
+        uint64_t const rest = (uint64_t{p1} << neg_e) + p2;
+        if (rest <= delta)
+        {
+            //
+            // Found V = buffer * 10^n, with w- <= V <= w+.
+            //
+            decimal_exponent += n;
+
+#if GRISU2_ROUND
+            //
+            // We may now just stop. But instead look if the buffer could be
+            // decremented to bring V closer to w.
+            //
+            // pow10 = 10^n is now 1 ulp in the decimal representation V.
+            // The rounding procedure works with DiyFp's with an implicit
+            // exponent of e.
+            //
+            //      10^n = (10^n * 2^-e) * 2^e = ulp * 2^e
+            //
+            uint64_t const ten_n = uint64_t{pow10} << neg_e;
+            Grisu2Round(buffer, length, dist, delta, rest, ten_n);
+#endif
+            return;
+        }
+    }
+
+    //
+    // 2.
+    // The digits of the integral part have been generated:
+    //
+    //      w+ = d[k-1]...d[1]d[0] + p2 * 2^e
+    //         = buffer            + p2 * 2^e
+    //
+    // Now generate the digits of the fractional part p2 * 2^e.
+    //
+    // Note:
+    // No decimal point is generated: the exponent is adjusted instead.
+    //
+    // p2 actually represents the fraction
+    //
+    //      p2 * 2^e
+    //          = p2 / 2^-e
+    //          = d[-1] / 10^1 + d[-2] / 10^2 + ...
+    //
+    // Now generate the digits d[-m] of p1 from left to right (m = 1,2,...)
+    //
+    //      p2 * 2^e = d[-1]d[-2]...d[-m] * 10^-m
+    //                      + 10^-m * (d[-m-1] / 10^1 + d[-m-2] / 10^2 + ...)
+    //
+    // using
+    //
+    //      10^m * p2 = ((10^m * p2) div 2^-e) * 2^-e + ((10^m * p2) mod 2^-e)
+    //                = (                   d) * 2^-e + (                   r)
+    //
+    // or
+    //      10^m * p2 * 2^e = d + r * 2^e
+    //
+    // i.e.
+    //
+    //      w+ = buffer + p2 * 2^e
+    //         = buffer + 10^-m * (d + r * 2^e)
+    //         = (buffer * 10^m + d) * 10^-m + 10^-m * r * 2^e
+    //
+    // and stop as soon as 10^-m * r * 2^e <= delta * 2^e
+    //
+
+    assert(p2 > delta);
+    // (otherwise the loop above would have been exited with rest <= delta)
+
+    int m = 0;
+    for (;;)
+    {
+        //
+        // Invariant:
+        //      w+ = buffer * 10^-m + 10^-m * (d[-m-1] / 10 + d[-m-2] / 10^2 + ...) * 2^e
+        //         = buffer * 10^-m + 10^-m * (p2                                 ) * 2^e
+        //         = buffer * 10^-m + 10^-m * (1/10 * (10 * p2)                   ) * 2^e
+        //         = buffer * 10^-m + 10^-m * (1/10 * ((10*p2 div 2^-e) * 2^-e + (10*p2 mod 2^-e)) * 2^e
+        //
+
+        assert(p2 <= UINT64_MAX / 10);
+        p2 *= 10;
+
+        uint64_t const d = p2 >> neg_e; // d = (10 * p2) div 2^-e
+        uint64_t const r = p2 & mod_e;  // r = (10 * p2) mod 2^-e
+        //
+        //      w+ = buffer * 10^-m + 10^-m * (1/10 * (d * 2^-e + r) * 2^e
+        //         = buffer * 10^-m + 10^-m * (1/10 * (d + r * 2^e))
+        //         = (buffer * 10 + d) * 10^(-m-1) + 10^(-m-1) * r * 2^e
+        //
+        assert(d <= 9);
+        buffer[length++] = static_cast<char>('0' + d); // buffer := buffer * 10 + d
+        //
+        //      w+ = buffer * 10^(-m-1) + 10^(-m-1) * r * 2^e
+        //
+        p2 = r;
+        m++;
+        //
+        //      w+ = buffer * 10^-m + 10^-m * p2 * 2^e
+        //
+        // Invariant restored.
+        //
+
+        //
+        // Check if enough digits have been generated.
+        // Compute
+        //
+        //      10^-m * p2 * 2^e <= delta * 2^e
+        //              p2 * 2^e <= 10^m * delta * 2^e
+        //                    p2 <= 10^m * delta
+        //
+        delta *= 10;
+#if GRISU2_ROUND
+        dist  *= 10;
+#endif
+
+        if (p2 <= delta)
+        {
+            decimal_exponent -= m;
+
+#if GRISU2_ROUND
+            //
+            // 1 ulp in the decimal representation is now 10^-m.
+            // Since delta and dist are now scaled by 10^m, we need to do the
+            // same with ulp in order to keep the units in sync.
+            //
+            //      10^m * 10^-m = 1 = 2^-e * 2^e = ten_m * 2^e
+            //
+            uint64_t const ten_m = uint64_t{1} << neg_e;
+            Grisu2Round(buffer, length, dist, delta, p2, ten_m);
+#endif
+            return;
+        }
+    }
+
+    //
+    // By construction this algorithm generates the shortest possible decimal
+    // number (Loitsch, Theorem 6.2) which rounds back to w.
+    // For an input number of precision p, at least
+    //
+    //      N = 1 + ceil(p * log_10(2))
+    //
+    // decimal digits are sufficient to identify all binary floating-point
+    // numbers (Matula, "In-and-Out conversions").
+    // This implies that the algorithm does not produce more than N decimal
+    // digits.
+    //
+    //      N = 17 for p = 53 (IEEE double precision)
+    //      N = 9  for p = 24 (IEEE single precision)
+    //
+}
+
+// v = buf * 10^decimal_exponent
+// len is the length of the buffer (number of decimal digits)
+#if GRISU2_ROUND
+inline void Grisu2(char* buf, int& len, int& decimal_exponent, Fp m_minus, Fp v, Fp m_plus)
+#else
+inline void Grisu2(char* buf, int& len, int& decimal_exponent, Fp m_minus, Fp m_plus)
+#endif
+{
+    assert(m_minus.e == m_plus.e);
+#if GRISU2_ROUND
+    assert(v.e == m_plus.e);
+#endif
+
+    //
+    //  --------(-----------------------+-----------------------)--------    (A)
+    //          m-                      v                       m+
+    //
+    //  --------------------(-----------+-----------------------)--------    (B)
+    //                      m-          v                       m+
+    //
+    // First scale v (and m- and m+) such that the exponent is in the range
+    // [alpha, gamma].
+    //
+
+    CachedPower const cached = GetCachedPowerForBinaryExponent(m_plus.e);
+
+    Fp const c_minus_k(cached.f, cached.e); // = c ~= 10^k
+
+    // The exponent of the products is v.e + c_minus_k.e + q
+#if GRISU2_ROUND
+    Fp const w       = Fp::Mul(v,       c_minus_k);
+#endif
+    Fp const w_minus = Fp::Mul(m_minus, c_minus_k);
+    Fp const w_plus  = Fp::Mul(m_plus,  c_minus_k);
+
+    //
+    //  ----(---+---)---------------(---+---)---------------(---+---)----
+    //          w-                      w                       w+
+    //          = c*m-                  = c*v                   = c*m+
+    //
+    // Fp::Mul rounds its result and c_minus_k is approximated too. w, w- and
+    // w+ are now off by a small amount.
+    // In fact:
+    //
+    //      w - v * 10^k < 1 ulp
+    //
+    // To account for this inaccuracy, add resp. subtract 1 ulp.
+    //
+    //  --------+---[---------------(---+---)---------------]---+--------
+    //          w-  M-                  w                   M+  w+
+    //
+    // Now any number in [M-, M+] (bounds included) will round to w when input,
+    // regardless of how the input rounding algorithm breaks ties.
+    //
+    // And DigitGen generates the shortest possible such number in [M-, M+].
+    // Note that this does not mean that Grisu2 always generates the shortest
+    // possible number in the interval (m-, m+).
+    //
+    Fp const M_minus = Fp(w_minus.f + 1, w_minus.e);
+    Fp const M_plus  = Fp(w_plus.f  - 1, w_plus.e );
+
+    decimal_exponent = -cached.k; // = -(-k) = k
+
+#if GRISU2_ROUND
+    Grisu2DigitGen(buf, len, decimal_exponent, M_minus, w, M_plus);
+#else
+    Grisu2DigitGen(buf, len, decimal_exponent, M_minus, M_plus);
+#endif
 }
 
 inline char* Itoa100(char* buf, uint32_t digits)
@@ -709,478 +1107,42 @@ inline char* Itoa100(char* buf, uint32_t digits)
     return buf + 2;
 }
 
-FAST_DTOA_INLINE char* Itoa_32(char* buf, uint32_t n)
+// Returns a pointer to the element following the exponent
+inline char* AppendExponent(char* buf, int e)
 {
-    uint32_t q;
+    assert(e > -1000);
+    assert(e <  1000);
 
-    if (n >= 1000000000)
+    if (e < 0)
     {
-//L_10_digits:
-        q = n / 100000000;
-        n = n % 100000000;
-        buf = Itoa100(buf, q);
-L_8_digits:
-        q = n / 1000000;
-        n = n % 1000000;
-        buf = Itoa100(buf, q);
-L_6_digits:
-        q = n / 10000;
-        n = n % 10000;
-        buf = Itoa100(buf, q);
-L_4_digits:
-        q = n / 100;
-        n = n % 100;
-        buf = Itoa100(buf, q);
-//L_2_digits:
-        return Itoa100(buf, n);
+        e = -e;
+        *buf++ = '-';
     }
-
-    if (n < 100) {
-        if (n >= 10) {
-            return Itoa100(buf, n);
-        } else {
-            buf[0] = static_cast<char>('0' + n);
-            return buf + 1;
-        }
-    }
-
-    if (n < 10000) {
-        if (n >= 1000)
-            goto L_4_digits;
-        else
-            goto L_3_digits;
-    }
-
-    if (n < 1000000) {
-        if (n >= 100000)
-            goto L_6_digits;
-        else
-            goto L_5_digits;
-    }
-
-    if (n < 100000000) {
-        if (n >= 10000000)
-            goto L_8_digits;
-        else
-            goto L_7_digits;
-    }
-
-    //if (n >= 100000000)
+    else
     {
-//L_9_digits:
-        q = n / 10000000;
-        n = n % 10000000;
-        buf = Itoa100(buf, q);
-L_7_digits:
-        q = n / 100000;
-        n = n % 100000;
-        buf = Itoa100(buf, q);
-L_5_digits:
-        q = n / 1000;
-        n = n % 1000;
-        buf = Itoa100(buf, q);
-L_3_digits:
-        q = n / 10;
-        n = n % 10;
-        buf = Itoa100(buf, q);
-//L_1_digit:
-        buf[0] = static_cast<char>('0' + n);
+        *buf++ = '+';
+    }
+
+    uint32_t k = static_cast<uint32_t>(e);
+    if (k < 10)
+    {
+        buf[0] = static_cast<char>('0' + k);
         return buf + 1;
     }
-}
-
-#if FAST_DTOA_ROUND
-FAST_DTOA_INLINE void Grisu2Round(char* buf, int len, uint64_t dist, uint64_t delta, uint64_t rest, uint64_t ten_k)
-{
-    // dist, delta, rest and ten_k all are the significands of
-    // floating-point numbers with an exponent e.
-
-    assert(len >= 1);
-    assert(dist <= delta);
-    assert(rest <= delta);
-    assert(ten_k > 0);
-
-    //
-    //               <--------------------------- delta ---->
-    //                                  <---- dist --------->
-    // --------------[------------------+-------------------]--------------
-    //               w-                 w                   w+
-    //
-    //                                  10^k
-    //                                <------>
-    //                                       <---- rest ---->
-    // --------------[------------------+----+--------------]--------------
-    //                                  w    V
-    //                                       = buf * 10^k
-    //
-    // ten_k represents a unit-in-the-last-place in the decimal representation
-    // stored in buf.
-    // Decrement buf by ten_k while this takes buf closer to w.
-    //
-
-    while (rest < dist
-        && delta - rest >= ten_k
-        && (rest + ten_k < dist || dist - rest > rest + ten_k - dist))
+    else if (k < 100)
     {
-        assert(buf[len - 1] != '0');
-        buf[len - 1]--;
-        rest += ten_k;
+        return Itoa100(buf, k);
+    }
+    else
+    {
+        uint32_t q = k / 100;
+        uint32_t r = k % 100;
+        buf[0] = static_cast<char>('0' + q);
+        return Itoa100(buf + 1, r);
     }
 }
-#endif
 
-struct Grisu2Result {
-    int length;
-    int decimal_exponent;
-};
-
-#if FAST_DTOA_ROUND
-FAST_DTOA_INLINE Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp w, Fp M_plus)
-#else
-FAST_DTOA_INLINE Grisu2Result Grisu2DigitGen(char* buffer, Fp M_minus, Fp M_plus)
-#endif
-{
-    static_assert(kAlpha >= -57, "invalid parameter");
-    static_assert(kGamma <= -32, "invalid parameter");
-
-    assert(M_plus.e >= kAlpha);
-    assert(M_plus.e <= kGamma);
-
-    uint64_t delta = Fp::Sub(M_plus, M_minus).f; // (significand of (w+ - w-), implicit exponent is e)
-#if FAST_DTOA_ROUND
-    uint64_t dist  = Fp::Sub(M_plus, w      ).f; // (significand of (w+ - w ), implicit exponent is e)
-#endif
-
-    //               <--------------------------- delta ---->
-    //                                  <---- dist --------->
-    // --------------[------------------+-------------------]--------------
-    //               w-                 w                   w+
-    //
-    // Split w+ = f * 2^e into two parts p1 and p2 (note: e < 0):
-    //
-    //      w+ = f * 2^e
-    //         = ((f div 2^-e) * 2^-e + (f mod 2^-e)) * 2^e
-    //         = ((p1        ) * 2^-e + (p2        )) * 2^e
-    //         = p1 + p2 * 2^e
-
-    Fp const one = Fp(uint64_t{1} << -M_plus.e, M_plus.e);
-
-    uint32_t p1 = static_cast<uint32_t>(M_plus.f >> -one.e); // p1 = f div 2^-e (Since -e >= 32, p1 fits into a 32-bit int.)
-    uint64_t p2 = M_plus.f & (one.f - 1);                    // p2 = f mod 2^-e
-
-    assert(p1 > 0);
-
-    int length = 0;
-    int decimal_exponent = 0;
-
-    //
-    // 1.
-    // Generate the digits of the integral part p1 = d[n-1]...d[1]d[0]
-    //
-
-    // We now have
-    //  (B = buffer, L = length = k - n)
-    //
-    //      10^(k-1) <= p1 < 10^k
-    //
-    //      p1 = (p1 div 10^(k-1)) * 10^(k-1) + (p1 mod 10^(k-1))
-    //         = (B[0]           ) * 10^(k-1) + (p1 mod 10^(k-1))
-    //
-    //      w+ = p1 + p2 * 2^e
-    //         = B[0] * 10^(k-1) + (p1 mod 10^(k-1)) + p2 * 2^e
-    //         = B[0] * 10^(k-1) + ((p1 mod 10^(k-1)) * 2^-e + p2) * 2^e
-    //         = B[0] * 10^(k-1) + (                         rest) * 2^e
-    //
-    // and generate the digits d of p1 from left to right:
-    //
-    //      p1 = (B[0]B[1]...B[L  -1]B[L]B[L+1] ...B[k-2]B[k-1])_10
-    //         = (B[0]B[1]...B[L  -1])_10 * 10^(k-L) + (B[L    ]...B[k-2]B[k-1])_10  (L = 1...k)
-    //         = (B[0]B[1]...B[k-n-1])_10 * 10^(n  ) + (B[k-n  ]...B[k-2]B[k-1])_10  (n = k...1)
-
-    // Generate _all_ the digits of p1.
-    // The common case is that all these digits are needed.
-    char const* last = Itoa_32(buffer, p1);
-    length = static_cast<int>(last - buffer);
-
-    if (p2 <= delta)
-    {
-        // In this case: Too many digits of p1 might have been generated.
-        //
-        // Find the largest 0 <= n < k, such that
-        //
-        //      w+ = (p1 div 10^n) * 10^n + ((p1 mod 10^n) * 2^-e + p2) * 2^e
-        //         = (p1 div 10^n) * 10^n + (                     rest) * 2^e
-        //
-        // and rest <= delta.
-        //
-        // Compute rest * 2^e = w+ mod 10^n = p1 + p2 * 2^e = (p1 * 2^-e + p2) * 2^e
-        // and check if enough digits have been generated:
-        //
-        //      rest * 2^e <= delta * 2^e
-        //
-        // This test can be slightly simplified, since
-        //
-        //      rest = (p1 mod 10^n) * 2^-e + p2 <= delta
-        //      <==>    r * 2^-e + p2 <= delta
-        //      <==>    r * 2^-e      <= delta - p2 = D = D1 * 2^-e + D2
-        //      <==>    r < D1 or (r == D1 and 0 <= D2)
-        //      <==>    r <= D1
-        //
-        //  rest = (p1 mod 10^n) * 2^-e + p2 <= delta
-        //  <==>    r * 2^-e + p2 <= delta
-        //  <==>    r * 2^-e      <= delta - p2 = D = D1 * 2^-e + D2
-        //  <==>    r < D1 or (r == D1 and 0 <= D2)
-        //  <==>    r <= D1
-
-        uint32_t const D1 = static_cast<uint32_t>((delta - p2) >> -one.e);
-
-        int k = length;
-        int n = 0;
-
-        uint32_t r = 0;
-        uint32_t pow10 = 1; // 10^n
-        for (;;)
-        {
-            assert(k >= n + 1);
-            assert(r <= D1);
-            assert(n <= 9);
-            assert(static_cast<uint32_t>(buffer[k - (n + 1)] - '0') <= UINT32_MAX / pow10);
-
-            uint32_t r_next = pow10 * static_cast<uint32_t>(buffer[k - (n + 1)] - '0') + r;
-            if (r_next > D1)
-                break;
-            r = r_next;
-            n++;
-            pow10 *= 10;
-        }
-        length = k - n;
-
-        // Found V = buffer * 10^n, with w- <= V <= w+.
-        decimal_exponent += n;
-
-#if FAST_DTOA_ROUND
-        uint64_t const rest = (uint64_t{r} << -one.e) + p2;
-
-        // 10^n is now 1 ulp in the decimal representation V.
-        // The rounding procedure works with DiyFp's with an implicit
-        // exponent e.
-        //
-        //      10^n = ten_n * 2^e = (10^n * 2^-e) * 2^e
-        //
-        uint64_t const ten_n = uint64_t{pow10} << -one.e;
-        Grisu2Round(buffer, length, dist, delta, rest, ten_n);
-#endif
-
-        return { length, decimal_exponent };
-    }
-
-    //
-    // 2.
-    // The digits of the integral part have been generated:
-    //
-    //      w+ = d[k-1]...d[1]d[0] + p2 * 2^e = buffer + p2 * 2^e
-    //
-    // Now generate the digits of the fractional part p2 * 2^e.
-    //
-    // Note:
-    // No decimal point is generated: the exponent is adjusted instead.
-    //
-    // p2 actually represents the fraction
-    //
-    //      p2 * 2^e
-    //          = p2 / 2^-e
-    //          = d[-1] / 10^1 + d[-2] / 10^2 + d[-3] / 10^3 + ... + d[-m] / 10^m
-    //
-    // or
-    //
-    //      10 * p2 / 2^-e = d[-1] + (d[-2] / 10^1 + ... + d[-m] / 10^(m-1))
-    //
-    // and the digits can be obtained from left to right by
-    //
-    //      (10 * p2) div 2^-e = d[-1]
-    //      (10 * p2) mod 2^-e = d[-2] / 10^1 + ... + d[-m] / 10^(m-1)
-    //
-
-    int m = 0;
-    for (;;)
-    {
-        // Invariant:
-        //  1.  w+ = buffer * 10^m + 10^m * p2 * 2^e  (Note: m <= 0)
-
-        // alpha >= -57 guarantees that the multiplication does not overflow.
-        assert(p2 <= UINT64_MAX / 100);
-        uint64_t const p2_0 = p2;
-        p2 *= 100;
-
-        uint32_t const d = static_cast<uint32_t>(p2 >> -one.e); // = (100 * p2) div 2^-e = d[-1] * 10^1 + d[-2]
-        uint64_t const r = p2 & (one.f - 1);                    // = (100 * p2) mod 2^-e = d[-3] / 10^1 + ... + d[-m] / 10^(m-2)
-
-        // w+ = buffer * 10^m + 10^m * p2 * 2^e
-        //    = buffer * 10^m + 10^(m-2) * (100 * p2    ) * 2^e
-        //    = buffer * 10^m + 10^(m-2) * (d * 2^-e + r) * 2^e
-        //    = (buffer * 100 + d) * 10^(m-2) + 10^(m-2) * r * 2^e
-
-        Itoa100(buffer + length, d); // buffer := buffer * 100 + d
-        length += 2;
-
-        // w+ = buffer * 10^(m-2) + 10^(m-2) * r * 2^e
-
-        p2 = r;
-        m -= 2;
-
-        // w+ = buffer * 10^m + 10^m * p2 * 2^e
-        // Invariant (1) restored.
-
-        // p2 is now scaled by 10^(-m) since it repeatedly is multiplied by 100.
-        // To keep the units in sync, delta and dist need to be scaled too.
-        delta *= 100;
-#if FAST_DTOA_ROUND
-        dist *= 100;
-#endif
-
-        if (r <= delta)
-        {
-            // Almost done.
-            // Check if we have generated one digit too much.
-
-            uint64_t const r10 = (10 * p2_0) & (one.f - 1);
-            uint64_t const delta10 = delta / 10;
-
-            if (r10 <= delta10) // Only one digit required.
-            {
-                length--;
-                p2 = r10;
-                m++;
-                delta = delta10;
-#if FAST_DTOA_ROUND
-                dist /= 10;
-#endif
-            }
-
-            break;
-        }
-    }
-
-    assert(p2 <= delta);
-
-    decimal_exponent += m;
-
-#if FAST_DTOA_ROUND
-    // ten_m represents 10^m as a Fp with an exponent e.
-    //
-    // Note: m < 0
-    //
-    // Note:
-    // delta and dist are now scaled by 10^(-m) (they are repeatedly
-    // multiplied by 10) and we need to do the same with ten_m.
-    //
-    //      10^(-m) * 10^m = 10^(-m) * ten_m * 2^e
-    //                     = (10^(-m) * 10^m * 2^-e) * 2^e
-    //                     = 2^-e * 2^e
-    //
-    // one.f = 2^-e and the exponent e is implicit.
-    //
-    uint64_t const ten_m = one.f;
-    Grisu2Round(buffer, length, dist, delta, p2, ten_m);
-#endif
-
-    // By construction this algorithm generates the shortest possible decimal
-    // number (Loitsch, Theorem 6.2) which rounds back to w.
-    // For an input number of precision p, at least
-    //
-    //      N = 1 + ceil(p * log_10(2))
-    //
-    // decimal digits are sufficient to identify all binary floating-point
-    // numbers (Matula, "In-and-Out conversions").
-    // This implies that the algorithm does not produce more than N decimal
-    // digits.
-    //
-    //      N = 17 for p = 53 (IEEE double precision)
-    //      N = 9  for p = 24 (IEEE single precision)
-    //
-    assert(length <= 17);
-
-    return { length, decimal_exponent };
-}
-
-// v = buf * 10^decimal_exponent
-// len is the length of the buffer (number of decimal digits)
-#if FAST_DTOA_ROUND
-FAST_DTOA_INLINE Grisu2Result Grisu2(char* buffer, Fp m_minus, Fp v, Fp m_plus)
-#else
-FAST_DTOA_INLINE Grisu2Result Grisu2(char* buffer, Fp m_minus, Fp m_plus)
-#endif
-{
-#if FAST_DTOA_ROUND
-    assert(v.e == m_minus.e);
-    assert(v.e == m_plus.e);
-#else
-    assert(m_minus.e == m_plus.e);
-#endif
-
-    //
-    //  --------(-----------------------+-----------------------)--------    (A)
-    //          m-                      v                       m+
-    //
-    //  --------------------(-----------+-----------------------)--------    (B)
-    //                      m-          v                       m+
-    //
-    // First scale v (and m- and m+) such that the exponent is in the range
-    // [alpha, gamma].
-    //
-
-    CachedPower const cached = GetCachedPowerForBinaryExponent(m_plus.e);
-
-    Fp const c_minus_k(cached.f, cached.e); // = c ~= 10^k
-
-#if FAST_DTOA_ROUND
-    Fp const w       = Fp::Mul(v,       c_minus_k); // Exponent of the products is v.e + c_minus_k.e + q
-#endif
-    Fp const w_minus = Fp::Mul(m_minus, c_minus_k);
-    Fp const w_plus  = Fp::Mul(m_plus,  c_minus_k);
-
-    //
-    //  ----(---+---)---------------(---+---)---------------(---+---)----
-    //          w-                      w                       w+
-    //          = c*m-                  = c*v                   = c*m+
-    //
-    // Fp::Mul rounds its result and c_minus_k is approximated too. w (as well
-    // as w- and w+) are now off by a small amount.
-    // In fact:
-    //
-    //      w - v * 10^k < 1 ulp
-    //
-    // To account for this inaccuracy, add resp. subtract 1 ulp.
-    //
-    //  --------+---[---------------(---+---)---------------]---+--------
-    //          w-  M-                  w                   M+  w+
-    //
-    // Now any number in [M-, M+] (bounds included) will round to w when input,
-    // regardless of how the input rounding algorithm breaks ties.
-    //
-    // And DigitGen generates the shortest possible such number in [M-, M+].
-    // This does not mean that Grisu2 always generates the shortest possible
-    // number in the interval (m-, m+).
-    //
-    Fp const M_minus = Fp(w_minus.f + 1, w_minus.e);
-    Fp const M_plus  = Fp(w_plus.f  - 1, w_plus.e );
-
-#if FAST_DTOA_ROUND
-    Grisu2Result res = Grisu2DigitGen(buffer, M_minus, w, M_plus);
-#else
-    Grisu2Result res = Grisu2DigitGen(buffer, M_minus, M_plus);
-#endif
-
-    res.decimal_exponent += -cached.k; // = -(-k) = k
-
-    return res;
-}
-
-//------------------------------------------------------------------------------
-//
-//------------------------------------------------------------------------------
-
-FAST_DTOA_INLINE char* FormatBuffer(char* buf, int k, int n)
+inline char* FormatBuffer(char* buf, int k, int n)
 {
     // v = digits * 10^(n-k)
     // k is the length of the buffer (number of decimal digits)
@@ -1197,22 +1159,20 @@ FAST_DTOA_INLINE char* FormatBuffer(char* buf, int k, int n)
         // digits[000]
 
         std::memset(buf + k, '0', static_cast<size_t>(n - k));
-        //if (trailing_dot_zero)
-        //{
-        //    buf[n++] = '.';
-        //    buf[n++] = '0';
-        //}
-        return buf + n;                 // (len <= 21 + 2 = 23)
+        buf[n++] = '.';
+        buf[n++] = '0';
+        return buf + n;
     }
 
     if (0 < n && n <= 21)
     {
         // dig.its
+
         assert(k > n);
 
         std::memmove(buf + (n + 1), buf + n, static_cast<size_t>(k - n));
         buf[n] = '.';
-        return buf + (k + 1);           // (len == k + 1 <= 18)
+        return buf + (k + 1);
     }
 
     if (-6 < n && n <= 0)
@@ -1223,14 +1183,14 @@ FAST_DTOA_INLINE char* FormatBuffer(char* buf, int k, int n)
         buf[0] = '0';
         buf[1] = '.';
         std::memset(buf + 2, '0', static_cast<size_t>(-n));
-        return buf + (2 + (-n) + k);    // (len <= k + 7 <= 24)
+        return buf + (2 + (-n) + k);
     }
 
     if (k == 1)
     {
         // dE+123
 
-        buf += 1;                       // (len <= 1 + 5 = 6)
+        buf += 1;
     }
     else
     {
@@ -1238,33 +1198,11 @@ FAST_DTOA_INLINE char* FormatBuffer(char* buf, int k, int n)
 
         std::memmove(buf + 2, buf + 1, static_cast<size_t>(k - 1));
         buf[1] = '.';
-        buf += 1 + k;                   // (len <= k + 6 = 23)
+        buf += 1 + k;
     }
-
-    int e = n - 1;
 
     *buf++ = 'e';
-    if (e < 0)
-        *buf++ = '-', e = -e;
-    else
-        *buf++ = '+';
-
-    if (e < 10)
-    {
-        buf[0] = static_cast<char>('0' + e);
-        return buf + 1;
-    }
-    else if (e < 100)
-    {
-        return Itoa100(buf, static_cast<uint32_t>(e));
-    }
-    else
-    {
-        uint32_t q = e / 100u;
-        uint32_t r = e % 100u;
-        buf[0] = static_cast<char>('0' + q);
-        return Itoa100(buf + 1, r);
-    }
+    return AppendExponent(buf, n - 1);
 }
 
 inline char* StrCopy_unsafe(char* dst, char const* src)
@@ -1292,7 +1230,7 @@ inline char* StrCopy_unsafe(char* dst, char const* src)
 // The result is not null-terminated.
 //
 template <typename Float>
-inline char* ToString(char* next, char* last, Float value)
+char* ToString(char* next, char* last, Float value)
 {
     static constexpr char const* const kNaNString = "NaN";      // assert len <= 25
     static constexpr char const* const kInfString = "Infinity"; // assert len <= 24
@@ -1337,29 +1275,31 @@ inline char* ToString(char* next, char* last, Float value)
         }
         else
         {
-            BoundedFp const w = ComputeBoundedFp(v.Abs());
+            FpBoundaries const w = ComputeBoundaries(v.Abs());
 
-            // Compute the decimal digits of v = digits * 10^decimal_exponent.
+            // Compute v = buffer * 10^decimal_exponent.
+            // The decimal digits are stored in the buffer, which needs to be
+            // interpreted as an unsigned decimal integer.
             // len is the length of the buffer, i.e. the number of decimal digits
-#if FAST_DTOA_ROUND
-            Grisu2Result const res = Grisu2(next, w.minus, w.w, w.plus);
+            int len = 0;
+            int decimal_exponent = 0;
+#if GRISU2_ROUND
+            Grisu2(next, len, decimal_exponent, w.minus, w.w, w.plus);
 #else
-            Grisu2Result const res = Grisu2(next, w.minus, w.plus);
+            Grisu2(next, len, decimal_exponent, w.minus, w.plus);
 #endif
-            assert(res.length <= IEEEType::kMaxDigits10);
 
             // Compute the position of the decimal point relative to the start of the buffer.
-            int const n = res.length + res.decimal_exponent;
+            int const n = decimal_exponent + len;
 
-            next = FormatBuffer(next, res.length, n);
-            // (len <= 1 + 24 = 25)
+            next = FormatBuffer(next, len, n);
         }
     }
 
     return next;
 }
 
-} // namespace fast_dtoa
+} // namespace dtoa
 
 // http://florian.loitsch.com/publications (bench.tar.gz)
 //

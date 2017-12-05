@@ -1,10 +1,12 @@
-#include "../src/fast_dtoa.h"
+#include "../src/dtoa.h"
 
 #include <double-conversion/double-conversion.h>
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
@@ -12,7 +14,6 @@
 
 #define TEST_ALL_SINGLE         0
 #define TEST_RANDOM_DOUBLES     0
-#define TEST_DOUBLE_CONVERSION  0
 
 //------------------------------------------------------------------------------
 //
@@ -36,32 +37,6 @@ static double StringToDouble(char const* str, char const* end)
     int processed_characters_count = 0;
     return conv.StringToDouble(str, static_cast<int>(end - str), &processed_characters_count);
 }
-
-#if TEST_DOUBLE_CONVERSION
-static char* SingleToString(char* next, char* last, float value)
-{
-    auto const& conv = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
-
-    double_conversion::StringBuilder builder(next, static_cast<int>(last - next));
-    conv.ToShortestSingle(value, &builder);
-
-    char* end = next + builder.position();
-    *end = '\0';
-    return end;
-}
-
-static char* DoubleToString(char* next, char* last, double value)
-{
-    auto const& conv = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
-
-    double_conversion::StringBuilder builder(next, static_cast<int>(last - next));
-    conv.ToShortest(value, &builder);
-
-    char* end = next + builder.position();
-    *end = '\0';
-    return end;
-}
-#endif
 
 //------------------------------------------------------------------------------
 //
@@ -198,13 +173,9 @@ static double MakeDouble(uint64_t f, int e)
 static bool CheckFloat(float d0)
 {
     char str[32];
-#if TEST_DOUBLE_CONVERSION
-    auto const end = SingleToString(str, str + 32, d0);
-#else
-    auto const end = fast_dtoa::ToString(str, str + 32, d0);
-#endif
-    assert(end - str <= 26);
+    auto const end = dtoa::ToString(str, str + 32, d0);
     *end = '\0';
+    assert(end - str <= 26);
 
     // printf("check single: %08x = '%s'\n", ReinterpretBits<uint32_t>(d0), str);
 
@@ -238,13 +209,9 @@ static bool CheckFloat(float d0)
 static bool CheckFloat(double d0)
 {
     char str[32];
-#if TEST_DOUBLE_CONVERSION
-    auto const end = DoubleToString(str, str + 32, d0);
-#else
-    auto const end = fast_dtoa::ToString(str, str + 32, d0);
-#endif
-    assert(end - str <= 26);
+    auto const end = dtoa::ToString(str, str + 32, d0);
     *end = '\0';
+    assert(end - str <= 26);
 
     // printf("check double: %016llx = '%s'\n", ReinterpretBits<uint64_t>(d0), str);
 
@@ -254,7 +221,7 @@ static bool CheckFloat(double d0)
         auto const b1 = ReinterpretBits<uint64_t>(d1);
         if (b0 != b1)
         {
-            printf("FAIL: double [%016llx] != [%016llx] -- [%s] [%.17g] [%.17g]\n", b0, b1, str, d0, d1);
+            printf("FAIL: double: expected=[%016llx] != actual[%016llx] -- [%s] expected=[%.17g] actual=[%.17g]\n", b0, b1, str, d0, d1);
             return false;
         }
     }
@@ -520,12 +487,12 @@ static void TestAllSingle()
 
     uint32_t bits = min_exp << 23;
 
-    int curr_exp = min_exp;
-    printf("exp = %d\n", curr_exp);
-
     auto const t_beg = Clock::now();
 
     auto t_lap = t_beg;
+    auto curr_exp = min_exp;
+
+    printf("exp = %d\n", curr_exp);
     for (;;)
     {
         float const f = ReinterpretBits<float>(bits);
@@ -567,25 +534,41 @@ struct RandomDoubles
     std::mt19937_64 random_;
     std::uniform_int_distribution<uint64_t> gen_;
 
-#if 0
-    RandomDoubles()
-        : random_()
-        , gen_(0, (uint64_t{0x7FF} << 52) - 1)
-    {
-    }
-#else
     RandomDoubles()
         : rd_()
         , random_(rd_())
         , gen_(0, (uint64_t{0x7FF} << 52) - 1)
     {
     }
-#endif
 
     double operator()()
     {
-        auto const bits = gen_(random_);
+        auto bits = gen_(random_);
         return ReinterpretBits<double>(bits);
+    }
+};
+
+struct RandomUniformDoubles
+{
+    // Test uniformly distributed bit patterns instead of uniformly distributed
+    // floating-points...
+
+    std::random_device rd_;
+    std::mt19937_64 random_;
+    std::uniform_real_distribution<double> gen_;
+
+    RandomUniformDoubles()
+        : rd_()
+        , random_(rd_())
+        , gen_(0.0, std::numeric_limits<double>::max())
+        //, gen_(0.0, 1.0)
+        //, gen_(1.0e-10, 1.0e-1)
+    {
+    }
+
+    double operator()()
+    {
+        return gen_(random_);
     }
 };
 
@@ -596,32 +579,67 @@ static void TestDoubles()
     using Clock = std::chrono::steady_clock;
 
     RandomDoubles rng;
-
-    uint64_t const kNumDoubles = uint64_t{1} << 30;
+    //RandomUniformDoubles rng;
 
     auto t_start = Clock::now();
 
-    uint64_t num_processed = 0;
+    uint64_t num_checked = 0;
+    uint64_t num_shortest = 0;
+    uint64_t num_optimal = 0;
+
+    uint64_t const kNumDoubles = uint64_t{1} << 30;
     for (uint64_t i = 0; i < kNumDoubles; ++i)
     {
-        CheckFloat(rng());
-        num_processed++;
+        double const value = rng();
+
+        CheckFloat(value);
+        num_checked++;
+
+#if 1
+        char buf1[32];
+        char buf2[32];
+        int len1 = 0;
+        int len2 = 0;
+        {
+            auto const w = dtoa::ComputeBoundaries(value);
+            int k = 0;
+            dtoa::Grisu2(buf1, len1, k, w.minus, w.w, w.plus);
+        }
+        {
+            using double_conversion::DoubleToStringConverter;
+
+            bool sign = false;
+            int point = 0;
+            DoubleToStringConverter::DoubleToAscii(value, DoubleToStringConverter::SHORTEST, -1 /*unused*/, buf2, 32, &sign, &len2, &point);
+        }
+        assert(len1 >= len2);
+        if (len1 == len2)
+        {
+            ++num_shortest;
+            if (memcmp(buf1, buf2, len1) == 0)
+                ++num_optimal;
+        }
+#endif
 
         auto const t_now = Clock::now();
         auto const t_sec = std::chrono::duration<double>(t_now - t_start).count();
         if (t_sec > 5.0)
         {
-            fprintf(stderr, "%.2f%% [fp/sec %.2f]\n", 100.0 * (double)i / (double)kNumDoubles, num_processed / 1000.0 / t_sec);
+            fprintf(stderr, "%.2f%% [fp/sec %.2f] [shortest: %.2f%%] [optimal: %.2f%%]\n", // [all p1: %.2f%%]\n",
+                100.0 * (double)i / (double)kNumDoubles, num_checked / 1000.0 / t_sec,
+                100.0 * num_shortest / num_checked,
+                100.0 * num_optimal / num_checked
+                //,
+                //100.0 * num_all_digits_of_p1_needed / num_checked
+                );
             t_start = t_now;
-            num_processed = 0;
+            num_checked = 0;
+            num_shortest = 0;
+            num_optimal = 0;
         }
     }
 }
 #endif
-
-//------------------------------------------------------------------------------
-//
-//------------------------------------------------------------------------------
 
 int main()
 {
