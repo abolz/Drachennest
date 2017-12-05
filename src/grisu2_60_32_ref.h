@@ -26,6 +26,9 @@
 #include <limits>
 #include <type_traits>
 
+// If rounding is enabled, Grisu2 produces the optimal output for ~99.8% of all
+// input numbers.
+// This step is not required for the correctness of the algorithm.
 #define GRISU2_ROUND 1
 
 //

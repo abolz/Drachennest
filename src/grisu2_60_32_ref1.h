@@ -38,6 +38,9 @@
 #define GRISU2_UNREACHABLE() assert(false && "unreachable");
 #endif
 
+// If rounding is enabled, Grisu2 produces the optimal output for ~99.8% of all
+// input numbers.
+// This step is not required for the correctness of the algorithm.
 #define GRISU2_ROUND 1
 
 //
