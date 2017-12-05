@@ -53,7 +53,7 @@
 // [2]  Burger, Dybvig, "Printing Floating-Point Numbers Quickly and Accurately",
 //      Proceedings of the ACM SIGPLAN 1996 Conference on Programming Language Design and Implementation, PLDI 1996
 //
-namespace dtoa {
+namespace fast_dtoa {
 
 template <typename Float>
 struct IEEEFloat
@@ -1341,7 +1341,7 @@ char* ToString(char* next, char* last, Float value)
     return next;
 }
 
-} // namespace dtoa
+} // namespace fast_dtoa
 
 // http://florian.loitsch.com/publications (bench.tar.gz)
 //

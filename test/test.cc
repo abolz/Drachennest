@@ -1,4 +1,4 @@
-#include "../src/dtoa.h"
+#include "../src/fast_dtoa.h"
 
 #include <double-conversion/double-conversion.h>
 
@@ -173,7 +173,7 @@ static double MakeDouble(uint64_t f, int e)
 static bool CheckFloat(float d0)
 {
     char str[32];
-    auto const end = dtoa::ToString(str, str + 32, d0);
+    auto const end = fast_dtoa::ToString(str, str + 32, d0);
     *end = '\0';
     assert(end - str <= 26);
 
@@ -209,7 +209,7 @@ static bool CheckFloat(float d0)
 static bool CheckFloat(double d0)
 {
     char str[32];
-    auto const end = dtoa::ToString(str, str + 32, d0);
+    auto const end = fast_dtoa::ToString(str, str + 32, d0);
     *end = '\0';
     assert(end - str <= 26);
 
@@ -601,9 +601,9 @@ static void TestDoubles()
         int len1 = 0;
         int len2 = 0;
         {
-            auto const w = dtoa::ComputeBoundaries(value);
+            auto const w = fast_dtoa::ComputeBoundaries(value);
             int k = 0;
-            dtoa::Grisu2(buf1, len1, k, w.minus, w.w, w.plus);
+            fast_dtoa::Grisu2(buf1, len1, k, w.minus, w.w, w.plus);
         }
         {
             using double_conversion::DoubleToStringConverter;
