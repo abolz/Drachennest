@@ -1162,8 +1162,11 @@ inline char* FormatBuffer(char* buf, int k, int n)
         // digits[000]
 
         std::memset(buf + k, '0', static_cast<size_t>(n - k));
-        buf[n++] = '.';
-        buf[n++] = '0';
+        //if (trailing_dot_zero)
+        //{
+        //    buf[n++] = '.';
+        //    buf[n++] = '0';
+        //}
         return buf + n;
     }
 
@@ -1251,7 +1254,6 @@ char* ToString(char* next, char* last, Float value)
     if (v.IsNaN())
     {
         next = StrCopy_unsafe(next, kNaNString);
-        // (len <= 25)
     }
     else
     {
@@ -1259,7 +1261,6 @@ char* ToString(char* next, char* last, Float value)
         {
             *next++ = '-';
         }
-        // (len <= 1)
 
         if (v.IsZero())
         {
@@ -1269,12 +1270,10 @@ char* ToString(char* next, char* last, Float value)
             //    *next++ = '.';
             //    *next++ = '0';
             //}
-            // (len <= 1 + 3 = 4)
         }
         else if (v.IsInf())
         {
             next = StrCopy_unsafe(next, kInfString);
-            // (len <= 1 + 24 = 25)
         }
         else
         {
