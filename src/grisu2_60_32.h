@@ -1047,23 +1047,22 @@ GRISU2_INLINE void Grisu2DigitGen(char* buffer, int& length, int& decimal_expone
 #endif
 
         if (p2 <= delta)
-        {
-            decimal_exponent -= m;
+            break;
+    }
+
+    decimal_exponent -= m;
 
 #if GRISU2_ROUND
-            //
-            // 1 ulp in the decimal representation is now 10^-m.
-            // Since delta and dist are now scaled by 10^m, we need to do the
-            // same with ulp in order to keep the units in sync.
-            //
-            //      10^m * 10^-m = 1 = 2^-e * 2^e = ten_m * 2^e
-            //
-            uint64_t const ten_m = uint64_t{1} << neg_e;
-            Grisu2Round(buffer, length, dist, delta, p2, ten_m);
+    //
+    // 1 ulp in the decimal representation is now 10^-m.
+    // Since delta and dist are now scaled by 10^m, we need to do the
+    // same with ulp in order to keep the units in sync.
+    //
+    //      10^m * 10^-m = 1 = 2^-e * 2^e = ten_m * 2^e
+    //
+    uint64_t const ten_m = uint64_t{1} << neg_e;
+    Grisu2Round(buffer, length, dist, delta, p2, ten_m);
 #endif
-            return;
-        }
-    }
 
     //
     // By construction this algorithm generates the shortest possible decimal
@@ -1080,6 +1079,7 @@ GRISU2_INLINE void Grisu2DigitGen(char* buffer, int& length, int& decimal_expone
     //      N = 17 for p = 53 (IEEE double precision)
     //      N = 9  for p = 24 (IEEE single precision)
     //
+    assert(length <= 17);
 }
 
 // v = buf * 10^decimal_exponent
@@ -1090,9 +1090,9 @@ GRISU2_INLINE void Grisu2(char* buf, int& len, int& decimal_exponent, Fp m_minus
 GRISU2_INLINE void Grisu2(char* buf, int& len, int& decimal_exponent, Fp m_minus, Fp m_plus)
 #endif
 {
-    assert(m_minus.e == m_plus.e);
+    assert(m_plus.e == m_minus.e);
 #if GRISU2_ROUND
-    assert(v.e == m_plus.e);
+    assert(m_plus.e == v.e);
 #endif
 
     //
@@ -1174,17 +1174,14 @@ GRISU2_INLINE char* AppendExponent(char* buf, int e)
         buf[0] = static_cast<char>('0' + k);
         return buf + 1;
     }
-    else if (k < 100)
-    {
+
+    if (k < 100)
         return Itoa100(buf, k);
-    }
-    else
-    {
-        uint32_t q = k / 100;
-        uint32_t r = k % 100;
-        buf[0] = static_cast<char>('0' + q);
-        return Itoa100(buf + 1, r);
-    }
+
+    uint32_t q = k / 100;
+    uint32_t r = k % 100;
+    buf[0] = static_cast<char>('0' + q);
+    return Itoa100(buf + 1, r);
 }
 
 GRISU2_INLINE char* FormatBuffer(char* buf, int k, int n)
@@ -1294,53 +1291,43 @@ char* ToString(char* next, char* last, Float value)
     //assert(!v.IsInf());
 
     if (v.IsNaN())
+        return StrCopy_unsafe(next, kNaNString);
+
+    if (v.IsNegative())
+        *next++ = '-';
+
+    if (v.IsInf())
+        return StrCopy_unsafe(next, kInfString);
+
+    if (v.IsZero())
     {
-        next = StrCopy_unsafe(next, kNaNString);
+        *next++ = '0';
+        //if (trailing_dot_zero)
+        //{
+        //    *next++ = '.';
+        //    *next++ = '0';
+        //}
+        return next;
     }
-    else
-    {
-        if (v.IsNegative())
-        {
-            *next++ = '-';
-        }
 
-        if (v.IsZero())
-        {
-            *next++ = '0';
-            //if (trailing_dot_zero)
-            //{
-            //    *next++ = '.';
-            //    *next++ = '0';
-            //}
-        }
-        else if (v.IsInf())
-        {
-            next = StrCopy_unsafe(next, kInfString);
-        }
-        else
-        {
-            FpBoundaries const w = ComputeBoundaries(v.Abs());
+    FpBoundaries const w = ComputeBoundaries(v.Abs());
 
-            // Compute v = buffer * 10^decimal_exponent.
-            // The decimal digits are stored in the buffer, which needs to be
-            // interpreted as an unsigned decimal integer.
-            // len is the length of the buffer, i.e. the number of decimal digits
-            int len = 0;
-            int decimal_exponent = 0;
+    // Compute v = buffer * 10^decimal_exponent.
+    // The decimal digits are stored in the buffer, which needs to be
+    // interpreted as an unsigned decimal integer.
+    // len is the length of the buffer, i.e. the number of decimal digits
+    int len = 0;
+    int decimal_exponent = 0;
 #if GRISU2_ROUND
-            Grisu2(next, len, decimal_exponent, w.minus, w.w, w.plus);
+    Grisu2(next, len, decimal_exponent, w.minus, w.w, w.plus);
 #else
-            Grisu2(next, len, decimal_exponent, w.minus, w.plus);
+    Grisu2(next, len, decimal_exponent, w.minus, w.plus);
 #endif
 
-            // Compute the position of the decimal point relative to the start of the buffer.
-            int const n = decimal_exponent + len;
+    // Compute the position of the decimal point relative to the start of the buffer.
+    int const n = decimal_exponent + len;
 
-            next = FormatBuffer(next, len, n);
-        }
-    }
-
-    return next;
+    return FormatBuffer(next, len, n);
 }
 
 } // namespace fast_dtoa

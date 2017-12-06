@@ -1029,9 +1029,9 @@ inline void Grisu2(char* buf, int& len, int& decimal_exponent, Fp m_minus, Fp v,
 inline void Grisu2(char* buf, int& len, int& decimal_exponent, Fp m_minus, Fp m_plus)
 #endif
 {
-    assert(m_minus.e == m_plus.e);
+    assert(m_plus.e == m_minus.e);
 #if GRISU2_ROUND
-    assert(v.e == m_plus.e);
+    assert(m_plus.e == v.e);
 #endif
 
     //
