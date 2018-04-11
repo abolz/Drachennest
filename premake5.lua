@@ -88,6 +88,17 @@ workspace "Grisu"
 --------------------------------------------------------------------------------
 group "Libs"
 
+--project "benchmark"
+--    language "C++"
+--    kind "StaticLib"
+--    files {
+--        "ext/benchmark/*.cc",
+--        "ext/benchmark/*.h",
+--    }
+--    includedirs {
+--        "ext/",
+--    }
+
 project "double-conversion"
     language "C++"
     kind "StaticLib"
@@ -102,11 +113,32 @@ project "double-conversion"
 --------------------------------------------------------------------------------
 group "Tests"
 
+--project "bench"
+--    language "C++"
+--    kind "ConsoleApp"
+--    files {
+--        "src/**.h",
+--        "src/**.cc",
+--        "test/bench.cc",
+--        "test/numbers.h",
+--        "test/numbers.cc",
+--    }
+--    includedirs {
+--        "ext/",
+--    }
+--    links {
+--        "benchmark",
+--    }
+--    configuration { "windows" }
+--        links {
+--            "shlwapi",
+--        }
+
 project "test"
     language "C++"
     kind "ConsoleApp"
     files {
-        "src/fast_dtoa.h",
+        "src/grisu2.h",
         "test/test.cc",
     }
     includedirs {

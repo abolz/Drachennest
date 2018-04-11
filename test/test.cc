@@ -1,4 +1,4 @@
-#include "../src/fast_dtoa.h"
+#include "../src/grisu2.h"
 
 #include <double-conversion/double-conversion.h>
 
@@ -13,6 +13,7 @@
 #include <random>
 
 #define TEST_ALL_SINGLE         0
+#define TEST_P1_DIGITS          0
 #define TEST_RANDOM_DOUBLES     0
 
 //------------------------------------------------------------------------------
@@ -173,7 +174,7 @@ static double MakeDouble(uint64_t f, int e)
 static bool CheckFloat(float d0)
 {
     char str[32];
-    auto const end = fast_dtoa::ToString(str, str + 32, d0);
+    auto const end = grisu::Dtoa(str, str + 32, d0);
     *end = '\0';
     assert(end - str <= 26);
 
@@ -209,12 +210,13 @@ static bool CheckFloat(float d0)
 static bool CheckFloat(double d0)
 {
     char str[32];
-    auto const end = fast_dtoa::ToString(str, str + 32, d0);
+    auto const end = grisu::Dtoa(str, str + 32, d0);
     *end = '\0';
     assert(end - str <= 26);
 
     // printf("check double: %016llx = '%s'\n", ReinterpretBits<uint64_t>(d0), str);
 
+#if 1
     {
         auto const d1 = StringToDouble(str, end);
         auto const b0 = ReinterpretBits<uint64_t>(d0);
@@ -225,6 +227,7 @@ static bool CheckFloat(double d0)
             return false;
         }
     }
+#endif
 
     return true;
 }
@@ -524,7 +527,6 @@ static void TestAllSingle()
 }
 #endif
 
-#if TEST_RANDOM_DOUBLES
 struct RandomDoubles
 {
     // Test uniformly distributed bit patterns instead of uniformly distributed
@@ -572,14 +574,15 @@ struct RandomUniformDoubles
     }
 };
 
+#if TEST_RANDOM_DOUBLES
 static void TestDoubles()
 {
     printf("Testing random double precision values...\n");
 
     using Clock = std::chrono::steady_clock;
 
-    RandomDoubles rng;
-    //RandomUniformDoubles rng;
+    //RandomDoubles rng;
+    RandomUniformDoubles rng;
 
     auto t_start = Clock::now();
 
@@ -601,13 +604,9 @@ static void TestDoubles()
         int len1 = 0;
         int len2 = 0;
         {
-            auto const w = fast_dtoa::ComputeBoundaries(value);
+            auto const boundaries = grisu::ComputeBoundaries(value);
             int k = 0;
-#if GRISU2_ROUND
-            fast_dtoa::Grisu2(buf1, len1, k, w.minus, w.w, w.plus);
-#else
-            fast_dtoa::Grisu2(buf1, len1, k, w.minus, w.plus);
-#endif
+            grisu::Grisu2(buf1, len1, k, boundaries.m_minus, boundaries.v, boundaries.m_plus);
         }
         {
             using double_conversion::DoubleToStringConverter;
@@ -629,7 +628,7 @@ static void TestDoubles()
         auto const t_sec = std::chrono::duration<double>(t_now - t_start).count();
         if (t_sec > 5.0)
         {
-            fprintf(stderr, "%.2f%% [fp/sec %.2f] [shortest: %.2f%%] [optimal: %.2f%%]\n", // [all p1: %.2f%%]\n",
+            fprintf(stderr, "%.2f%% [fp/sec %.3f] [shortest: %.3f%%] [optimal: %.3f%%]\n", // [all p1: %.3f%%]\n",
                 100.0 * (double)i / (double)kNumDoubles, num_checked / 1000.0 / t_sec,
                 100.0 * num_shortest / num_checked,
                 100.0 * num_optimal / num_checked
@@ -645,12 +644,96 @@ static void TestDoubles()
 }
 #endif
 
+static void FindMaxP1()
+{
+    constexpr int kExpMin = -1137;
+    constexpr int kExpMax =   960;
+    constexpr uint64_t kMaxF = UINT64_MAX; // ((uint64_t{1} << 53) - 1) << 11;
+
+    uint64_t max_p1 = 0;
+    for (int e = kExpMin; e <= kExpMax; ++e)
+    {
+        auto const v = grisu::DiyFp(kMaxF, e);
+        auto const cached = grisu::GetCachedPowerForBinaryExponent(e);
+        auto const c_minus_k = grisu::DiyFp(cached.f, cached.e);
+        auto const w = grisu::Multiply(v, c_minus_k);
+        if (max_p1 < (w.f >> -w.e))
+            max_p1 = (w.f >> -w.e);
+    }
+
+    printf("max_p1 = %llu [%llX]\n", max_p1, max_p1);
+}
+
+#if TEST_P1_DIGITS
+static int CountDecimalDigits(uint32_t n)
+{
+    if (n >= 1000000000) { return 10; }
+    if (n >=  100000000) { return  9; }
+    if (n >=   10000000) { return  8; }
+    if (n >=    1000000) { return  7; }
+    if (n >=     100000) { return  6; }
+    if (n >=      10000) { return  5; }
+    if (n >=       1000) { return  4; }
+    if (n >=        100) { return  3; }
+    if (n >=         10) { return  2; }
+    return 1;
+}
+
+static void TestP1Digits()
+{
+    printf("Testing P1 integral distribution...\n");
+
+    using Clock = std::chrono::steady_clock;
+
+    //RandomDoubles rng;
+    RandomUniformDoubles rng;
+
+    auto t_start = Clock::now();
+
+    uint64_t hist[11] = {0,0,0,0,0, 0,0,0,0,0, 0};
+    uint64_t num_checked = 0;
+
+    uint64_t const kNumDoubles = uint64_t{1} << 30;
+    for (uint64_t i = 0; i < kNumDoubles; ++i)
+    {
+        double const value = rng();
+        ++num_checked;
+
+        auto const boundaries = grisu::ComputeBoundaries(value);
+        auto const cached = grisu::GetCachedPowerForBinaryExponent(boundaries.v.e);
+        auto const c_minus_k = grisu::DiyFp(cached.f, cached.e);
+        auto const w_plus = grisu::Multiply(boundaries.m_plus, c_minus_k);
+        auto const p1 = static_cast<uint32_t>(w_plus.f >> -w_plus.e);
+
+        hist[CountDecimalDigits(p1)]++;
+
+        auto const t_now = Clock::now();
+        auto const t_sec = std::chrono::duration<double>(t_now - t_start).count();
+        if (t_sec > 5.0)
+        {
+            for (int k = 1; k <= 10; ++k) {
+                fprintf(stderr, "hist[%2d] = %.3f%%\n", k, hist[k] / static_cast<double>(num_checked));
+                //hist[k] = 0;
+            }
+            //num_checked = 0;
+
+            t_start = t_now;
+        }
+    }
+}
+#endif
+
 int main()
 {
+    FindMaxP1();
+
     VerifySingle();
     VerifyDouble();
 #if TEST_ALL_SINGLE
     TestAllSingle();
+#endif
+#if TEST_P1_DIGITS
+    TestP1Digits();
 #endif
 #if TEST_RANDOM_DOUBLES
     TestDoubles();
