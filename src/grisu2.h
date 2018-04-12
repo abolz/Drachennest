@@ -51,14 +51,14 @@ namespace grisu {
 // Grisu2
 //--------------------------------------------------------------------------------------------------
 
-template <typename Target, typename Source>
-inline Target ReinterpretBits(Source source)
+template <typename Dest, typename Source>
+inline Dest ReinterpretBits(Source source)
 {
-    static_assert(sizeof(Target) == sizeof(Source), "size mismatch");
+    static_assert(sizeof(Dest) == sizeof(Source), "size mismatch");
 
-    Target target;
-    std::memcpy(&target, &source, sizeof(Source));
-    return target;
+    Dest dest;
+    std::memcpy(&dest, &source, sizeof(Source));
+    return dest;
 }
 
 inline char* Utoa100(char* buf, uint32_t digits)
@@ -310,9 +310,9 @@ inline Boundaries ComputeBoundaries(Fp value)
     // If v is normalized:
     //      value = 1.F * 2^(E - bias) = (2^(p-1) + F) * 2^(E - bias - (p-1))
 
-    static constexpr int      kPrecision = std::numeric_limits<Fp>::digits; // = p (includes the hidden bit)
-    static constexpr int      kBias      = std::numeric_limits<Fp>::max_exponent - 1 + (kPrecision - 1);
-    static constexpr uint64_t kHiddenBit = uint64_t{1} << (kPrecision - 1); // = 2^(p-1)
+    constexpr int      kPrecision = std::numeric_limits<Fp>::digits; // = p (includes the hidden bit)
+    constexpr int      kBias      = std::numeric_limits<Fp>::max_exponent - 1 + (kPrecision - 1);
+    constexpr uint64_t kHiddenBit = uint64_t{1} << (kPrecision - 1); // = 2^(p-1)
 
     using bits_type = typename std::conditional<kPrecision == 24, uint32_t, uint64_t>::type;
 
@@ -420,8 +420,8 @@ inline Boundaries ComputeBoundaries(Fp value)
 //
 //      -e <= 60   or   e >= -60 := alpha
 
-static constexpr int kAlpha = -60;
-static constexpr int kGamma = -32;
+constexpr int kAlpha = -60;
+constexpr int kGamma = -32;
 
 // Now
 //
@@ -476,10 +476,10 @@ struct CachedPower { // c = f * 2^e ~= 10^k
     int k; // decimal exponent
 };
 
-static constexpr int kCachedPowersSize         =   79;
-static constexpr int kCachedPowersMinDecExp    = -300;
-static constexpr int kCachedPowersMaxDecExp    =  324;
-static constexpr int kCachedPowersDecExpStep   =    8;
+constexpr int kCachedPowersSize         =   79;
+constexpr int kCachedPowersMinDecExp    = -300;
+constexpr int kCachedPowersMaxDecExp    =  324;
+constexpr int kCachedPowersDecExpStep   =    8;
 
 inline CachedPower GetCachedPower(int index)
 {
@@ -1123,7 +1123,7 @@ inline char* StrCopy(char* next, char* last, char const* source)
     return next + len;
 }
 
-static constexpr int kDtoaPositiveMaxLength = 24;
+constexpr int kDtoaPositiveMaxLength = 24;
 
 // Generates a decimal representation of the floating-point number `value` in
 // the buffer `[next, last)`.
@@ -1159,11 +1159,11 @@ inline char* DtoaPositive(char* next, char* last, Fp value, bool emit_trailing_d
     // These are the values used by JavaScript's ToString applied to Number
     // type. Printf uses the values -4 and max_digits10 resp.
 #if 0
-    static constexpr int kMinExp = -4;
-    static constexpr int kMaxExp = std::numeric_limits<Fp>::max_digits10;
+    constexpr int kMinExp = -4;
+    constexpr int kMaxExp = std::numeric_limits<Fp>::max_digits10;
 #else
-    static constexpr int kMinExp = -6;
-    static constexpr int kMaxExp = 21;
+    constexpr int kMinExp = -6;
+    constexpr int kMaxExp = 21;
 #endif
 
     char* const end = FormatBuffer(next, length, exponent, kMinExp, kMaxExp, emit_trailing_dot_zero);
