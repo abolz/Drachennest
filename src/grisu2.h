@@ -80,64 +80,6 @@ inline char* Utoa100(char* buf, uint32_t digits)
     return buf + 2;
 }
 
-inline char* U32ToString(char* buf, uint32_t n)
-{
-    assert(n <= 798336123);
-
-    uint32_t q;
-
-    if (n >= 100000000)
-    {
-//L_9_digits:
-        q = n / 10000000;
-        n = n % 10000000;
-        buf = Utoa100(buf, q);
-L_7_digits:
-        q = n / 100000;
-        n = n % 100000;
-        buf = Utoa100(buf, q);
-L_5_digits:
-        q = n / 1000;
-        n = n % 1000;
-        buf = Utoa100(buf, q);
-L_3_digits:
-        q = n / 10;
-        n = n % 10;
-        buf = Utoa100(buf, q);
-L_1_digit:
-        buf[0] = static_cast<char>('0' + n);
-        buf++;
-        return buf;
-    }
-
-    if (n >= 10000000)
-    {
-//L_8_digits:
-        q = n / 1000000;
-        n = n % 1000000;
-        buf = Utoa100(buf, q);
-L_6_digits:
-        q = n / 10000;
-        n = n % 10000;
-        buf = Utoa100(buf, q);
-L_4_digits:
-        q = n / 100;
-        n = n % 100;
-        buf = Utoa100(buf, q);
-L_2_digits:
-        buf = Utoa100(buf, n);
-        return buf;
-    }
-
-    if (n >=  1000000) goto L_7_digits;
-    if (n >=   100000) goto L_6_digits;
-    if (n >=    10000) goto L_5_digits;
-    if (n >=     1000) goto L_4_digits;
-    if (n >=      100) goto L_3_digits;
-    if (n >=       10) goto L_2_digits;
-    goto L_1_digit;
-}
-
 struct DiyFp // f * 2^e
 {
     static constexpr int kPrecision = 64; // = q
@@ -160,7 +102,7 @@ inline DiyFp Subtract(DiyFp x, DiyFp y)
 }
 
 // Returns x * y.
-// The result is rounded. (Only the upper q bits are returned.)
+// The result is rounded (ties up). (Only the upper q bits are returned.)
 inline DiyFp Multiply(DiyFp x, DiyFp y)
 {
     // Computes:
@@ -357,8 +299,11 @@ inline Boundaries ComputeBoundaries(Fp value)
 
     // Determine the normalized w = v.
     DiyFp const w = Normalize(v);
+
     // Determine the normalized w+ = m+.
-    DiyFp const w_plus = Normalize(m_plus);
+    // Since e_(w+) == e_(w), one can use NormalizeTo instead of Normalize.
+    DiyFp const w_plus = NormalizeTo(m_plus, w.e);
+
     // Determine w- = m- such that e_(w-) = e_(w+).
     DiyFp const w_minus = NormalizeTo(m_minus, w_plus.e);
 
@@ -483,8 +428,9 @@ constexpr int kCachedPowersDecExpStep   =    8;
 
 inline CachedPower GetCachedPower(int index)
 {
+    // sizeof(table) = 1264 bytes
     static constexpr CachedPower kCachedPowers[] = {
-        { 0xAB70FE17C79AC6CA, -1060, -300 },
+        { 0xAB70FE17C79AC6CA, -1060, -300 }, // >>> double-precision (-1060 + 960 + 64 = -36)
         { 0xFF77B1FCBEBCDC4F, -1034, -292 },
         { 0xBE5691EF416BD60C, -1007, -284 },
         { 0x8DD01FAD907FFC3C,  -980, -276 },
@@ -517,17 +463,17 @@ inline CachedPower GetCachedPower(int index)
         { 0xCDB02555653131B6,  -263,  -60 },
         { 0x993FE2C6D07B7FAC,  -236,  -52 },
         { 0xE45C10C42A2B3B06,  -210,  -44 },
-        { 0xAA242499697392D3,  -183,  -36 },
-        { 0xFD87B5F28300CA0E,  -157,  -28 },
-        { 0xBCE5086492111AEB,  -130,  -20 },
-        { 0x8CBCCC096F5088CC,  -103,  -12 },
-        { 0xD1B71758E219652C,   -77,   -4 },
-        { 0x9C40000000000000,   -50,    4 },
-        { 0xE8D4A51000000000,   -24,   12 },
-        { 0xAD78EBC5AC620000,     3,   20 },
-        { 0x813F3978F8940984,    30,   28 },
-        { 0xC097CE7BC90715B3,    56,   36 },
-        { 0x8F7E32CE7BEA5C70,    83,   44 },
+        { 0xAA242499697392D3,  -183,  -36 }, // >>> single-precision (-183 + 80 + 64 = -39)
+        { 0xFD87B5F28300CA0E,  -157,  -28 }, //
+        { 0xBCE5086492111AEB,  -130,  -20 }, //
+        { 0x8CBCCC096F5088CC,  -103,  -12 }, //
+        { 0xD1B71758E219652C,   -77,   -4 }, //
+        { 0x9C40000000000000,   -50,    4 }, //
+        { 0xE8D4A51000000000,   -24,   12 }, //
+        { 0xAD78EBC5AC620000,     3,   20 }, //
+        { 0x813F3978F8940984,    30,   28 }, //
+        { 0xC097CE7BC90715B3,    56,   36 }, //
+        { 0x8F7E32CE7BEA5C70,    83,   44 }, // <<< single-precision (83 - 196 + 64 = -49)
         { 0xD5D238A4ABE98068,   109,   52 },
         { 0x9F4F2726179A2245,   136,   60 },
         { 0xED63A231D4C4FB27,   162,   68 },
@@ -562,7 +508,7 @@ inline CachedPower GetCachedPower(int index)
         { 0xBF21E44003ACDD2D,   933,  300 },
         { 0x8E679C2F5E44FF8F,   960,  308 },
         { 0xD433179D9C8CB841,   986,  316 },
-        { 0x9E19DB92B4E31BA9,  1013,  324 },
+        { 0x9E19DB92B4E31BA9,  1013,  324 }, // <<< double-precision (1013 - 1137 + 64 = -60)
     };
 
     assert(index >= 0);
@@ -602,6 +548,64 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
     return cached;
 }
 
+inline char* GenerateIntegralDigits(char* buf, uint32_t n)
+{
+    assert(n <= 798336123);
+
+    uint32_t q;
+
+    if (n >= 100000000)
+    {
+//L_9_digits:
+        q = n / 10000000;
+        n = n % 10000000;
+        buf = Utoa100(buf, q);
+L_7_digits:
+        q = n / 100000;
+        n = n % 100000;
+        buf = Utoa100(buf, q);
+L_5_digits:
+        q = n / 1000;
+        n = n % 1000;
+        buf = Utoa100(buf, q);
+L_3_digits:
+        q = n / 10;
+        n = n % 10;
+        buf = Utoa100(buf, q);
+L_1_digit:
+        buf[0] = static_cast<char>('0' + n);
+        buf++;
+        return buf;
+    }
+
+    if (n >= 10000000)
+    {
+//L_8_digits:
+        q = n / 1000000;
+        n = n % 1000000;
+        buf = Utoa100(buf, q);
+L_6_digits:
+        q = n / 10000;
+        n = n % 10000;
+        buf = Utoa100(buf, q);
+L_4_digits:
+        q = n / 100;
+        n = n % 100;
+        buf = Utoa100(buf, q);
+L_2_digits:
+        buf = Utoa100(buf, n);
+        return buf;
+    }
+
+    if (n >=  1000000) goto L_7_digits;
+    if (n >=   100000) goto L_6_digits;
+    if (n >=    10000) goto L_5_digits;
+    if (n >=     1000) goto L_4_digits;
+    if (n >=      100) goto L_3_digits;
+    if (n >=       10) goto L_2_digits;
+    goto L_1_digit;
+}
+
 // Modifies the generated digits in the buffer to approach (round towards) w.
 //
 // Input:
@@ -635,14 +639,14 @@ inline void Grisu2Round(char* buffer, int length, uint64_t distance, uint64_t de
     // There are three stopping conditions:
     // (The position of the numbers is measured relative to H.)
     //
-    //  1)  B is already <= w:
+    //  1)  B is already <= w
     //          rest >= distance
     //
-    //  2)  Decrementing B would yield a number B' < L:
+    //  2)  Decrementing B would yield a number B' < L
     //          rest + ten_kappa > delta
     //
     //  3)  Decrementing B would yield a number B' < w and farther away from
-    //      w than the current number B:
+    //      w than the current number B: w - B' > B - w
     //          rest + ten_kappa > distance &&
     //          rest + ten_kappa - distance >= distance - rest
 
@@ -731,7 +735,7 @@ inline void Grisu2DigitGen(char* buffer, int& length, int& exponent, DiyFp L, Di
 
     // The common case is that all the digits of p1 are needed.
     // Optimize for this case and correct later if required.
-    length = static_cast<int>(U32ToString(buffer, p1) - buffer);
+    length = static_cast<int>(GenerateIntegralDigits(buffer, p1) - buffer);
 
     if (p2 > delta)
     {
@@ -994,18 +998,20 @@ inline void Grisu2(char* buffer, int& length, int& exponent, Fp value)
 // Dtoa
 //--------------------------------------------------------------------------------------------------
 
-// Appends a decimal representation of exponent to buffer.
-// Returns a pointer to the element following the exponent.
-//
-// PRE: -1000 < e < 1000
-inline char* AppendExponent(char* buffer, int exponent)
-{
-    assert(exponent > -1000);
-    assert(exponent <  1000);
+constexpr int kDtoaPositiveMaxLength = 24;
 
-    if (exponent < 0)
+// Appends a decimal representation of 'value' to buffer.
+// Returns a pointer to the element following the digits.
+//
+// PRE: -1000 < value < 1000
+inline char* Itoa1000(char* buffer, int value)
+{
+    assert(value > -1000);
+    assert(value <  1000);
+
+    if (value < 0)
     {
-        exponent = -exponent;
+        value = -value;
         *buffer++ = '-';
     }
     else
@@ -1013,7 +1019,7 @@ inline char* AppendExponent(char* buffer, int exponent)
         *buffer++ = '+';
     }
 
-    uint32_t const k = static_cast<uint32_t>(exponent);
+    uint32_t const k = static_cast<uint32_t>(value);
     if (k < 10)
     {
         *buffer++ = static_cast<char>('0' + k);
@@ -1033,80 +1039,73 @@ inline char* AppendExponent(char* buffer, int exponent)
     return buffer;
 }
 
-// Prettify v = buffer[0...length-1] * 10^exponent
-//
-// If v is in the range [10^min_exp, 10^max_exp) it will be printed in fixed-point notation.
-// Otherwise it will be printed in exponential notation.
-//
-// PRE: min_exp < 0
-// PRE: max_exp > 0
-inline char* FormatBuffer(char* buffer, int length, int exponent, int min_exp, int max_exp, bool emit_trailing_dot_zero)
+inline char* FormatFixed(char* buffer, int length, int decimal_point, bool force_trailing_dot_zero)
 {
-    assert(min_exp < 0);
-    assert(max_exp > 0);
+    assert(buffer != nullptr);
+    assert(length >= 1);
 
-    int k = length;
-    int n = exponent + length;
-    // k is the length of the buffer (number of decimal digits)
-    // n is the position of the decimal point relative to the start of the buffer.
-
-    if (k <= n && n <= max_exp)
+    if (length <= decimal_point)
     {
         // digits[000]
-        // length <= max_exp (+ 2)
+        // assert(buffer_length >= decimal_point + (force_trailing_dot_zero ? 2 : 0));
 
-        std::memset(buffer + k, '0', static_cast<size_t>(n - k));
-        if (emit_trailing_dot_zero)
+        std::memset(buffer + length, '0', static_cast<size_t>(decimal_point - length));
+        buffer += decimal_point;
+        if (force_trailing_dot_zero)
         {
-            buffer[n++] = '.';
-            buffer[n++] = '0';
+            *buffer++ = '.';
+            *buffer++ = '0';
         }
-        return buffer + n;
+        return buffer;
     }
-
-    if (0 < n && n <= max_exp)
+    else if (0 < decimal_point)
     {
         // dig.its
-        // length <= max_digits10 + 1
+        // assert(buffer_length >= length + 1);
 
-        assert(k > n);
-
-        std::memmove(buffer + (n + 1), buffer + n, static_cast<size_t>(k - n));
-        buffer[n] = '.';
-        return buffer + (k + 1);
+        std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, static_cast<size_t>(length - decimal_point));
+        buffer[decimal_point] = '.';
+        return buffer + (length + 1);
     }
-
-    if (min_exp < n && n <= 0)
+    else // decimal_point <= 0
     {
         // 0.[000]digits
-        // length <= 2 + (-min_exp - 1) + max_digits10
+        // assert(buffer_length >= 2 + (-decimal_point) + length);
 
-        std::memmove(buffer + (2 + -n), buffer, static_cast<size_t>(k));
+        std::memmove(buffer + (2 + -decimal_point), buffer, static_cast<size_t>(length));
         buffer[0] = '0';
         buffer[1] = '.';
-        std::memset(buffer + 2, '0', static_cast<size_t>(-n));
-        return buffer + (2 + (-n) + k);
+        std::memset(buffer + 2, '0', static_cast<size_t>(-decimal_point));
+        return buffer + (2 + (-decimal_point) + length);
     }
+}
 
-    if (k == 1)
+inline char* FormatExponential(char* buffer, int length, int decimal_point)
+{
+    assert(buffer != nullptr);
+    assert(length >= 1);
+
+    if (length == 1)
     {
         // dE+123
-        // length <= 1 + 5
+        // assert(buffer_length >= length + 5);
 
         buffer += 1;
     }
     else
     {
         // d.igitsE+123
-        // length <= max_digits10 + 1 + 5
+        // assert(buffer_length >= length + 1 + 5);
 
-        std::memmove(buffer + 2, buffer + 1, static_cast<size_t>(k - 1));
+        std::memmove(buffer + 2, buffer + 1, static_cast<size_t>(length - 1));
         buffer[1] = '.';
-        buffer += 1 + k;
+        buffer += 1 + length;
     }
 
     *buffer++ = 'e';
-    return AppendExponent(buffer, n - 1);
+
+    int const exponent = decimal_point - 1;
+    return Itoa1000(buffer, exponent);
 }
 
 inline char* StrCopy(char* next, char* last, char const* source)
@@ -1123,8 +1122,6 @@ inline char* StrCopy(char* next, char* last, char const* source)
     return next + len;
 }
 
-constexpr int kDtoaPositiveMaxLength = 24;
-
 // Generates a decimal representation of the floating-point number `value` in
 // the buffer `[next, last)`.
 //
@@ -1132,7 +1129,7 @@ constexpr int kDtoaPositiveMaxLength = 24;
 // Note: The buffer must be large enough (>= kDtoaPositiveMaxLength)
 // Note: The result is _not_ null-terminated
 template <typename Fp>
-inline char* DtoaPositive(char* next, char* last, Fp value, bool emit_trailing_dot_zero = false)
+inline char* DtoaPositive(char* next, char* last, Fp value, bool force_trailing_dot_zero = false)
 {
     assert(last - next >= kDtoaPositiveMaxLength);
     static_cast<void>(last); // Fix warning
@@ -1151,22 +1148,35 @@ inline char* DtoaPositive(char* next, char* last, Fp value, bool emit_trailing_d
     // Grisu2 generates at most max_digits10 decimal digits.
     assert(length <= std::numeric_limits<Fp>::max_digits10);
 
+    // The position of the decimal point relative to the start of the buffer.
+    int const decimal_point = length + exponent;
+
     // Just appending the exponent would yield a correct decimal representation
-    // for the input value. Instead format the digits similar to printf's %g
-    // style.
+    // for the input value.
+
+#if 0
+    // Format the digits similar to printf's %g style.
     //
     // NB:
     // These are the values used by JavaScript's ToString applied to Number
     // type. Printf uses the values -4 and max_digits10 resp.
-#if 0
-    constexpr int kMinExp = -4;
-    constexpr int kMaxExp = std::numeric_limits<Fp>::max_digits10;
-#else
     constexpr int kMinExp = -6;
     constexpr int kMaxExp = 21;
+
+    bool const use_fixed = kMinExp < decimal_point && decimal_point <= kMaxExp;
+#else
+    // NB:
+    // Integers <= 2^p = kMaxVal are exactly representable as Fp's.
+    constexpr auto kMinExp = -6;
+    constexpr auto kMaxVal = static_cast<Fp>(uint64_t{1} << std::numeric_limits<Fp>::digits); // <= 16 digits
+
+    bool const use_fixed = kMinExp < decimal_point && value <= kMaxVal;
 #endif
 
-    char* const end = FormatBuffer(next, length, exponent, kMinExp, kMaxExp, emit_trailing_dot_zero);
+    char* const end = use_fixed
+        ? FormatFixed(next, length, decimal_point, force_trailing_dot_zero)
+        : FormatExponential(next, length, decimal_point);
+
     assert(end - next <= kDtoaPositiveMaxLength);
     return end;
 }
@@ -1183,7 +1193,7 @@ inline char* Dtoa(
     char*       next,
     char*       last,
     Fp          value,
-    bool        emit_trailing_dot_zero = false,
+    bool        force_trailing_dot_zero = false,
     char const* nan_string = "NaN",
     char const* inf_string = "Infinity")
 {
@@ -1203,7 +1213,7 @@ inline char* Dtoa(
     if (value == 0)
     {
         *next++ = '0';
-        if (emit_trailing_dot_zero)
+        if (force_trailing_dot_zero)
         {
             *next++ = '.';
             *next++ = '0';
@@ -1211,7 +1221,7 @@ inline char* Dtoa(
         return next;
     }
 
-    return grisu::DtoaPositive(next, last, value, emit_trailing_dot_zero);
+    return grisu::DtoaPositive(next, last, value, force_trailing_dot_zero);
 }
 
 } // namespace grisu

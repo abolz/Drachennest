@@ -478,6 +478,14 @@ static void VerifyDouble()
 // strtod("7.0385307e-26") = 3AB5C87FA06C50E6
 //                         = 6131424988778726 * 2^-136
 //------------------------------------------------------------------------------
+//   0 <= exp <= 114 ==> all optimal
+// 149 <= exp <= 151 ==> all optimal
+// 184 <= exp <= 255 ==> all optimal
+//
+//
+//      XXX:      115 <= exp <= 183
+//
+//------------------------------------------------------------------------------
 #if TEST_ALL_SINGLE
 static void TestAllSingle()
 {
@@ -485,8 +493,12 @@ static void TestAllSingle()
 
     using Clock = std::chrono::steady_clock;
 
-    int const min_exp = 0;
+    int const min_exp = 0; // 0;
     int const max_exp = (1 << 8) - 1; // exclusive!
+
+    uint64_t num_tested = 0;
+    uint64_t num_shortest = 0;
+    uint64_t num_optimal = 0;
 
     uint32_t bits = min_exp << 23;
 
@@ -499,24 +511,59 @@ static void TestAllSingle()
     for (;;)
     {
         float const f = ReinterpretBits<float>(bits);
+
+#if 1
+        if (f != 0.0)
+        {
+            ++num_tested;
+
+            char buf1[32];
+            char buf2[32];
+            int len1 = 0;
+            int len2 = 0;
+            {
+                auto const boundaries = grisu::ComputeBoundaries(f);
+                int k1 = 0;
+                grisu::Grisu2(buf1, len1, k1, boundaries.m_minus, boundaries.v, boundaries.m_plus);
+            }
+            {
+                using double_conversion::DoubleToStringConverter;
+
+                bool sign = false;
+                int point = 0;
+                DoubleToStringConverter::DoubleToAscii(f, DoubleToStringConverter::SHORTEST_SINGLE, -1 /*unused*/, buf2, 32, &sign, &len2, &point);
+            }
+            assert(len1 >= len2);
+            if (len1 == len2)
+            {
+                ++num_shortest;
+                if (memcmp(buf1, buf2, len1) == 0)
+                {
+                    ++num_optimal;
+                }
+            }
+        }
+#else
         CheckFloat(f);
+#endif
 
         ++bits;
 
-        int next_exp = bits >> 23;
-        if (next_exp == max_exp)
+        int const next_exp = bits >> 23;
+        if (next_exp == max_exp || curr_exp != next_exp)
         {
             auto const t_now = Clock::now();
             printf("   time: %f sec\n", std::chrono::duration<double>(t_now - t_lap).count());
-            break;
-        }
-
-        if (curr_exp != next_exp)
-        {
-            auto const t_now = Clock::now();
-            printf("   time: %f sec\n", std::chrono::duration<double>(t_now - t_lap).count());
+            // printf("   num_tested   %u\n", num_tested);
+            // printf("   num_shortest %u %.17g%%\n", num_shortest, 100.0 * (static_cast<double>(num_shortest) / static_cast<double>(num_tested)));
+            // printf("   num_optimal  %u %.17g%%\n", num_optimal,  100.0 * (static_cast<double>(num_optimal)  / static_cast<double>(num_tested)));
             printf("exp = %d\n", next_exp);
             t_lap = t_now;
+            if (next_exp == max_exp)
+                break;
+            // num_tested = 0;
+            // num_shortest = 0;
+            // num_optimal = 0;
         }
 
         curr_exp = next_exp;
@@ -524,6 +571,9 @@ static void TestAllSingle()
 
     auto const t_end = Clock::now();
     printf("all-floats time: %f sec\n", std::chrono::duration<double>(t_end - t_beg).count());
+    printf("   num_tested   %llu\n", num_tested);
+    printf("   num_shortest %llu %.17g%%\n", num_shortest, 100.0 * (static_cast<double>(num_shortest) / static_cast<double>(num_tested)));
+    printf("   num_optimal  %llu %.17g%%\n", num_optimal,  100.0 * (static_cast<double>(num_optimal)  / static_cast<double>(num_tested)));
 }
 #endif
 
@@ -628,12 +678,11 @@ static void TestDoubles()
         auto const t_sec = std::chrono::duration<double>(t_now - t_start).count();
         if (t_sec > 5.0)
         {
-            fprintf(stderr, "%.2f%% [fp/sec %.3f] [shortest: %.3f%%] [optimal: %.3f%%]\n", // [all p1: %.3f%%]\n",
-                100.0 * (double)i / (double)kNumDoubles, num_checked / 1000.0 / t_sec,
-                100.0 * num_shortest / num_checked,
-                100.0 * num_optimal / num_checked
-                //,
-                //100.0 * num_all_digits_of_p1_needed / num_checked
+            fprintf(stderr, "%.2f%% [fp/sec %.3f] [shortest: %.17g%%] [optimal: %.17g%%]\n",
+                100.0 * (static_cast<double>(i) / static_cast<double>(kNumDoubles)),
+                num_checked / 1000.0 / t_sec,
+                100.0 * (static_cast<double>(num_shortest) / static_cast<double>(num_checked)),
+                100.0 * (static_cast<double>(num_optimal ) / static_cast<double>(num_checked))
                 );
             t_start = t_now;
             num_checked = 0;
@@ -643,6 +692,86 @@ static void TestDoubles()
     }
 }
 #endif
+
+static void TestDoubleRange()
+{
+    printf("Testing some finite double precision values...\n");
+
+    using Clock = std::chrono::steady_clock;
+
+    int const min_exp = 0;
+    int const max_exp = (1 << 11) - 1; // exclusive!
+    int curr_exp = min_exp;
+
+    uint64_t num_tested = 0;
+    uint64_t num_shortest = 0;
+    uint64_t num_optimal = 0;
+
+    auto const t_beg = Clock::now();
+    auto t_lap = t_beg;
+
+    std::mt19937 rng;
+
+    printf("exp = %d\n", curr_exp);
+    for (;;)
+    {
+        std::uniform_int_distribution<uint64_t> gen(0, (uint64_t{0x7FF} << 52) - 1);
+        uint64_t significand = gen(rng);
+
+        double const f = ReinterpretBits<double>((uint64_t(curr_exp) << 52) | significand);
+
+        if (curr_exp != 0 || significand != 0)
+        {
+            ++num_tested;
+
+            char buf1[32];
+            char buf2[32];
+            int len1 = 0;
+            int len2 = 0;
+            {
+                auto const boundaries = grisu::ComputeBoundaries(f);
+                int k1 = 0;
+                grisu::Grisu2(buf1, len1, k1, boundaries.m_minus, boundaries.v, boundaries.m_plus);
+            }
+            {
+                using double_conversion::DoubleToStringConverter;
+
+                bool sign = false;
+                int point = 0;
+                DoubleToStringConverter::DoubleToAscii(f, DoubleToStringConverter::SHORTEST, -1 /*unused*/, buf2, 32, &sign, &len2, &point);
+            }
+            assert(len1 >= len2);
+            if (len1 == len2)
+            {
+                ++num_shortest;
+                if (memcmp(buf1, buf2, len1) == 0)
+                {
+                    ++num_optimal;
+                }
+            }
+        }
+
+        if (num_tested > (1 << 10))
+        {
+            ++curr_exp;
+
+            auto const t_now = Clock::now();
+            printf("   time: %f sec\n", std::chrono::duration<double>(t_now - t_lap).count());
+            printf("   num_shortest %.17g%%\n", 100.0 * (static_cast<double>(num_shortest) / static_cast<double>(num_tested)));
+            printf("   num_optimal  %.17g%%\n", 100.0 * (static_cast<double>(num_optimal)  / static_cast<double>(num_tested)));
+            printf("exp = %d\n", curr_exp);
+            t_lap = t_now;
+            if (curr_exp == max_exp)
+                break;
+            num_tested = 0;
+            num_shortest = 0;
+            num_optimal = 0;
+        }
+    }
+
+    auto const t_end = Clock::now();
+    printf("some-doubles time: %f sec\n", std::chrono::duration<double>(t_end - t_beg).count());
+}
 
 static void FindMaxP1()
 {
@@ -729,6 +858,7 @@ int main()
 
     VerifySingle();
     VerifyDouble();
+    // TestDoubleRange();
 #if TEST_ALL_SINGLE
     TestAllSingle();
 #endif
