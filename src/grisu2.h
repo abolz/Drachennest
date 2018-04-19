@@ -150,15 +150,19 @@ inline DiyFp Multiply(DiyFp x, DiyFp y)
     //
     //   = p_lo + 2^64 p_hi
 
-    uint64_t const u_lo = x.f & 0xFFFFFFFF;
-    uint64_t const u_hi = x.f >> 32;
-    uint64_t const v_lo = y.f & 0xFFFFFFFF;
-    uint64_t const v_hi = y.f >> 32;
+    // Note:
+    // The 32/64-bit casts here help MSVC to avoid calls to the _allmul
+    // library function.
 
-    uint64_t const p0 = u_lo * v_lo;
-    uint64_t const p1 = u_lo * v_hi;
-    uint64_t const p2 = u_hi * v_lo;
-    uint64_t const p3 = u_hi * v_hi;
+    uint32_t const u_lo = static_cast<uint32_t>(x.f /*& 0xFFFFFFFF*/);
+    uint32_t const u_hi = static_cast<uint32_t>(x.f >> 32);
+    uint32_t const v_lo = static_cast<uint32_t>(y.f /*& 0xFFFFFFFF*/);
+    uint32_t const v_hi = static_cast<uint32_t>(y.f >> 32);
+
+    uint64_t const p0 = uint64_t{u_lo} * v_lo;
+    uint64_t const p1 = uint64_t{u_lo} * v_hi;
+    uint64_t const p2 = uint64_t{u_hi} * v_lo;
+    uint64_t const p3 = uint64_t{u_hi} * v_hi;
 
     uint64_t const p0_hi = p0 >> 32;
     uint64_t const p1_lo = p1 & 0xFFFFFFFF;
@@ -194,13 +198,21 @@ inline DiyFp Normalize(DiyFp x)
 
 #if defined(_MSC_VER) && defined(_M_X64)
 
-    int const leading_zeros = static_cast<int>(__lzcnt64(x.f));
-    return DiyFp(x.f << leading_zeros, x.e - leading_zeros);
+    int const lz = static_cast<int>(__lzcnt64(x.f));
+    return DiyFp(x.f << lz, x.e - lz);
+
+#elif defined(_MSC_VER) && defined(_M_IX86)
+
+    int lz = static_cast<int>( __lzcnt(static_cast<uint32_t>(x.f >> 32)) );
+    if (lz == 32) {
+        lz += static_cast<int>( __lzcnt(static_cast<uint32_t>(x.f)) );
+    }
+    return DiyFp(x.f << lz, x.e - lz);
 
 #elif defined(__GNUC__)
 
-    int const leading_zeros = __builtin_clzll(x.f);
-    return DiyFp(x.f << leading_zeros, x.e - leading_zeros);
+    int const lz = __builtin_clzll(x.f);
+    return DiyFp(x.f << lz, x.e - lz);
 
 #else
 
@@ -428,8 +440,13 @@ constexpr int kCachedPowersDecExpStep   =    8;
 
 inline CachedPower GetCachedPower(int index)
 {
-    // sizeof(table) = 1264 bytes
     static constexpr CachedPower kCachedPowers[] = {
+//      { 0xFA8FD5A0081C0288, -1220, -348 },
+//      { 0xBAAEE17FA23EBF76, -1193, -340 },
+//      { 0x8B16FB203055AC76, -1166, -332 },
+//      { 0xCF42894A5DCE35EA, -1140, -324 },
+//      { 0x9A6BB0AA55653B2D, -1113, -316 },
+//      { 0xE61ACF033D1A45DF, -1087, -308 },
         { 0xAB70FE17C79AC6CA, -1060, -300 }, // >>> double-precision (-1060 + 960 + 64 = -36)
         { 0xFF77B1FCBEBCDC4F, -1034, -292 },
         { 0xBE5691EF416BD60C, -1007, -284 },
@@ -509,6 +526,8 @@ inline CachedPower GetCachedPower(int index)
         { 0x8E679C2F5E44FF8F,   960,  308 },
         { 0xD433179D9C8CB841,   986,  316 },
         { 0x9E19DB92B4E31BA9,  1013,  324 }, // <<< double-precision (1013 - 1137 + 64 = -60)
+//      { 0xEB96BF6EBADF77D9,  1039,  332 },
+//      { 0xAF87023B9BF0EE6B,  1066,  340 },
     };
 
     assert(index >= 0);
@@ -671,9 +690,9 @@ inline void Grisu2Round(char* buffer, int length, uint64_t distance, uint64_t de
 // L and H must be normalized and share the same exponent -60 <= e <= -32.
 inline void Grisu2DigitGen(char* buffer, int& length, int& exponent, DiyFp L, DiyFp w, DiyFp H)
 {
-    static_assert(DiyFp::kPrecision == 64, "invalid config");
-    static_assert(kAlpha >= -60, "invalid config");
-    static_assert(kGamma <= -32, "invalid config");
+    static_assert(DiyFp::kPrecision == 64, "internal error");
+    static_assert(kAlpha >= -60, "internal error");
+    static_assert(kGamma <= -32, "internal error");
 
     // Generates the digits (and the exponent) of a decimal floating-point
     // number V = buffer * 10^exponent in the range [L, H].
