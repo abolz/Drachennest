@@ -780,17 +780,22 @@ static void FindMaxP1()
     constexpr uint64_t kMaxF = UINT64_MAX; // ((uint64_t{1} << 53) - 1) << 11;
 
     uint64_t max_p1 = 0;
+    uint64_t min_p1 = UINT64_MAX;
     for (int e = kExpMin; e <= kExpMax; ++e)
     {
         auto const v = grisu::DiyFp(kMaxF, e);
         auto const cached = grisu::GetCachedPowerForBinaryExponent(e);
         auto const c_minus_k = grisu::DiyFp(cached.f, cached.e);
         auto const w = grisu::Multiply(v, c_minus_k);
-        if (max_p1 < (w.f >> -w.e))
-            max_p1 = (w.f >> -w.e);
+        auto const p1 = w.f >> -w.e;
+        if (max_p1 < p1)
+            max_p1 = p1;
+        if (min_p1 > p1)
+            min_p1 = p1;
     }
 
     printf("max_p1 = %llu [%llX]\n", max_p1, max_p1);
+    printf("min_p1 = %llu [%llX]\n", min_p1, min_p1);
 }
 
 #if TEST_P1_DIGITS
@@ -858,14 +863,14 @@ int main()
 
     VerifySingle();
     VerifyDouble();
-    // TestDoubleRange();
-#if TEST_ALL_SINGLE
-    TestAllSingle();
-#endif
-#if TEST_P1_DIGITS
-    TestP1Digits();
-#endif
-#if TEST_RANDOM_DOUBLES
-    TestDoubles();
-#endif
+//    // TestDoubleRange();
+//#if TEST_ALL_SINGLE
+//    TestAllSingle();
+//#endif
+//#if TEST_P1_DIGITS
+//    TestP1Digits();
+//#endif
+//#if TEST_RANDOM_DOUBLES
+//    TestDoubles();
+//#endif
 }
