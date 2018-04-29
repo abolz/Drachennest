@@ -1,4 +1,7 @@
-#include "../src/grisu2.h"
+#include "../src/dtoa.h"
+#if 0
+#include "../src/strtod.h"
+#endif
 
 #include <double-conversion/double-conversion.h>
 
@@ -14,7 +17,8 @@
 
 #define TEST_ALL_SINGLE         0
 #define TEST_P1_DIGITS          0
-#define TEST_RANDOM_DOUBLES     0
+#define TEST_RANDOM_DOUBLES     1
+#define TEST_DTOA               0
 
 //------------------------------------------------------------------------------
 //
@@ -80,6 +84,7 @@ static float MakeSingle(uint64_t f, int e)
     constexpr int kDenormalExponent = -kExponentBias + 1;
     constexpr int kMaxExponent = 0xFF - kExponentBias;
 
+    assert(f <= kHiddenBit + kSignificandMask);
     while (f > kHiddenBit + kSignificandMask) {
         f >>= 1;
         e++;
@@ -137,6 +142,7 @@ static double MakeDouble(uint64_t f, int e)
     constexpr int kDenormalExponent = -kExponentBias + 1;
     constexpr int kMaxExponent = 0x7FF - kExponentBias;
 
+    assert(f <= kHiddenBit + kSignificandMask);
     while (f > kHiddenBit + kSignificandMask) {
         f >>= 1;
         e++;
@@ -173,63 +179,119 @@ static double MakeDouble(uint64_t f, int e)
 
 static bool CheckFloat(float d0)
 {
+    auto const b0 = ReinterpretBits<uint32_t>(d0);
+
+#if TEST_DTOA
     char str[32];
-    auto const end = grisu::Dtoa(str, str + 32, d0);
+    auto const end = base_conv::Dtoa(str, str + 32, d0);
     *end = '\0';
     assert(end - str <= 26);
+#else
+    char str[1024*4];
+    char const* end = str + std::snprintf(str, 1024*2, "%.1500g", d0);
+#endif
 
     // printf("check single: %08x = '%s'\n", ReinterpretBits<uint32_t>(d0), str);
 
+    bool result = true;
     {
         auto const d1 = StringToSingle(str, end);
-        auto const b0 = ReinterpretBits<uint32_t>(d0);
         auto const b1 = ReinterpretBits<uint32_t>(d1);
         if (b0 != b1)
         {
-            printf("FAIL: single strtof [%08x] != [%08x] -- [%s] [%.17g] [%.17g]\n", b0, b1, str, d0, d1);
-            return false;
+            printf("FAIL: single: StringToSingle expected[%08x] != actual[%08x] -- [%s] [%.17g] [%.17g]\n", b0, b1, str, d0, d1);
+            result = false;
         }
     }
-
-#if 1
     {
-        auto const d1 = static_cast<float>(StringToDouble(str, end));
-        auto const b0 = ReinterpretBits<uint32_t>(d0);
+        auto const x1 = StringToDouble(str, end);
+        auto const d1 = static_cast<float>(x1);
         auto const b1 = ReinterpretBits<uint32_t>(d1);
         if (b0 != b1)
         {
-            printf("FAIL: single strtod [%08x] != [%08x] -- [%s] [%.17g] [%.17g]\n", b0, b1, str, d0, d1);
-            return false;
+            printf("FAIL: single: (float)StringToDouble expected[%08x] != actual[%08x] -- [%s] [%.17g] [%.17g]\n", b0, b1, str, d0, d1);
+            result = false;
+        }
+    }
+#if 0
+    {
+        float d1;
+        auto const ok = base_conv::Strtod(d1, str, end);
+        assert(ok);
+        auto const b1 = ReinterpretBits<uint32_t>(d1);
+        if (b0 != b1)
+        {
+            printf("FAIL: single: base_conv::Strtof expected[%08x] != actual[%08x] -- [%s] [%.17g] [%.17g]\n", b0, b1, str, d0, d1);
+            result = false;
+        }
+    }
+    {
+        double d1_;
+        auto const ok = base_conv::Strtod(d1_, str, end);
+        assert(ok);
+        auto const d1 = static_cast<float>(d1_);
+        auto const b1 = ReinterpretBits<uint32_t>(d1);
+        if (b0 != b1)
+        {
+            printf("FAIL: single: (float)base_conv::Strtod expected[%08x] != actual[%08x] -- [%s] [%.17g] [%.17g]\n", b0, b1, str, d0, d1);
+            result = false;
         }
     }
 #endif
 
-    return true;
+    return result;
 }
 
 static bool CheckFloat(double d0)
 {
+    auto const b0 = ReinterpretBits<uint64_t>(d0);
+
+#if TEST_DTOA
     char str[32];
-    auto const end = grisu::Dtoa(str, str + 32, d0);
+    auto const end = base_conv::Dtoa(str, str + 32, d0);
     *end = '\0';
     assert(end - str <= 26);
+#else
+    char str[1024*4];
+    char const* end = str + std::snprintf(str, 1024*2, "%.1500g", d0);
+#endif
 
-    // printf("check double: %016llx = '%s'\n", ReinterpretBits<uint64_t>(d0), str);
-
-#if 1
+    bool result = true;
     {
         auto const d1 = StringToDouble(str, end);
-        auto const b0 = ReinterpretBits<uint64_t>(d0);
         auto const b1 = ReinterpretBits<uint64_t>(d1);
         if (b0 != b1)
         {
-            printf("FAIL: double: expected=[%016llx] != actual[%016llx] -- [%s] expected=[%.17g] actual=[%.17g]\n", b0, b1, str, d0, d1);
-            return false;
+            printf("FAIL: double: StringToDouble expected=[%016llx] != actual[%016llx] -- [%s] expected=[%.17g] actual=[%.17g]\n", b0, b1, str, d0, d1);
+            result = false;
+        }
+    }
+#if 0
+    {
+        double d1;
+        auto const ok = base_conv::Strtod(d1, str, end);
+        assert(ok);
+        auto const b1 = ReinterpretBits<uint64_t>(d1);
+        if (b0 != b1)
+        {
+            printf("FAIL: double: base_conv::Strtod expected[%016llx] != actual[%016llx] -- [%s] [%.17g] [%.17g]\n", b0, b1, str, d0, d1);
+            result = false;
+        }
+    }
+#endif
+#if 0
+    {
+        auto const d1 = std::strtod(str, nullptr);
+        auto const b1 = ReinterpretBits<uint64_t>(d1);
+        if (b0 != b1)
+        {
+            printf("FAIL: double: std::strtod expected=[%016llx] != actual[%016llx] -- [%s] expected=[%.17g] actual=[%.17g]\n", b0, b1, str, d0, d1);
+            result = false;
         }
     }
 #endif
 
-    return true;
+    return result;
 }
 
 //------------------------------------------------------------------------------
@@ -385,6 +447,7 @@ static void VerifyDouble()
     CheckFloat(MakeDouble(7363326733505337, +272)); // digits 21, bits 61
     CheckFloat(MakeDouble(8549497411294502, -448)); // digits 22, bits 66
 
+#if 0
     // Table 20: Stress Inputs for Converting 56-bit Binary to Decimal, < 1/2 ULP
     CheckFloat(MakeDouble(50883641005312716, -172)); // digits  1, bits 65
     CheckFloat(MakeDouble(38162730753984537, -170)); // digits  2, bits 64
@@ -432,7 +495,202 @@ static void VerifyDouble()
     CheckFloat(MakeDouble(69116558615326153, -144)); // digits 20, bits 62
     CheckFloat(MakeDouble(39462549494468513, -152)); // digits 21, bits 63
     CheckFloat(MakeDouble(39462549494468513, -153)); // digits 22, bits 61
+#endif
 }
+
+#if 0
+static void TestStrtod()
+{
+    printf("TestStrtod...\n");
+
+    auto check_double = [](std::string const& number, double expected)
+    {
+        double d;
+        auto const ok = base_conv::Strtod(d, number.data(), number.data() + number.size());
+        if (d != expected)
+        {
+            printf("FAIL: Strtod: \"%s\" --- actual: %.17g --- expected: %.17g\n", number.c_str(), d, expected);
+        }
+    };
+
+    check_double("1e-2147483649", 1e-2147483649);
+    check_double("1e-2147483648", 1e-2147483648);
+    check_double("1e-2147483647", 1e-2147483647);
+    check_double("1e+2147483647", std::numeric_limits<double>::infinity());
+    check_double("1e+2147483648", std::numeric_limits<double>::infinity());
+    check_double("1.7976931348623159e+308", std::numeric_limits<double>::infinity());
+    check_double("1e-100000", 1e-100000);
+    check_double("1e-1000", 1e-1000);
+    check_double("1e-325", 1e-325);
+    check_double("4.9406564584124653e-324", 4.9406564584124653e-324);
+    check_double("4.94065645841246539999999999999999999999999999999999999999999999999999999999e-324", 4.94065645841246539999999999999999999999999999999999999999999999999999999999e-324);
+    check_double("4.9406564584124654e-324", 4.9406564584124654e-324); // min denormal
+    check_double("4.94065645841246540000000000000000000000000000000000000000000000000000000001e-324", 4.94065645841246540000000000000000000000000000000000000000000000000000000001e-324);
+    check_double("4.9406564584124655e-324", 4.9406564584124655e-324);
+    check_double("1e-324", 1e-324);
+    check_double("2e-324", 2e-324);
+    check_double("2.4703282292062327e-324", 0.0);
+    check_double("2.4703282292062328e-324", 2.4703282292062328e-324);
+    check_double("2.48e-324", 2.48e-324);
+    check_double("2.5e-324", 2.5e-324);
+    check_double("2.500000000000000000000000000000000000000000000000000000000000000000000000001e-324", 2.500000000000000000000000000000000000000000000000000000000000000000000000001e-324);
+    check_double("3e-324", 3e-324);
+    check_double("4e-324", 4e-324);
+    check_double("5e-324", 5e-324); // min denormal
+    check_double("2.225073858507201e-308", 2.225073858507201e-308); // max denormal
+    check_double("2.2250738585072014e-308", 2.2250738585072014e-308); // min normal
+    check_double("1.7976931348623157e+308", 1.7976931348623157e+308); // max normal
+    check_double("1.7976931348623156999999999999999999999999999999999999999999999999999e+308", 1.7976931348623156999999999999999999999999999999999999999999999999999e+308);
+    check_double("1.7976931348623157000000000000000000000000000000000000000000000000001e+308", 1.7976931348623157000000000000000000000000000000000000000000000000001e+308);
+    check_double("1.7976931348623158e+308", 1.7976931348623158e+308);
+    check_double(
+        "1797693134862315708145274237317043567980705675258449965989174768031572607800285387605"
+        "8955863276687817154045895351438246423432132688946418276846754670353751698604991057655"
+        "1282076245490090389328944075868508455133942304583236903222948165808559332123348274797"
+        "826204144723168738177180919299881250404026184124858368",
+        std::numeric_limits<double>::max());
+    check_double(
+        "0.0000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000049406564584124654417656879286822137"
+        "236505980261432476442558568250067550727020875186529983636163"
+        "599237979656469544571773092665671035593979639877479601078187"
+        "812630071319031140452784581716784898210368871863605699873072"
+        "305000638740915356498438731247339727316961514003171538539807"
+        "412623856559117102665855668676818703956031062493194527159149"
+        "245532930545654440112748012970999954193198940908041656332452"
+        "475714786901472678015935523861155013480352649347201937902681"
+        "071074917033322268447533357208324319360923828934583680601060"
+        "115061698097530783422773183292479049825247307763759272478746"
+        "560847782037344696995336470179726777175851256605511991315048"
+        "911014510378627381672509558373897335989936648099411642057026"
+        "37090279242767544565229087538682506419718265533447265625",
+        std::numeric_limits<double>::denorm_min());
+    check_double(
+        "243546080556034731077856379609316893158278902575447060151047"
+        "212703405344938119816206067372775299130836050315842578309818"
+        "316450894337978612745889730079163798234256495613858256849283"
+        "467066859489192118352020514036083287319232435355752493038825"
+        "828481044358810649108367633313557305310641892225870327827273"
+        "41408256.000000",
+        2.4354608055603473e+307);
+    check_double("2.2250738585072011e-308", 2.2250738585072011e-308);
+    check_double(
+        "2.4703282292062327208828439643411068618252990130716238221279"
+        "284125033775363510437593264991818081799618989828234772285886"
+        "546332835517796989819938739800539093906315035659515570226392"
+        "290858392449105184435931802849936536152500319370457678249219"
+        "365623669863658480757001585769269903706311928279558551332927"
+        "834338409351978015531246597263579574622766465272827220056374"
+        "006485499977096599470454020828166226237857393450736339007967"
+        "761930577506740176324673600968951340535537458516661134223766"
+        "678604162159680461914467291840300530057530849048765391711386"
+        "591646239524912623653881879636239373280423891018672348497668"
+        "235089863388587925628302755995657524455507255189313690836254"
+        "779186948667994968324049705821028513185451396213837722826145"
+        "437693412532098591327667236328125001e-324",
+        5e-324);
+    check_double(
+        "0.0000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "00000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "00000000000002470328229206232720882843964341106861825299013071623822127928412503"
+        "3775363510437593264991818081799618989828234772285886546332835517796989819938739"
+        "80053909390631503565951557022639229085839244910518443593180284993653615250"
+        "0319370457678249219365623669863658480757001585769269903706311928279558551332"
+        "9278343384093519780155312465972635795746227664652728272200563740064854999770"
+        "9659947045402082816622623785739345073633900796776193057750674017632467360096"
+        "8951340535537458516661134223766678604162159680461914467291840300530057530849"
+        "0487653917113865916462395249126236538818796362393732804238910186723484976682"
+        "3508986338858792562830275599565752445550725518931369083625477918694866799496"
+        "8324049705821028513185451396213837722826145437693412532098591327667236328125", 0.0);
+    check_double(
+        "0.0000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "0000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "00000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "000000000000000000000000000000000000000000000000000000000000000000000000000000"
+        "00000000000002470328229206232720882843964341106861825299013071623822127928412503"
+        "3775363510437593264991818081799618989828234772285886546332835517796989819938739"
+        "80053909390631503565951557022639229085839244910518443593180284993653615250"
+        "0319370457678249219365623669863658480757001585769269903706311928279558551332"
+        "9278343384093519780155312465972635795746227664652728272200563740064854999770"
+        "9659947045402082816622623785739345073633900796776193057750674017632467360096"
+        "8951340535537458516661134223766678604162159680461914467291840300530057530849"
+        "0487653917113865916462395249126236538818796362393732804238910186723484976682"
+        "3508986338858792562830275599565752445550725518931369083625477918694866799496"
+        "8324049705821028513185451396213837722826145437693412532098591327667236328126", 5e-324);
+    check_double("0.500000000000000166533453693773481063544750213623046875", 0.500000000000000166533453693773481063544750213623046875);
+    check_double("3.518437208883201171875e13", 3.518437208883201171875e13);
+    check_double("62.5364939768271845828", 62.5364939768271845828);
+    check_double("8.10109172351e-10", 8.10109172351e-10);
+    check_double("1.50000000000000011102230246251565404236316680908203125", 1.50000000000000011102230246251565404236316680908203125);
+    check_double("9007199254740991.4999999999999999999999999999999995", 9007199254740991.4999999999999999999999999999999995);
+    check_double("1.2345678901234567e22", 1.2345678901234567e22);
+    check_double("2.2250738585072011e-308", 2.2250738585072011e-308);
+    check_double(
+        "6.6312368714697582767853966302759672433990999473553031442499717"
+        "587362866301392654396180682007880487441059604205526018528897150"
+        "063763256665955396033303618005191075917832333584923372080578494"
+        "993608994251286407188566165030934449228547591599881603044399098"
+        "682919739314266256986631577498362522745234853124423586512070512"
+        "924530832781161439325697279187097860044978723221938561502254152"
+        "119972830784963194121246401117772161481107528151017752957198119"
+        "743384519360959074196224175384736794951486324803914359317679811"
+        "223967034438033355297560033532098300718322306892013830155987921"
+        "841729099279241763393155074022348361207309147831684007154624400"
+        "538175927027662135590421159867638194826541287705957668068727833"
+        "49146967171293949598850675682115696218943412532098591327667236328125E-316",
+        6.631236846766476e-316);
+    check_double(
+        "3.2378839133029012895883524125015321748630376694231080599012970"
+        "495523019706706765657868357425877995578606157765598382834355143"
+        "910841531692526891905643964595773946180389283653051434639551003"
+        "566966656292020173313440317300443693602052583458034314716600326"
+        "995807313009548483639755486900107515300188817581841745696521731"
+        "104736960227499346384253806233697747365600089974040609674980283"
+        "891918789639685754392222064169814626901133425240027243859416510"
+        "512935526014211553334302252372915238433223313261384314778235911"
+        "424088000307751706259156707286570031519536642607698224949379518"
+        "458015308952384398197084033899378732414634842056080000272705311"
+        "068273879077914449185347715987501628125488627684932015189916680"
+        "28251730299953143924168545708663913273994694463908672332763671875E-319",
+        3.2379086165851934e-319);
+    check_double(
+        "6.953355807847677105972805215521891690222119817145950754416205607980030"
+        "13154963668880611572639944188006538639986402869127553953941465283158479"
+        "56685600829998895513577849614468960421131982842131079351102171626549398"
+        "02416034676213829409720583759540476786936413816541621287843248433202369"
+        "20991661224967600557302270324479971462211654218883777037602237117207955"
+        "91258533828013962195524188394697705149041926576270603193728475623010741"
+        "40442660237844114174497210955449896389180395827191602886654488182452409"
+        "58398138944278337700150546201574501784875457466834216175949666176602002"
+        "87528887833870748507731929971029979366198762266880963149896457660004790"
+        "09083731736585750335262099860150896718774401964796827166283225641992040"
+        "747894382698751809812609536720628966577351093292236328125E-310",
+        6.9533558078476524e-310);
+    check_double(
+        "3.339068557571188581835713701280943911923401916998521771655656997328440"
+        "31455961531816884914907466260909999811300946556642680817037843406572299"
+        "16596426194677060348844249897410807907667784563321682004646515939958173"
+        "71782125010668346652995912233993254584461125868481633343674905074271064"
+        "40976309070801785658401977687881242531200881232626036303547481153223685"
+        "33599053346255754042160606228586332807443018924703005556787346899784768"
+        "70369853549413277156622170245846166991655321535529623870646888786637528"
+        "99559280043617790174628627227337447170145299143304725786386460142425202"
+        "47915673681950560773208853293843223323915646452641434007986196650406080"
+        "77549162173963649264049738362290606875883456826586710961041737908872035"
+        "803481241600376705491726170293986797332763671875E-319",
+        3.3390932608534806e-319);
+    check_double("2.2250738585072012e-308", 2.2250738585072012e-308);
+    check_double("2.2250738585072011e-308", 2.2250738585072011e-308);
+
+    check_double("6114917000000003e-14", 6114917000000003e-14);
+}
+#endif
 
 //------------------------------------------------------------------------------
 // "7.038531e-26"
@@ -473,15 +731,19 @@ static void VerifyDouble()
 //
 // Cast d to single precision: (round to nearest, ties to even)
 //  ==> f+
+//------------------------------------------------------------------------------
+// From:
+// http://www.exploringbinary.com/floating-point-converter/
 //
 // strtof("7.0385307e-26") = 15AE43FD
+//                         = 11420669 * 2^-107
 // strtod("7.0385307e-26") = 3AB5C87FA06C50E6
+//                         = 3065712494389363 * 2^-135
 //                         = 6131424988778726 * 2^-136
 //------------------------------------------------------------------------------
 //   0 <= exp <= 114 ==> all optimal
 // 149 <= exp <= 151 ==> all optimal
 // 184 <= exp <= 255 ==> all optimal
-//
 //
 //      XXX:      115 <= exp <= 183
 //
@@ -493,7 +755,7 @@ static void TestAllSingle()
 
     using Clock = std::chrono::steady_clock;
 
-    int const min_exp = 0; // 0;
+    int const min_exp = 0;
     int const max_exp = (1 << 8) - 1; // exclusive!
 
     uint64_t num_tested = 0;
@@ -512,7 +774,7 @@ static void TestAllSingle()
     {
         float const f = ReinterpretBits<float>(bits);
 
-#if 1
+#if 0
         if (f != 0.0)
         {
             ++num_tested;
@@ -522,9 +784,9 @@ static void TestAllSingle()
             int len1 = 0;
             int len2 = 0;
             {
-                auto const boundaries = grisu::ComputeBoundaries(f);
+                auto const boundaries = base_conv::ComputeBoundaries(f);
                 int k1 = 0;
-                grisu::Grisu2(buf1, len1, k1, boundaries.m_minus, boundaries.v, boundaries.m_plus);
+                base_conv::Grisu2(buf1, len1, k1, boundaries.m_minus, boundaries.v, boundaries.m_plus);
             }
             {
                 using double_conversion::DoubleToStringConverter;
@@ -654,9 +916,9 @@ static void TestDoubles()
         int len1 = 0;
         int len2 = 0;
         {
-            auto const boundaries = grisu::ComputeBoundaries(value);
+            auto const boundaries = base_conv::ComputeBoundaries(value);
             int k = 0;
-            grisu::Grisu2(buf1, len1, k, boundaries.m_minus, boundaries.v, boundaries.m_plus);
+            base_conv::Grisu2(buf1, len1, k, boundaries.m_minus, boundaries.v, boundaries.m_plus);
         }
         {
             using double_conversion::DoubleToStringConverter;
@@ -693,6 +955,7 @@ static void TestDoubles()
 }
 #endif
 
+#if 0
 static void TestDoubleRange()
 {
     printf("Testing some finite double precision values...\n");
@@ -715,7 +978,7 @@ static void TestDoubleRange()
     printf("exp = %d\n", curr_exp);
     for (;;)
     {
-        std::uniform_int_distribution<uint64_t> gen(0, (uint64_t{0x7FF} << 52) - 1);
+        std::uniform_int_distribution<uint64_t> gen(0, (uint64_t{1} << 52) - 1);
         uint64_t significand = gen(rng);
 
         double const f = ReinterpretBits<double>((uint64_t(curr_exp) << 52) | significand);
@@ -729,9 +992,9 @@ static void TestDoubleRange()
             int len1 = 0;
             int len2 = 0;
             {
-                auto const boundaries = grisu::ComputeBoundaries(f);
+                auto const boundaries = base_conv::ComputeBoundaries(f);
                 int k1 = 0;
-                grisu::Grisu2(buf1, len1, k1, boundaries.m_minus, boundaries.v, boundaries.m_plus);
+                base_conv::Grisu2(buf1, len1, k1, boundaries.m_minus, boundaries.v, boundaries.m_plus);
             }
             {
                 using double_conversion::DoubleToStringConverter;
@@ -752,26 +1015,27 @@ static void TestDoubleRange()
         }
 
         if (num_tested > (1 << 10))
-        {
-            ++curr_exp;
-
+        {        
             auto const t_now = Clock::now();
+
             printf("   time: %f sec\n", std::chrono::duration<double>(t_now - t_lap).count());
             printf("   num_shortest %.17g%%\n", 100.0 * (static_cast<double>(num_shortest) / static_cast<double>(num_tested)));
             printf("   num_optimal  %.17g%%\n", 100.0 * (static_cast<double>(num_optimal)  / static_cast<double>(num_tested)));
-            printf("exp = %d\n", curr_exp);
-            t_lap = t_now;
-            if (curr_exp == max_exp)
+            if (++curr_exp == max_exp)
                 break;
+            printf("exp = %d\n", curr_exp);
             num_tested = 0;
             num_shortest = 0;
             num_optimal = 0;
+
+            t_lap = t_now;
         }
     }
 
     auto const t_end = Clock::now();
     printf("some-doubles time: %f sec\n", std::chrono::duration<double>(t_end - t_beg).count());
 }
+#endif
 
 static void FindMaxP1()
 {
@@ -783,10 +1047,10 @@ static void FindMaxP1()
     uint64_t min_p1 = UINT64_MAX;
     for (int e = kExpMin; e <= kExpMax; ++e)
     {
-        auto const v = grisu::DiyFp(kMaxF, e);
-        auto const cached = grisu::GetCachedPowerForBinaryExponent(e);
-        auto const c_minus_k = grisu::DiyFp(cached.f, cached.e);
-        auto const w = grisu::Multiply(v, c_minus_k);
+        auto const v = base_conv::DiyFp(kMaxF, e);
+        auto const cached = base_conv::GetCachedPowerForBinaryExponent(e);
+        auto const c_minus_k = base_conv::DiyFp(cached.f, cached.e);
+        auto const w = base_conv::Multiply(v, c_minus_k);
         auto const p1 = w.f >> -w.e;
         if (max_p1 < p1)
             max_p1 = p1;
@@ -859,18 +1123,55 @@ static void TestP1Digits()
 
 int main()
 {
+#if 0
+    const float fff = ReinterpretBits<float>(0x15AE43FDu);
+    printf("%.9g\n", fff);
+    printf("%08x\n", ReinterpretBits<uint32_t>(fff));
+    char buf[32];
+    char* bufend = base_conv::Dtoa(buf, buf + 32, fff);
+    *bufend = '\0';
+    printf("|%s|\n", buf);
+    //char const* inp = "7.0385307e-26";
+    //char const* inp = "7.038531e-26";
+    //char const* inp = "7.03853069e-26";
+    char const* inp = buf;
+    char const* end = inp + std::strlen(inp);
+    uint32_t b0;
+    uint32_t b1;
+    {
+        double d = StringToDouble(inp, end);
+        auto const v = base_conv::DiyFpFromFloat(d);
+        printf("%lld * 2^%d\n", v.f, v.e);
+        b0 = ReinterpretBits<uint32_t>(static_cast<float>(d));
+    }
+    {
+        double d;
+        base_conv::Strtod(d, inp, end);
+        auto const v = base_conv::DiyFpFromFloat(d);
+        printf("%lld * 2^%d\n", v.f, v.e);
+        b1 = ReinterpretBits<uint32_t>(static_cast<float>(d));
+    }
+    printf("b0 = %08x\n", b0);
+    printf("b1 = %08x\n", b1);
+#else
     FindMaxP1();
 
     VerifySingle();
     VerifyDouble();
-//    // TestDoubleRange();
-//#if TEST_ALL_SINGLE
-//    TestAllSingle();
-//#endif
-//#if TEST_P1_DIGITS
-//    TestP1Digits();
-//#endif
-//#if TEST_RANDOM_DOUBLES
-//    TestDoubles();
-//#endif
+#if 0
+    TestStrtod();
+#endif
+#if 0
+   TestDoubleRange();
+#endif
+#if TEST_ALL_SINGLE
+    TestAllSingle();
+#endif
+#if TEST_P1_DIGITS
+    TestP1Digits();
+#endif
+#if TEST_RANDOM_DOUBLES
+    TestDoubles();
+#endif
+#endif
 }
