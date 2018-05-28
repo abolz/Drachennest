@@ -18,22 +18,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Implements the Grisu2 algorithm for binary to decimal floating-point
-// conversion.
-//
-// This implementation is a slightly modified version of the reference
-// implementation by Florian Loitsch which can be obtained from
-// http://florian.loitsch.com/publications (bench.tar.gz)
-//
-// The original license can be found at the end of this file.
-//
-// References:
-//
-// [1]  Loitsch, "Printing Floating-Point Numbers Quickly and Accurately with Integers",
-//      Proceedings of the ACM SIGPLAN 2010 Conference on Programming Language Design and Implementation, PLDI 2010
-// [2]  Burger, Dybvig, "Printing Floating-Point Numbers Quickly and Accurately",
-//      Proceedings of the ACM SIGPLAN 1996 Conference on Programming Language Design and Implementation, PLDI 1996
-
 #pragma once
 
 #include <cassert>
@@ -54,9 +38,27 @@
 
 namespace base_conv {
 
-//--------------------------------------------------------------------------------------------------
-// Grisu2
-//--------------------------------------------------------------------------------------------------
+//==================================================================================================
+// DoubleToDecimal
+//
+// Implements the Grisu2 algorithm for binary to decimal floating-point
+// conversion.
+//
+// This implementation is a slightly modified version of the reference
+// implementation by Florian Loitsch which can be obtained from
+// http://florian.loitsch.com/publications (bench.tar.gz)
+//
+// The original license can be found at the end of this file.
+//
+// References:
+//
+// [1]  Loitsch, "Printing Floating-Point Numbers Quickly and Accurately with Integers",
+//      Proceedings of the ACM SIGPLAN 2010 Conference on Programming Language Design and Implementation, PLDI 2010
+// [2]  Burger, Dybvig, "Printing Floating-Point Numbers Quickly and Accurately",
+//      Proceedings of the ACM SIGPLAN 1996 Conference on Programming Language Design and Implementation, PLDI 1996
+//==================================================================================================
+
+namespace impl {
 
 template <typename Dest, typename Source>
 inline Dest ReinterpretBits(Source source)
@@ -98,6 +100,14 @@ struct DiyFp // f * 2^e
     constexpr DiyFp(uint64_t f_, int e_) : f(f_), e(e_) {}
 };
 
+// Returns whether the given floating point value is normalized.
+inline bool IsNormalized(DiyFp x)
+{
+    static_assert(DiyFp::SignificandSize == 64, "internal error");
+
+    return x.f >= (uint64_t{1} << 63);
+}
+
 // Returns x - y.
 // PRE: x.e == y.e and x.f >= y.f
 inline DiyFp Subtract(DiyFp x, DiyFp y)
@@ -112,6 +122,8 @@ inline DiyFp Subtract(DiyFp x, DiyFp y)
 // The result is rounded (ties up). (Only the upper q bits are returned.)
 inline DiyFp Multiply(DiyFp x, DiyFp y)
 {
+    static_assert(DiyFp::SignificandSize == 64, "internal error");
+
     // Computes:
     //  f = round((x.f * y.f) / 2^q)
     //  e = x.e + y.e + q
@@ -201,6 +213,8 @@ inline DiyFp Multiply(DiyFp x, DiyFp y)
 // PRE: x.f != 0
 inline DiyFp Normalize(DiyFp x)
 {
+    static_assert(DiyFp::SignificandSize == 64, "internal error");
+
     DTOA_ASSERT(x.f != 0);
 
 #if defined(_MSC_VER) && defined(_M_X64)
@@ -1060,18 +1074,29 @@ inline void Grisu2(char* buffer, int& length, int& exponent, DiyFp m_minus, DiyF
     // v = buffer * 10^exponent
 }
 
+} // namespace impl
+
+#if 0
+constexpr int kDoubleToDecimalMaxLength = std::numeric_limits<double>::max_digits10;
+#else
+constexpr int kDoubleToDecimalMaxLength = 17;
+#endif
+
 // v = buffer * 10^exponent
 // length is the length of the buffer (number of decimal digits)
-// The buffer must be large enough, i.e. >= max_digits10.
+// PRE: The buffer must be large enough, i.e. >= max_digits10.
 // PRE: value must be finite and strictly positive.
 template <typename Float>
-inline void Grisu2(char* buffer, int& length, int& exponent, Float value)
+inline char* DoubleToDecimal(char* next, char* last, int& length, int& exponent, Float value)
 {
-    static_assert(DiyFp::SignificandSize >= std::numeric_limits<Float>::digits + 3,
+    static_assert(base_conv::impl::DiyFp::SignificandSize >= std::numeric_limits<Float>::digits + 3,
         "Grisu2 requires at least three extra bits of precision");
 
+    DTOA_ASSERT(last - next >= kDoubleToDecimalMaxLength);
     DTOA_ASSERT(std::isfinite(value));
     DTOA_ASSERT(value > 0);
+
+    static_cast<void>(last); // Fix warning
 
 #if 0
     // If the neighbors (and boundaries) of 'value' are always computed for
@@ -1082,19 +1107,24 @@ inline void Grisu2(char* buffer, int& length, int& exponent, Float value)
     // If the neighbors are computed for single-precision numbers, there is a
     // single float (7.0385307e-26f) which can't be recovered using strtod.
     // (The resulting double precision is off by 1 ulp.)
-    auto const boundaries = base_conv::ComputeBoundaries(static_cast<double>(value));
+    auto const boundaries = base_conv::impl::ComputeBoundaries(static_cast<double>(value));
 #else
-    auto const boundaries = base_conv::ComputeBoundaries(value);
+    auto const boundaries = base_conv::impl::ComputeBoundaries(value);
 #endif
 
-    return Grisu2(buffer, length, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
+    base_conv::impl::Grisu2(buffer, length, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
+
+    DTOA_ASSERT(length > 0);
+    DTOA_ASSERT(length <= kDoubleToDecimalMaxLength);
+
+    return next + length;
 }
 
-//--------------------------------------------------------------------------------------------------
-// Dtoa
-//--------------------------------------------------------------------------------------------------
+//==================================================================================================
+// PositiveDtoa
+//==================================================================================================
 
-constexpr int kDtoaPositiveMaxLength = 24;
+namespace impl {
 
 // Appends a decimal representation of 'value' to buffer.
 // Returns a pointer to the element following the digits.
@@ -1186,6 +1216,11 @@ inline char* FormatExponential(char* buffer, int length, int decimal_point)
         // dE+123
         // DTOA_ASSERT(buffer_length >= length + 5);
 
+        //
+        // XXX:
+        // Should force_trailing_dot_zero apply here?!?!
+        //
+
         buffer += 1;
     }
     else
@@ -1204,18 +1239,21 @@ inline char* FormatExponential(char* buffer, int length, int decimal_point)
     return Itoa1000(buffer, exponent);
 }
 
+} // namespace impl
+
+constexpr int kPositiveDtoaMaxLength = 24;
+
 // Generates a decimal representation of the floating-point number `value` in
 // the buffer `[next, last)`.
 //
-// Note: The input `value` must be strictly positive
-// Note: The buffer must be large enough (>= kDtoaPositiveMaxLength)
+// PRE: The input `value` must be strictly positive
+// PRE: The buffer must be large enough (>= kPositiveDtoaMaxLength)
+//
 // Note: The result is _not_ null-terminated
-template <typename Fp>
-inline char* PositiveDtoa(char* next, char* last, Fp value, bool force_trailing_dot_zero = false)
+template <typename Float>
+inline char* PositiveDtoa(char* next, char* last, Float value, bool force_trailing_dot_zero = false)
 {
-    DTOA_ASSERT(last - next >= kDtoaPositiveMaxLength);
-    static_cast<void>(last); // Fix warning
-
+    DTOA_ASSERT(last - next >= kPositiveDtoaMaxLength);
     DTOA_ASSERT(std::isfinite(value));
     DTOA_ASSERT(value > 0);
 
@@ -1225,10 +1263,10 @@ inline char* PositiveDtoa(char* next, char* last, Fp value, bool force_trailing_
     // length is the length of the buffer, i.e. the number of decimal digits.
     int length = 0;
     int exponent = 0;
-    base_conv::Grisu2(next, length, exponent, value);
+    base_conv::DoubleToDecimal(next, last, length, exponent, value);
 
     // Grisu2 generates at most max_digits10 decimal digits.
-    DTOA_ASSERT(length <= std::numeric_limits<Fp>::max_digits10);
+    DTOA_ASSERT(length <= std::numeric_limits<Float>::max_digits10);
 
     // The position of the decimal point relative to the start of the buffer.
     int const decimal_point = length + exponent;
@@ -1236,7 +1274,7 @@ inline char* PositiveDtoa(char* next, char* last, Fp value, bool force_trailing_
     // Just appending the exponent would yield a correct decimal representation
     // for the input value.
 
-#if 0
+#if 1
     // Format the digits similar to printf's %g style.
     //
     // NB:
@@ -1250,18 +1288,24 @@ inline char* PositiveDtoa(char* next, char* last, Fp value, bool force_trailing_
     // NB:
     // Integers <= 2^p = kMaxVal are exactly representable as Fp's.
     constexpr auto kMinExp = -6;
-    constexpr auto kMaxVal = static_cast<Fp>(uint64_t{1} << std::numeric_limits<Fp>::digits); // <= 16 digits
+    constexpr auto kMaxVal = static_cast<Fp>(uint64_t{1} << std::numeric_limits<Float>::digits); // <= 16 digits
 
     bool const use_fixed = kMinExp < decimal_point && value <= kMaxVal;
 #endif
 
     char* const end = use_fixed
-        ? FormatFixed(next, length, decimal_point, force_trailing_dot_zero)
-        : FormatExponential(next, length, decimal_point);
+        ? base_conv::impl::FormatFixed(next, length, decimal_point, force_trailing_dot_zero)
+        : base_conv::impl::FormatExponential(next, length, decimal_point);
 
-    DTOA_ASSERT(end - next <= kDtoaPositiveMaxLength);
+    DTOA_ASSERT(end - next <= kPositiveDtoaMaxLength);
     return end;
 }
+
+//==================================================================================================
+// Dtoa
+//==================================================================================================
+
+namespace impl {
 
 inline char* StrCopy(char* next, char* last, char const* source)
 {
@@ -1277,41 +1321,44 @@ inline char* StrCopy(char* next, char* last, char const* source)
     return next + len;
 }
 
-constexpr int kDtoaMaxLength = kDtoaPositiveMaxLength + 1;
+} // namespace impl
+
+constexpr int kDtoaMaxLength = 1/* minus-sign */ + kPositiveDtoaMaxLength;
 
 // Generates a decimal representation of the floating-point number `value` in
 // the buffer `[next, last)`.
 //
-// Note: The buffer must be large enough.
-//       Max(1 + kDtoaPositiveMaxLength, len(nan_string), 1 + len(inf_string))
+// PRE: The buffer must be large enough.
+//       Max(1 + kPositiveDtoaMaxLength, len(nan_string), 1 + len(inf_string))
 //       is sufficient.
+//
 // Note: The result is _not_ null-terminated.
-template <typename Fp>
+template <typename Float>
 inline char* Dtoa(
     char*       next,
     char*       last,
-    Fp          value,
+    Float       value,
     bool        force_trailing_dot_zero = false,
     char const* nan_string = "NaN",
     char const* inf_string = "Infinity")
 {
     DTOA_ASSERT(last - next >= kDtoaMaxLength);
-    DTOA_ASSERT(strlen(nan_string) <= size_t{kDtoaPositiveMaxLength});
-    DTOA_ASSERT(strlen(inf_string) <= size_t{kDtoaPositiveMaxLength});
+    DTOA_ASSERT(std::strlen(nan_string) <= size_t{kPositiveDtoaMaxLength});
+    DTOA_ASSERT(std::strlen(inf_string) <= size_t{kPositiveDtoaMaxLength});
 
     if (!std::isfinite(value))
     {
         if (std::isnan(value))
-            return StrCopy(next, last, nan_string);
+            return base_conv::impl::StrCopy(next, last, nan_string);
         if (value < 0)
             *next++ = '-';
-        return StrCopy(next, last, inf_string);
+        return base_conv::impl::StrCopy(next, last, inf_string);
     }
 
     if (value == 0)
     {
         if (std::signbit(value))
-            return StrCopy(next, last, "-0.0");
+            return base_conv::impl::StrCopy(next, last, "-0.0");
         *next++ = '0';
         return next;
     }
