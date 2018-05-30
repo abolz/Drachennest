@@ -35,11 +35,14 @@ workspace "Grisu"
         "StaticRuntime",
     }
 
-    configuration { "debug" }
-        targetdir (build_dir .. "/bin/debug")
-
-    configuration { "release" }
-        targetdir (build_dir .. "/bin/release")
+    configuration { "debug", "x64" }
+        targetdir (build_dir .. "/bin/debug_x64")
+    configuration { "release", "x64" }
+        targetdir (build_dir .. "/bin/release_x64")
+    configuration { "debug", "x86" }
+        targetdir (build_dir .. "/bin/debug_x86")
+    configuration { "release", "x86" }
+        targetdir (build_dir .. "/bin/release_x86")
 
     configuration { "debug" }
         defines { "_DEBUG" }
