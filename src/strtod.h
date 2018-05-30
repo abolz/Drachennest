@@ -984,7 +984,7 @@ inline int CompareBufferWithDiyFp(char const* digits, int num_digits, int expone
     }
 #endif
 
-#if 1
+#if 0
     // Cancel common factors of 2.
     int const min_exp2 = Min(lhs_exp2, rhs_exp2);
     lhs_exp2 -= min_exp2;
