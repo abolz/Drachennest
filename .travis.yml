@@ -16,7 +16,7 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-6
-        - CONFIGURATION=debug_x64
+        - CONFIGURATION=debug
         - CXXFLAGS="-std=c++11 -O0 -fprofile-arcs -ftest-coverage --coverage"
         - LINKFLAGS="--coverage"
         - GCOV=true
@@ -35,7 +35,7 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-6
-        - CONFIGURATION=release_x64
+        - CONFIGURATION=release
         - CXXFLAGS="-std=c++11"
     - os: linux
       addons:
@@ -47,7 +47,7 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-6
-        - CONFIGURATION=debug_x64
+        - CONFIGURATION=debug
         - CXXFLAGS="-std=c++11"
     - os: linux
       addons:
@@ -59,7 +59,7 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-6
-        - CONFIGURATION=release_x64
+        - CONFIGURATION=release
         - CXXFLAGS="-std=c++14"
     - os: linux
       addons:
@@ -71,7 +71,7 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-6
-        - CONFIGURATION=debug_x64
+        - CONFIGURATION=debug
         - CXXFLAGS="-std=c++14"
     - os: linux
       addons:
@@ -83,7 +83,7 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-7
-        - CONFIGURATION=release_x64
+        - CONFIGURATION=release
         - CXXFLAGS="-std=c++17"
     - os: linux
       addons:
@@ -95,68 +95,32 @@ matrix:
       compiler: gcc
       env:
         - COMPILER=g++-7
-        - CONFIGURATION=debug_x64
+        - CONFIGURATION=debug
         - CXXFLAGS="-std=c++17"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-6
-      compiler: gcc
-      env:
-        - COMPILER=g++-6
-        - CONFIGURATION=release_x86
-        - CXXFLAGS="-std=c++11"
-    - os: linux
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-6
-      compiler: gcc
-      env:
-        - COMPILER=g++-6
-        - CONFIGURATION=debug_x86
-        - CXXFLAGS="-std=c++11"
     - os: osx
       compiler: clang
       env:
         - COMPILER=clang++
-        - CONFIGURATION=release_x64
+        - CONFIGURATION=release
         - CXXFLAGS="-std=c++11 -stdlib=libc++"
     - os: osx
       compiler: clang
       env:
         - COMPILER=clang++
-        - CONFIGURATION=debug_x64
+        - CONFIGURATION=debug
         - CXXFLAGS="-std=c++11 -stdlib=libc++"
     - os: osx
       compiler: clang
       env:
         - COMPILER=clang++
-        - CONFIGURATION=release_x64
+        - CONFIGURATION=release
         - CXXFLAGS="-std=c++14 -stdlib=libc++"
     - os: osx
       compiler: clang
       env:
         - COMPILER=clang++
-        - CONFIGURATION=debug_x64
+        - CONFIGURATION=debug
         - CXXFLAGS="-std=c++14 -stdlib=libc++"
-    - os: osx
-      compiler: clang
-      env:
-        - COMPILER=clang++
-        - CONFIGURATION=release_x86
-        - CXXFLAGS="-std=c++11 -stdlib=libc++"
-    - os: osx
-      compiler: clang
-      env:
-        - COMPILER=clang++
-        - CONFIGURATION=debug_x86
-        - CXXFLAGS="-std=c++11 -stdlib=libc++"
 
 before_install:
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then wget "https://github.com/premake/premake-core/releases/download/v5.0.0-alpha11/premake-5.0.0-alpha11-linux.tar.gz" -O premake5.tar.gz; fi

@@ -13,15 +13,7 @@ newoption {
 --------------------------------------------------------------------------------
 workspace "Grisu"
     configurations { "release", "debug" }
-    platforms { "x64", "x86" }
-
-    filter { "platforms:x64" }
-        architecture "x86_64"
-
-    filter { "platforms:x86" }
-        architecture "x86"
-
-    filter {}
+    architecture "x64"
 
     location    (build_dir)
     objdir      (build_dir .. "/obj")
@@ -34,15 +26,6 @@ workspace "Grisu"
     flags {
         "StaticRuntime",
     }
-
-    configuration { "debug", "x64" }
-        targetdir (build_dir .. "/bin/debug_x64")
-    configuration { "release", "x64" }
-        targetdir (build_dir .. "/bin/release_x64")
-    configuration { "debug", "x86" }
-        targetdir (build_dir .. "/bin/debug_x86")
-    configuration { "release", "x86" }
-        targetdir (build_dir .. "/bin/release_x86")
 
     configuration { "debug" }
         defines { "_DEBUG" }
