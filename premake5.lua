@@ -88,6 +88,17 @@ workspace "Grisu"
 --------------------------------------------------------------------------------
 group "Libs"
 
+--project "benchmark"
+--    language "C++"
+--    kind "StaticLib"
+--    files {
+--        "ext/benchmark/*.cc",
+--        "ext/benchmark/*.h",
+--    }
+--    includedirs {
+--        "ext/",
+--    }
+
 project "double-conversion"
     language "C++"
     kind "StaticLib"
@@ -108,7 +119,10 @@ project "test"
     files {
         "src/**.h",
         "src/**.cc",
-        "test/test.cc",
+        "test/catch.hpp",
+        "test/catch_main.cc",
+        "test/test_dtoa.cc",
+        "test/test_strtod.cc",
     }
     includedirs {
         "ext/",
@@ -116,3 +130,37 @@ project "test"
     links {
         "double-conversion",
     }
+
+--project "bench_dtoa"
+--    language "C++"
+--    kind "ConsoleApp"
+--    files {
+--        "src/**.h",
+--        "src/**.cc",
+--        "test/bench_dtoa.cc",
+--    }
+--    includedirs {
+--        "ext/",
+--    }
+--    links {
+--        "benchmark",
+--    }
+--    configuration { "windows" }
+--        links { "shlwapi" }
+--
+--project "bench_strtod"
+--    language "C++"
+--    kind "ConsoleApp"
+--    files {
+--        "src/**.h",
+--        "src/**.cc",
+--        "test/bench_strtod.cc",
+--    }
+--    includedirs {
+--        "ext/",
+--    }
+--    links {
+--        "benchmark",
+--    }
+--    configuration { "windows" }
+--        links { "shlwapi" }
