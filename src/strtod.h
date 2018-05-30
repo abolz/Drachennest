@@ -118,21 +118,27 @@ inline bool StrtodFast(char const* /*digits*/, int /*num_digits*/, int /*exponen
 
 #else // ^^^ !DTOA_CORRECT_DOUBLE_OPERATIONS
 
-// 2^53 = 9007199254740992.
-// Any integer with at most 15 decimal digits will hence fit into a double
-// (which has a 53bit significand) without loss of precision.
-constexpr int kMaxExactDoubleIntegerDecimalDigits = 15;
+// 2^63 = 9223372036854775808.
+// Any integer with at most 18 decimal digits will hence fit into an int64_t.
+constexpr int kMaxSint64DecimalDigits = 18;
 
-inline double ReadDouble(char const* digits, int num_digits)
+inline int64_t ReadI64(char const* digits, int num_digits)
 {
+    DTOA_ASSERT(num_digits <= kMaxSint64DecimalDigits);
+
     int64_t value = 0;
     for (int i = 0; i < num_digits; ++i)
     {
         value = 10 * value + DigitValue(digits[i]);
     }
 
-    return static_cast<double>(value);
+    return value;
 }
+
+// 2^53 = 9007199254740992.
+// Any integer with at most 15 decimal digits will hence fit into a double
+// (which has a 53bit significand) without loss of precision.
+constexpr int kMaxExactDoubleIntegerDecimalDigits = 15;
 
 // XXX: std::optional<double>
 inline bool StrtodFast(char const* digits, int num_digits, int exponent, double& result)
@@ -178,7 +184,7 @@ inline bool StrtodFast(char const* digits, int num_digits, int exponent, double&
     int const remaining_digits = kMaxExactDoubleIntegerDecimalDigits - num_digits; // 0 <= rd <= 15
     if (-kMaxExactPowerOfTen <= exponent && exponent <= remaining_digits + kMaxExactPowerOfTen)
     {
-        double d = ReadDouble(digits, num_digits);
+        double d = static_cast<double>(ReadI64(digits, num_digits));
         if (exponent < 0)
         {
             d /= kExactPowersOfTen[-exponent];
@@ -239,7 +245,7 @@ constexpr int kMaxUint64DecimalDigits = 19;
 
 // Reads a (rounded) DiyFp from the buffer.
 //
-// If read_digits == buffer_length then the returned DiyFp is accurate.
+// If read_digits == num_digits then the returned DiyFp is accurate.
 // Otherwise it has been rounded and has an error of at most 1/2 ulp.
 //
 // The returned DiyFp is not normalized.
@@ -252,17 +258,15 @@ inline DiyFpWithError ReadDiyFp(char const* digits, int num_digits, int& read_di
     uint64_t significand = 0;
     uint64_t error = 0;
 
-    int const max_len = Min(num_digits, kMaxUint64DecimalDigits);
-    int i = 0;
-
-    for ( ; i < max_len; ++i)
+    int const max_digits = Min(num_digits, kMaxUint64DecimalDigits);
+    for (int i = 0; i < max_digits; ++i)
     {
         significand = 10 * significand + static_cast<uint32_t>(DigitValue(digits[i]));
     }
 
-    if (i < num_digits)
+    if (max_digits < num_digits)
     {
-        if (DigitValue(digits[i]) >= 5)
+        if (DigitValue(digits[max_digits]) >= 5)
         {
             // Round up.
             ++significand;
@@ -272,7 +276,7 @@ inline DiyFpWithError ReadDiyFp(char const* digits, int num_digits, int& read_di
         error = DiyFpWithError::kDenominator / 2;
     }
 
-    read_digits = i;
+    read_digits = max_digits;
     return {DiyFp(significand, 0), error};
 }
 
