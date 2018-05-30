@@ -1,5 +1,15 @@
 local build_dir = "build/" .. _ACTION
 
+newoption {
+    trigger = "cxxflags",
+    description = "Additional build options",
+}
+
+newoption {
+    trigger = "linkflags",
+    description = "Additional linker options",
+}
+
 --------------------------------------------------------------------------------
 workspace "Grisu"
     configurations { "release", "debug" }
@@ -84,6 +94,25 @@ workspace "Grisu"
 
     configuration { "windows" }
         characterset "MBCS"
+
+    if _OPTIONS["cxxflags"] then
+        configuration {}
+            buildoptions {
+                _OPTIONS["cxxflags"],
+            }
+    else
+        configuration { "gmake" }
+            buildoptions {
+                "-std=c++14",
+            }
+    end
+
+    if _OPTIONS["linkflags"] then
+        configuration {}
+            linkoptions {
+                _OPTIONS["linkflags"],
+            }
+    end
 
 --------------------------------------------------------------------------------
 group "Libs"

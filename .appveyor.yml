@@ -1,0 +1,33 @@
+image: Visual Studio 2017
+
+platform:
+  - x64
+  - x86
+
+configuration:
+  - Release
+  - Debug
+
+environment:
+  matrix:
+    - TOOLSET: vs2017
+
+clone_script:
+  - cmd: git clone -q --branch=%APPVEYOR_REPO_BRANCH% https://github.com/%APPVEYOR_REPO_NAME%.git %APPVEYOR_BUILD_FOLDER%
+  - cmd: cd %APPVEYOR_BUILD_FOLDER%
+  - cmd: git checkout -qf %APPVEYOR_REPO_COMMIT%
+  - cmd: git submodule update --init --recursive
+
+build:
+  verbosity: quiet
+
+before_build:
+  - ps: wget "https://github.com/premake/premake-core/releases/download/v5.0.0-alpha11/premake-5.0.0-alpha11-windows.zip" -OutFile premake.zip
+  - ps: 7z x premake.zip
+
+build_script:
+  - premake5 %TOOLSET%
+  - msbuild .\build\%TOOLSET%\test.vcxproj
+
+test_script:
+  - .\build\%TOOLSET%\bin\%CONFIGURATION%\test.exe
