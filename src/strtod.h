@@ -307,20 +307,20 @@ inline DiyFp GetAdjustmentPowerOfTen(int exponent)
 {
     static_assert(kCachedPowersDecExpStep <= 8, "internal error");
 
-    static constexpr DiyFp kPowers[] = {
-        { 0x8000000000000000, -63 }, // == 10^0 (unused)
-        { 0xA000000000000000, -60 }, // == 10^1
-        { 0xC800000000000000, -57 }, // == 10^2
-        { 0xFA00000000000000, -54 }, // == 10^3
-        { 0x9C40000000000000, -50 }, // == 10^4
-        { 0xC350000000000000, -47 }, // == 10^5
-        { 0xF424000000000000, -44 }, // == 10^6
-        { 0x9896800000000000, -40 }, // == 10^7
+    static constexpr uint64_t kSignificands[] = {
+        0x8000000000000000, // e = -63, == 10^0 (unused)
+        0xA000000000000000, // e = -60, == 10^1
+        0xC800000000000000, // e = -57, == 10^2
+        0xFA00000000000000, // e = -54, == 10^3
+        0x9C40000000000000, // e = -50, == 10^4
+        0xC350000000000000, // e = -47, == 10^5
+        0xF424000000000000, // e = -44, == 10^6
+        0x9896800000000000, // e = -40, == 10^7
     };
 
     DTOA_ASSERT(exponent > 0);
     DTOA_ASSERT(exponent < kCachedPowersDecExpStep);
-    return kPowers[exponent];
+    return {kSignificands[exponent], (exponent * 13607) / (1 << 12) - 63};
 }
 
 // Max double: 1.7976931348623157 * 10^308
