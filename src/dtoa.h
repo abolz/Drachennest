@@ -679,7 +679,7 @@ inline CachedPower GetCachedPower(int index)
     DTOA_ASSERT(index < kCachedPowersSize);
 
     int const k = kCachedPowersMinDecExp + index * kCachedPowersDecExpStep;
-    int const e = (k * 13607) / (1 << 12) - 63 - (k < 0);
+    int const e = ((k * 13607) >> 12) - 63;
 
     return {kSignificands[index], e, k};
 }
@@ -697,12 +697,11 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
 
     // This computation gives exactly the same results for k as
     //      k = ceil((kAlpha - e - 1) * 0.30102999566398114)
-    // for |e| <= 1500, but doesn't require floating-point operations.
+    // but doesn't require floating-point operations.
     // NB: log_10(2) ~= 78913 / 2^18
     DTOA_ASSERT(e >= -1500);
     DTOA_ASSERT(e <=  1500);
-    int const f = kAlpha - e - 1;
-    int const k = (f * 78913) / (1 << 18) + (f > 0);
+    int const k = (((kAlpha - e - 1) * 78913) >> 18) + 1;
 
     int const index = (-kCachedPowersMinDecExp + k + (kCachedPowersDecExpStep - 1)) / kCachedPowersDecExpStep;
     DTOA_ASSERT(index >= 0);

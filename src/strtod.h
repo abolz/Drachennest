@@ -320,7 +320,7 @@ inline DiyFp GetAdjustmentPowerOfTen(int exponent)
 
     DTOA_ASSERT(exponent > 0);
     DTOA_ASSERT(exponent < kCachedPowersDecExpStep);
-    return {kSignificands[exponent], (exponent * 13607) / (1 << 12) - 63};
+    return {kSignificands[exponent], ((exponent * 13607) >> 12) - 63};
 }
 
 // Max double: 1.7976931348623157 * 10^308
@@ -1301,7 +1301,7 @@ inline bool Strtod(double& result, char const* next, char const* last)
 
         bool const exp_is_neg = (*next == '-');
 
-        if (*next == '+' || exp_is_neg)
+        if (exp_is_neg || *next == '+')
         {
             ++next;
             if (next == last)
