@@ -585,6 +585,36 @@ constexpr int kCachedPowersMinDecExp    = -348;
 constexpr int kCachedPowersMaxDecExp    =  324;
 constexpr int kCachedPowersDecExpStep   =    8;
 
+// Returns the binary exponent of a cached power for a given decimal exponent.
+inline int BinaryExponentFromDecimalExponent(int k)
+{
+    DTOA_ASSERT(k <=  400);
+    DTOA_ASSERT(k >= -400);
+
+    // log_2(10) ~= [3; 3, 9, 2, 2, 4, 6, 2, 1, 1, 3] = 254370/76573
+    // 2^15 * 254370/76573 = 108852.93980907...
+
+//  return (k * 108853) / (1 << 15) - (k < 0) - 63;
+//  return ((k * 108853) >> 15) - 63;
+    return (k * 108853 - 63 * (1 << 15)) >> 15;
+}
+
+#if 0
+// Returns the decimal for a cached power with the given binary exponent.
+inline int DecimalExponentFromBinaryExponent(int e)
+{
+    DTOA_ASSERT(e <=  1265);
+    DTOA_ASSERT(e >= -1392);
+
+    // log_10(2) ~= [0; 3, 3, 9, 2, 2, 4, 6, 2, 1, 1, 3] = 76573/254370
+    // 2^18 * 76573/254370 = 78913.20718638...
+
+//  return ((e + 63) * 78913) / (1 << 18) + (e + 63 > 0);
+//  return -(((e + 63) * -78913) >> 18);
+    return -((e * -78913 - 63 * 78913) >> 18);
+}
+#endif
+
 inline CachedPower GetCachedPower(int index)
 {
     static constexpr uint64_t kSignificands[/*680 bytes*/] = {
@@ -679,7 +709,7 @@ inline CachedPower GetCachedPower(int index)
     DTOA_ASSERT(index < kCachedPowersSize);
 
     int const k = kCachedPowersMinDecExp + index * kCachedPowersDecExpStep;
-    int const e = ((k * 13607) >> 12) - 63;
+    int const e = BinaryExponentFromDecimalExponent(k);
 
     return {kSignificands[index], e, k};
 }
@@ -692,14 +722,11 @@ inline CachedPower GetCachedPower(int index)
 //
 inline CachedPower GetCachedPowerForBinaryExponent(int e)
 {
-    // NB:
-    // Actually this function returns c, such that -60 <= e_c + e + 64 <= -34.
+    DTOA_ASSERT(e <=  1265);
+    DTOA_ASSERT(e >= -1392);
 
-    // This computation gives exactly the same results for k as
-    //      k = ceil((kAlpha - e - 1) * 0.30102999566398114)
-    // but doesn't require floating-point operations.
-    // NB: log_10(2) ~= 78913 / 2^18
-    int const k = ((((kAlpha - 1) - e) * 78913) >> 18) + 1;
+    // k = ceil((kAlpha - e - 1) * log_10(2))
+    int const k = (e * -78913 + ((kAlpha - 1) * 78913 + (1 << 18))) >> 18;
     DTOA_ASSERT(k >= kCachedPowersMinDecExp);
     DTOA_ASSERT(k <= kCachedPowersMaxDecExp);
 
@@ -711,6 +738,11 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
     auto const cached = GetCachedPower(index);
     DTOA_ASSERT(kAlpha <= cached.e + e + 64);
     DTOA_ASSERT(kGamma >= cached.e + e + 64);
+
+    // NB:
+    // Actually this function returns c, such that -60 <= e_c + e + 64 <= -34.
+    DTOA_ASSERT(-60 <= cached.e + e + 64);
+    DTOA_ASSERT(-34 >= cached.e + e + 64);
 
     return cached;
 }

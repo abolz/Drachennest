@@ -290,7 +290,7 @@ inline CachedPower GetCachedPowerForDecimalExponent(int e)
     DTOA_ASSERT(e >= kCachedPowersMinDecExp);
     DTOA_ASSERT(e <  kCachedPowersMaxDecExp + kCachedPowersDecExpStep);
 
-    int const index = (-kCachedPowersMinDecExp + e) / kCachedPowersDecExpStep;
+    int const index = static_cast<int>( static_cast<unsigned>(-kCachedPowersMinDecExp + e) / kCachedPowersDecExpStep );
     DTOA_ASSERT(index >= 0);
     DTOA_ASSERT(index < kCachedPowersSize);
 
@@ -301,9 +301,9 @@ inline CachedPower GetCachedPowerForDecimalExponent(int e)
     return cached;
 }
 
-// Returns 10^exponent as an exact DiyFp.
-// PRE: 1 <= exponent < kCachedPowersDecExpStep
-inline DiyFp GetAdjustmentPowerOfTen(int exponent)
+// Returns 10^k as an exact DiyFp.
+// PRE: 1 <= k < kCachedPowersDecExpStep
+inline DiyFp GetAdjustmentPowerOfTen(int k)
 {
     static_assert(kCachedPowersDecExpStep <= 8, "internal error");
 
@@ -318,9 +318,11 @@ inline DiyFp GetAdjustmentPowerOfTen(int exponent)
         0x9896800000000000, // e = -40, == 10^7
     };
 
-    DTOA_ASSERT(exponent > 0);
-    DTOA_ASSERT(exponent < kCachedPowersDecExpStep);
-    return {kSignificands[exponent], ((exponent * 13607) >> 12) - 63};
+    DTOA_ASSERT(k > 0);
+    DTOA_ASSERT(k < kCachedPowersDecExpStep);
+
+    int const e = BinaryExponentFromDecimalExponent(k);
+    return {kSignificands[k], e};
 }
 
 // Max double: 1.7976931348623157 * 10^308
