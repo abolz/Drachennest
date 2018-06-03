@@ -110,7 +110,7 @@ matrix:
         - COMPILER=clang++
         - CONFIGURATION=debug
         - CXXFLAGS="-std=c++11 -stdlib=libc++ -fsanitize=undefined"
-        - LINKFLAGS="-lubsan"
+        - LINKFLAGS="-fsanitize=undefined"
     - os: osx
       compiler: clang
       env:
