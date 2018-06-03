@@ -699,11 +699,11 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
     //      k = ceil((kAlpha - e - 1) * 0.30102999566398114)
     // but doesn't require floating-point operations.
     // NB: log_10(2) ~= 78913 / 2^18
-    DTOA_ASSERT(e >= -1500);
-    DTOA_ASSERT(e <=  1500);
-    int const k = (((kAlpha - e - 1) * 78913) >> 18) + 1;
+    int const k = ((((kAlpha - 1) - e) * 78913) >> 18) + 1;
+    DTOA_ASSERT(k >= kCachedPowersMinDecExp);
+    DTOA_ASSERT(k <= kCachedPowersMaxDecExp);
 
-    int const index = (-kCachedPowersMinDecExp + k + (kCachedPowersDecExpStep - 1)) / kCachedPowersDecExpStep;
+    int const index = static_cast<int>( static_cast<unsigned>(-kCachedPowersMinDecExp + k + (kCachedPowersDecExpStep - 1)) / kCachedPowersDecExpStep );
     DTOA_ASSERT(index >= 0);
     DTOA_ASSERT(index < kCachedPowersSize);
     static_cast<void>(kCachedPowersSize);
