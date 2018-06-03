@@ -48,7 +48,8 @@ matrix:
       env:
         - COMPILER=g++-6
         - CONFIGURATION=debug
-        - CXXFLAGS="-std=c++11"
+        - CXXFLAGS="-std=c++11 -fsanitize=undefined"
+        - LINKFLAGS="-fsanitize=undefined"
     - os: linux
       addons:
         apt:
@@ -108,7 +109,8 @@ matrix:
       env:
         - COMPILER=clang++
         - CONFIGURATION=debug
-        - CXXFLAGS="-std=c++11 -stdlib=libc++"
+        - CXXFLAGS="-std=c++11 -stdlib=libc++ -fsanitize=undefined"
+        - LINKFLAGS="-fsanitize=undefined"
     - os: osx
       compiler: clang
       env:
