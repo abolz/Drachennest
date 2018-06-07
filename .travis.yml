@@ -85,7 +85,8 @@ matrix:
       env:
         - COMPILER=g++-7
         - CONFIGURATION=release
-        - CXXFLAGS="-std=c++17"
+        - CXXFLAGS="-std=c++17 -fsanitize=undefined"
+        - LINKFLAGS="-lubsan"
     - os: linux
       addons:
         apt:
