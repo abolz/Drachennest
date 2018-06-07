@@ -223,7 +223,10 @@ struct DiyFpWithError // value = (x.f + delta) * 2^x.e, where |delta| <= error
     static constexpr int kDenominator = 1 << kDenominatorLog;
 
     DiyFp x;
-    uint64_t error;
+    uint64_t error = 0;
+
+    constexpr DiyFpWithError() = default;
+    constexpr DiyFpWithError(DiyFp x_, uint64_t error_) : x(x_), error(error_) {}
 };
 
 // Normalize x

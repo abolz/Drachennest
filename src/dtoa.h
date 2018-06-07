@@ -91,10 +91,10 @@ struct DiyFp // f * 2^e
 {
     static constexpr int SignificandSize = 64; // = q
 
-    uint64_t f;
-    int e;
+    uint64_t f = 0;
+    int e = 0;
 
-    constexpr DiyFp() : f(0), e(0) {}
+    constexpr DiyFp() = default;
     constexpr DiyFp(uint64_t f_, int e_) : f(f_), e(e_) {}
 };
 
