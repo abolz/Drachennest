@@ -335,12 +335,6 @@ struct IEEE
     }
 };
 
-template <typename Float>
-inline IEEE<Float> IEEEFloat(Float v)
-{
-    return IEEE<Float>(v);
-}
-
 // Decomposes `value` into `f * 2^e`.
 // The result is not normalized.
 // PRE: `value` must be finite and non-negative, i.e. >= +0.0.
@@ -402,7 +396,7 @@ inline DiyFp UpperBoundary(Float value)
 template <typename Float>
 inline bool LowerBoundaryIsCloser(Float value)
 {
-    auto const v = IEEEFloat(value);
+    IEEE<Float> const v(value);
 
     DTOA_ASSERT(v.IsFinite());
     DTOA_ASSERT(!v.SignBit());
@@ -419,7 +413,7 @@ inline bool LowerBoundaryIsCloser(Float value)
 template <typename Float>
 inline DiyFp LowerBoundary(Float value)
 {
-    DTOA_ASSERT(IEEEFloat(value).IsFinite());
+    DTOA_ASSERT(IEEE<Float>(value).IsFinite());
     DTOA_ASSERT(value > 0);
 
     auto const v = DiyFpFromFloat(value);
@@ -440,7 +434,7 @@ struct Boundaries {
 template <typename Float>
 inline Boundaries ComputeBoundaries(Float value)
 {
-    DTOA_ASSERT(IEEEFloat(value).IsFinite());
+    DTOA_ASSERT(IEEE<Float>(value).IsFinite());
     DTOA_ASSERT(value > 0);
 
     auto const v = DiyFpFromFloat(value);
@@ -1179,7 +1173,7 @@ inline char* DoubleToDecimal(char* next, char* last, int& length, int& exponent,
         "Grisu2 requires at least three extra bits of precision");
 
     DTOA_ASSERT(last - next >= kDoubleToDecimalMaxLength);
-    DTOA_ASSERT(base_conv::impl::IEEEFloat(value).IsFinite());
+    DTOA_ASSERT(base_conv::impl::IEEE<Float>(value).IsFinite());
     DTOA_ASSERT(value > 0);
 
     static_cast<void>(last); // Fix warning
@@ -1340,7 +1334,7 @@ template <typename Float>
 inline char* PositiveDtoa(char* next, char* last, Float value, bool force_trailing_dot_zero = false)
 {
     DTOA_ASSERT(last - next >= kPositiveDtoaMaxLength);
-    DTOA_ASSERT(base_conv::impl::IEEEFloat(value).IsFinite());
+    DTOA_ASSERT(base_conv::impl::IEEE<Float>(value).IsFinite());
     DTOA_ASSERT(value > 0);
 
     // Compute v = buffer * 10^exponent.
@@ -1372,9 +1366,9 @@ inline char* PositiveDtoa(char* next, char* last, Float value, bool force_traili
     bool const use_fixed = kMinExp < decimal_point && decimal_point <= kMaxExp;
 #else
     // NB:
-    // Integers <= 2^p = kMaxVal are exactly representable as Fp's.
+    // Integers <= 2^p = kMaxVal are exactly representable as Float's.
     constexpr auto kMinExp = -6;
-    constexpr auto kMaxVal = static_cast<Fp>(uint64_t{1} << std::numeric_limits<Float>::digits); // <= 16 digits
+    constexpr auto kMaxVal = static_cast<Float>(uint64_t{1} << std::numeric_limits<Float>::digits); // <= 16 digits
 
     bool const use_fixed = kMinExp < decimal_point && value <= kMaxVal;
 #endif
@@ -1432,7 +1426,7 @@ inline char* Dtoa(
     DTOA_ASSERT(std::strlen(nan_string) <= size_t{kPositiveDtoaMaxLength});
     DTOA_ASSERT(std::strlen(inf_string) <= size_t{kPositiveDtoaMaxLength});
 
-    auto const v = base_conv::impl::IEEEFloat(value);
+    base_conv::impl::IEEE<Float> const v(value);
 
     if (!v.IsFinite())
     {
