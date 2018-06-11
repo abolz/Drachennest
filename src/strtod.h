@@ -96,9 +96,11 @@ inline int DigitValue(char ch)
     defined(__aarch64__)         || \
     defined(__riscv)
 #define DTOA_CORRECT_DOUBLE_OPERATIONS 1
-#elif (defined(_M_IX86) || defined(__i386__) || defined(__i386)) && defined(_WIN32)
+#elif defined(_M_IX86) || defined(__i386__) || defined(__i386)
+#ifdef _WIN32
 // Windows uses a 64bit wide floating point stack.
 #define DTOA_CORRECT_DOUBLE_OPERATIONS 1
+#endif
 #endif
 
 #if DTOA_CORRECT_DOUBLE_OPERATIONS
