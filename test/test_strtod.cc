@@ -2,6 +2,26 @@
 
 #include "catch.hpp"
 
+#define HAS_FLOAT 0
+
+#ifdef _MSC_VER
+#define ATTRIBUTE_NOINLINE __declspec(noinline)
+#else
+#define ATTRIBUTE_NOINLINE __attribute__((noinline))
+#endif
+
+static double ATTRIBUTE_NOINLINE div_double(double x, double y)
+{
+    return x / y;
+}
+
+TEST_CASE("Div_double")
+{
+#if DTOA_CORRECT_DOUBLE_OPERATIONS
+    CHECK(89255e-22 == div_double(89255.0, 1e22));
+#endif
+}
+
 #if 0
 #include <double-conversion/double-conversion.h>
 #include <double-conversion/strtod.h>
@@ -18,6 +38,13 @@ static double Strtod(char const* str, int exponent)
 {
     return double_conversion::Strtod({str, static_cast<int>(strlen(str))}, exponent);
 }
+
+#if HAS_FLOAT
+static float Strtof(char const* str, int exponent)
+{
+    return double_conversion::Strtof({str, static_cast<int>(strlen(str))}, exponent);
+}
+#endif
 #else
 static double Strtod(char const* str)
 {
@@ -30,6 +57,13 @@ static double Strtod(char const* str, int exponent)
 {
     return base_conv::DecimalToDouble(str, static_cast<int>(strlen(str)), exponent);
 }
+
+#if HAS_FLOAT
+static float Strtof(char const* str, int exponent)
+{
+    return base_conv::DecimalToSingle(str, static_cast<int>(strlen(str)), exponent);
+}
+#endif
 #endif
 
 #define CHECK_EQ(X,Y) CHECK(X == Y)
@@ -924,7 +958,7 @@ TEST_CASE("Strtod - 2")
     CHECK_DOUBLE("-0.0001e-9223372036854775809", -0.0);
 }
 
-TEST_CASE("Testbase")
+TEST_CASE("Testbase - double")
 {
     // Table 1: Stress Inputs for Conversion to 53-bit Binary, < 1/2 ULP
 
@@ -976,3 +1010,296 @@ TEST_CASE("Testbase")
     CHECK_EQ(Strtod("308984926168550152811", -52), 308984926168550152811e-052);
     CHECK_EQ(Strtod("6372891218502368041059", +64), 6372891218502368041059e+064);
 }
+
+#if HAS_FLOAT
+
+TEST_CASE("Strtof - double-conversion") {
+  char const* vector;
+
+  vector = "0";
+  CHECK_EQ(0.0f, Strtof(vector, 1));
+  CHECK_EQ(0.0f, Strtof(vector, 2));
+  CHECK_EQ(0.0f, Strtof(vector, -2));
+  CHECK_EQ(0.0f, Strtof(vector, -999));
+  CHECK_EQ(0.0f, Strtof(vector, +999));
+
+  vector = "1";
+  CHECK_EQ(1.0f, Strtof(vector, 0));
+  CHECK_EQ(10.0f, Strtof(vector, 1));
+  CHECK_EQ(100.0f, Strtof(vector, 2));
+  CHECK_EQ(1e20f, Strtof(vector, 20));
+  CHECK_EQ(1e22f, Strtof(vector, 22));
+  CHECK_EQ(1e23f, Strtof(vector, 23));
+  CHECK_EQ(1e35f, Strtof(vector, 35));
+  CHECK_EQ(1e36f, Strtof(vector, 36));
+  CHECK_EQ(1e37f, Strtof(vector, 37));
+  CHECK_EQ(1e-1f, Strtof(vector, -1));
+  CHECK_EQ(1e-2f, Strtof(vector, -2));
+  CHECK_EQ(1e-5f, Strtof(vector, -5));
+  CHECK_EQ(1e-20f, Strtof(vector, -20));
+  CHECK_EQ(1e-22f, Strtof(vector, -22));
+  CHECK_EQ(1e-23f, Strtof(vector, -23));
+  CHECK_EQ(1e-25f, Strtof(vector, -25));
+  CHECK_EQ(1e-39f, Strtof(vector, -39));
+
+  vector = "2";
+  CHECK_EQ(2.0f, Strtof(vector, 0));
+  CHECK_EQ(20.0f, Strtof(vector, 1));
+  CHECK_EQ(200.0f, Strtof(vector, 2));
+  CHECK_EQ(2e20f, Strtof(vector, 20));
+  CHECK_EQ(2e22f, Strtof(vector, 22));
+  CHECK_EQ(2e23f, Strtof(vector, 23));
+  CHECK_EQ(2e35f, Strtof(vector, 35));
+  CHECK_EQ(2e36f, Strtof(vector, 36));
+  CHECK_EQ(2e37f, Strtof(vector, 37));
+  CHECK_EQ(2e-1f, Strtof(vector, -1));
+  CHECK_EQ(2e-2f, Strtof(vector, -2));
+  CHECK_EQ(2e-5f, Strtof(vector, -5));
+  CHECK_EQ(2e-20f, Strtof(vector, -20));
+  CHECK_EQ(2e-22f, Strtof(vector, -22));
+  CHECK_EQ(2e-23f, Strtof(vector, -23));
+  CHECK_EQ(2e-25f, Strtof(vector, -25));
+  CHECK_EQ(2e-39f, Strtof(vector, -39));
+
+  vector = "9";
+  CHECK_EQ(9.0f, Strtof(vector, 0));
+  CHECK_EQ(90.0f, Strtof(vector, 1));
+  CHECK_EQ(900.0f, Strtof(vector, 2));
+  CHECK_EQ(9e20f, Strtof(vector, 20));
+  CHECK_EQ(9e22f, Strtof(vector, 22));
+  CHECK_EQ(9e23f, Strtof(vector, 23));
+  CHECK_EQ(9e35f, Strtof(vector, 35));
+  CHECK_EQ(9e36f, Strtof(vector, 36));
+  CHECK_EQ(9e37f, Strtof(vector, 37));
+  CHECK_EQ(9e-1f, Strtof(vector, -1));
+  CHECK_EQ(9e-2f, Strtof(vector, -2));
+  CHECK_EQ(9e-5f, Strtof(vector, -5));
+  CHECK_EQ(9e-20f, Strtof(vector, -20));
+  CHECK_EQ(9e-22f, Strtof(vector, -22));
+  CHECK_EQ(9e-23f, Strtof(vector, -23));
+  CHECK_EQ(9e-25f, Strtof(vector, -25));
+  CHECK_EQ(9e-39f, Strtof(vector, -39));
+
+  vector = "12345";
+  CHECK_EQ(12345.0f, Strtof(vector, 0));
+  CHECK_EQ(123450.0f, Strtof(vector, 1));
+  CHECK_EQ(1234500.0f, Strtof(vector, 2));
+  CHECK_EQ(12345e20f, Strtof(vector, 20));
+  CHECK_EQ(12345e22f, Strtof(vector, 22));
+  CHECK_EQ(12345e23f, Strtof(vector, 23));
+  CHECK_EQ(12345e30f, Strtof(vector, 30));
+  CHECK_EQ(12345e31f, Strtof(vector, 31));
+  CHECK_EQ(12345e32f, Strtof(vector, 32));
+  CHECK_EQ(12345e-1f, Strtof(vector, -1));
+  CHECK_EQ(12345e-2f, Strtof(vector, -2));
+  CHECK_EQ(12345e-5f, Strtof(vector, -5));
+  CHECK_EQ(12345e-20f, Strtof(vector, -20));
+  CHECK_EQ(12345e-22f, Strtof(vector, -22));
+  CHECK_EQ(12345e-23f, Strtof(vector, -23));
+  CHECK_EQ(12345e-25f, Strtof(vector, -25));
+  CHECK_EQ(12345e-39f, Strtof(vector, -39));
+
+  vector = "12345678901234";
+  CHECK_EQ(12345678901234.0f, Strtof(vector, 0));
+  CHECK_EQ(123456789012340.0f, Strtof(vector, 1));
+  CHECK_EQ(1234567890123400.0f, Strtof(vector, 2));
+  CHECK_EQ(12345678901234e20f, Strtof(vector, 20));
+  CHECK_EQ(12345678901234e22f, Strtof(vector, 22));
+  CHECK_EQ(12345678901234e23f, Strtof(vector, 23));
+  CHECK_EQ(12345678901234e-1f, Strtof(vector, -1));
+  CHECK_EQ(12345678901234e-2f, Strtof(vector, -2));
+  CHECK_EQ(12345678901234e-5f, Strtof(vector, -5));
+  CHECK_EQ(12345678901234e-20f, Strtof(vector, -20));
+  CHECK_EQ(12345678901234e-22f, Strtof(vector, -22));
+  CHECK_EQ(12345678901234e-23f, Strtof(vector, -23));
+  CHECK_EQ(12345678901234e-25f, Strtof(vector, -25));
+  CHECK_EQ(12345678901234e-39f, Strtof(vector, -39));
+
+  vector = "123456789012345";
+  CHECK_EQ(123456789012345.0f, Strtof(vector, 0));
+  CHECK_EQ(1234567890123450.0f, Strtof(vector, 1));
+  CHECK_EQ(12345678901234500.0f, Strtof(vector, 2));
+  CHECK_EQ(123456789012345e20f, Strtof(vector, 20));
+  CHECK_EQ(123456789012345e22f, Strtof(vector, 22));
+  CHECK_EQ(123456789012345e23f, Strtof(vector, 23));
+  CHECK_EQ(123456789012345e-1f, Strtof(vector, -1));
+  CHECK_EQ(123456789012345e-2f, Strtof(vector, -2));
+  CHECK_EQ(123456789012345e-5f, Strtof(vector, -5));
+  CHECK_EQ(123456789012345e-20f, Strtof(vector, -20));
+  CHECK_EQ(123456789012345e-22f, Strtof(vector, -22));
+  CHECK_EQ(123456789012345e-23f, Strtof(vector, -23));
+  CHECK_EQ(123456789012345e-25f, Strtof(vector, -25));
+  CHECK_EQ(123456789012345e-39f, Strtof(vector, -39));
+
+  CHECK_EQ(0.0f, Strtof("0", 12345));
+  CHECK_EQ(0.0f, Strtof("", 1324));
+  CHECK_EQ(0.0f, Strtof("000000000", 123));
+  CHECK_EQ(0.0f, Strtof("2", -324));
+  CHECK_EQ(1e-45f, Strtof("1", -45));
+  // It would be more readable to put non-zero literals on the left side (i.e.
+  //   CHECK_EQ(1e-46, Strtof("1", -45))), but then Gcc complains that
+  // they are truncated to zero.
+  CHECK_EQ(0.0f, Strtof("1", -46));
+  CHECK_EQ(0.0f, Strtof("1", -47));
+  CHECK_EQ(1e-45f, Strtof("1", -45));
+  CHECK_EQ(1e-45f, Strtof("8", -46));
+  CHECK_EQ(0.0f, Strtof("200000", -51));
+  CHECK_EQ(100000e-50f, Strtof("100000", -50));
+  CHECK_EQ(0.0f, Strtof("100000", -51));
+  CHECK_EQ(0.0f, Strtof("900000", -52));
+  CHECK_EQ(0.0f, Strtof("000000001", -47));
+  CHECK_EQ(0.0f, Strtof("000000001", -47));
+  CHECK_EQ(0.0f, Strtof("00000000200000", -51));
+  CHECK_EQ(800000e-50f, Strtof("000000800000", -50));
+  CHECK_EQ(0.0f, Strtof("00000000100000", -51));
+  CHECK_EQ(1e-45f, Strtof("00000000900000", -51));
+
+  // It would be more readable to put the literals (and not Double::Infinity())
+  // on the left side (i.e. CHECK_EQ(3e38, Strtof("3", 38))), but then Gcc
+  // complains that the floating constant exceeds range of 'double'.
+  CHECK_EQ(std::numeric_limits<float>::infinity(), Strtof("3", 39));
+  CHECK_EQ(3e38f, Strtof("3", 38));
+  CHECK_EQ(3401e35f, Strtof("3401", 35));
+  CHECK_EQ(3401e34f, Strtof("3401", 34));
+  CHECK_EQ(std::numeric_limits<float>::infinity(), Strtof("3410", 35));
+  CHECK_EQ(34e37f, Strtof("34", 37));
+  CHECK_EQ(std::numeric_limits<float>::infinity(), Strtof("0000001", 39));
+  CHECK_EQ(3401e35f, Strtof("0000003401", 35));
+  CHECK_EQ(3401e34f, Strtof("0000003401", 34));
+  CHECK_EQ(std::numeric_limits<float>::infinity(), Strtof("0000003410", 35));
+  CHECK_EQ(34e37f, Strtof("00000034", 37));
+  CHECK_EQ(1e38f, Strtof("100000", 33));
+  CHECK_EQ(3401e35f, Strtof("340100000", 30));
+  CHECK_EQ(3401e34f, Strtof("340100000", 29));
+  CHECK_EQ(std::numeric_limits<float>::infinity(), Strtof("341000000", 30));
+  CHECK_EQ(34e37f, Strtof("3400000", 32));
+  CHECK_EQ(1e38f, Strtof("00000100000", 33));
+  CHECK_EQ(3401e35f, Strtof("00000340100000", 30));
+  CHECK_EQ(3401e34f, Strtof("00000340100000", 29));
+  CHECK_EQ(std::numeric_limits<float>::infinity(), Strtof("00000341000000", 30));
+  CHECK_EQ(34e37f, Strtof("000003400000", 32));
+  CHECK_EQ(3.4028234e+38f, Strtof("34028235676", 28));
+  CHECK_EQ(3.4028234e+38f, Strtof("34028235677", 28));
+  CHECK_EQ(std::numeric_limits<float>::infinity(), Strtof("34028235678", 28));
+
+  // The following number is the result of 89255.0/1e-22. Both floating-point
+  // numbers can be accurately represented with doubles. However on Linux,x86
+  // the floating-point stack is set to 80bits and the double-rounding
+  // introduces an error.
+  CHECK_EQ(89255e-22f, Strtof("89255", -22));
+
+  // Boundary cases. Boundaries themselves should round to even.
+  //
+  // 0x4f012334 = 2166567936
+  //      next:   2166568192
+  //  boundary:   2166568064 should round down.
+  CHECK_EQ(2166567936.0f, Strtof("2166567936", 0));
+  CHECK_EQ(2166568192.0f, Strtof("2166568192", 0));
+  CHECK_EQ(2166567936.0f, Strtof("2166568064", 0));
+  CHECK_EQ(2166567936.0f, Strtof("216656806399999", -5));
+  CHECK_EQ(2166568192.0f, Strtof("216656806400001", -5));
+  // Verify that we don't double round.
+  // Get the boundary of the boundary.
+  CHECK_EQ(2.1665680640000002384185791015625e9, 2166568064.0);
+  // Visual Studio gets this wrong and believes that these two numbers are the
+  // same doubles. We want to test our conversion and not the compiler. We
+  // therefore disable the check.
+#ifndef _MSC_VER
+  CHECK(2.16656806400000023841857910156251e9 != 2166568064.0);
+#endif
+  CHECK_EQ(2166568192.0f, Strtof("21665680640000002384185791015625", -22));
+
+  // 0x4fffffff = 8589934080
+  //      next:   8589934592
+  //  boundary:   8589934336 should round up.
+  CHECK_EQ(8589934080.0f, Strtof("8589934080", 0));
+  CHECK_EQ(8589934592.0f, Strtof("8589934592", 0));
+  CHECK_EQ(8589934592.0f, Strtof("8589934336", 0));
+  CHECK_EQ(8589934080.0f, Strtof("858993433599999", -5));
+  CHECK_EQ(8589934592.0f, Strtof("858993433600001", -5));
+  // Verify that we don't double round.
+  // Get the boundary of the boundary.
+  // Visual Studio gets this wrong. To avoid failing tests because of a broken
+  // compiler we disable the following two tests. They were only testing the
+  // compiler. The real test is still active.
+#ifndef _MSC_VER
+  CHECK_EQ(8.589934335999999523162841796875e+09, 8589934336.0);
+  CHECK(8.5899343359999995231628417968749e+09 != 8589934336.0);
+#endif
+  CHECK_EQ(8589934080.0f, Strtof("8589934335999999523162841796875", -21));
+
+  // 0x4f000000 = 2147483648
+  //      next:   2147483904
+  //  boundary:   2147483776 should round down.
+  CHECK_EQ(2147483648.0f, Strtof("2147483648", 0));
+  CHECK_EQ(2147483904.0f, Strtof("2147483904", 0));
+  CHECK_EQ(2147483648.0f, Strtof("2147483776", 0));
+  CHECK_EQ(2147483648.0f, Strtof("214748377599999", -5));
+  CHECK_EQ(2147483904.0f, Strtof("214748377600001", -5));
+
+}
+
+TEST_CASE("Testbase - single")
+{
+    // Table 14: Stress Inputs for Conversion to 24-bit Binary, < 1/2 ULP
+
+    CHECK_EQ(Strtof("5", -20), 5e-20f);
+    CHECK_EQ(Strtof("67", +14), 67e+14f);
+    CHECK_EQ(Strtof("985", +15), 985e+15f);
+    CHECK_EQ(Strtof("7693", -42), 7693e-42f);
+    CHECK_EQ(Strtof("55895", -16), 55895e-16f);
+    CHECK_EQ(Strtof("996622", -44), 996622e-44f);
+#ifndef _MSC_VER // cl.exe gets the floating-point literal wrong
+    CHECK_EQ(Strtof("7038531", -32), 7038531e-32f);
+#endif
+    CHECK_EQ(Strtof("60419369", -46), 60419369e-46f);
+    CHECK_EQ(Strtof("702990899", -20), 702990899e-20f);
+    CHECK_EQ(Strtof("6930161142", -48), 6930161142e-48f);
+    CHECK_EQ(Strtof("25933168707", +13), 25933168707e+13f);
+    CHECK_EQ(Strtof("596428896559", +20), 596428896559e+20f);
+
+    CHECK_EQ(Strtof("5", -20), std::strtof("5e-20", nullptr));
+    CHECK_EQ(Strtof("67", +14), std::strtof("67e+14", nullptr));
+    CHECK_EQ(Strtof("985", +15), std::strtof("985e+15", nullptr));
+    CHECK_EQ(Strtof("7693", -42), std::strtof("7693e-42", nullptr));
+    CHECK_EQ(Strtof("55895", -16), std::strtof("55895e-16", nullptr));
+    CHECK_EQ(Strtof("996622", -44), std::strtof("996622e-44", nullptr));
+    CHECK_EQ(Strtof("7038531", -32), std::strtof("7038531e-32", nullptr));
+    CHECK_EQ(Strtof("60419369", -46), std::strtof("60419369e-46", nullptr));
+    CHECK_EQ(Strtof("702990899", -20), std::strtof("702990899e-20", nullptr));
+    CHECK_EQ(Strtof("6930161142", -48), std::strtof("6930161142e-48", nullptr));
+    CHECK_EQ(Strtof("25933168707", +13), std::strtof("25933168707e+13", nullptr));
+    CHECK_EQ(Strtof("596428896559", +20), std::strtof("596428896559e+20", nullptr));
+
+    // Table 15: Stress Inputs for Conversion to 24-bit Binary, > 1/2 ULP
+
+    CHECK_EQ(Strtof("3", -23), 3e-23f);
+    CHECK_EQ(Strtof("57", +18), 57e+18f);
+    CHECK_EQ(Strtof("789", -35), 789e-35f);
+    CHECK_EQ(Strtof("2539", -18), 2539e-18f);
+    CHECK_EQ(Strtof("76173", +28), 76173e+28f);
+    CHECK_EQ(Strtof("887745", -11), 887745e-11f);
+    CHECK_EQ(Strtof("5382571", -37), 5382571e-37f);
+#ifndef _MSC_VER
+    CHECK_EQ(Strtof("82381273", -35), 82381273e-35f);
+#endif
+    CHECK_EQ(Strtof("750486563", -38), 750486563e-38f);
+    CHECK_EQ(Strtof("3752432815", -39), 3752432815e-39f);
+    CHECK_EQ(Strtof("75224575729", -45), 75224575729e-45f);
+    CHECK_EQ(Strtof("459926601011", +15), 459926601011e+15f);
+
+    CHECK_EQ(Strtof("3", -23), std::strtof("3e-23", nullptr));
+    CHECK_EQ(Strtof("57", +18), std::strtof("57e+18", nullptr));
+    CHECK_EQ(Strtof("789", -35), std::strtof("789e-35", nullptr));
+    CHECK_EQ(Strtof("2539", -18), std::strtof("2539e-18", nullptr));
+    CHECK_EQ(Strtof("76173", +28), std::strtof("76173e+28", nullptr));
+    CHECK_EQ(Strtof("887745", -11), std::strtof("887745e-11", nullptr));
+    CHECK_EQ(Strtof("5382571", -37), std::strtof("5382571e-37", nullptr));
+    CHECK_EQ(Strtof("82381273", -35), std::strtof("82381273e-35", nullptr));
+    CHECK_EQ(Strtof("750486563", -38), std::strtof("750486563e-38", nullptr));
+    CHECK_EQ(Strtof("3752432815", -39), std::strtof("3752432815e-39", nullptr));
+    CHECK_EQ(Strtof("75224575729", -45), std::strtof("75224575729e-45", nullptr));
+    CHECK_EQ(Strtof("459926601011", +15), std::strtof("459926601011e+15", nullptr));
+}
+
+#endif // HAS_FLOAT

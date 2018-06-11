@@ -7,6 +7,7 @@
 
 #include <double-conversion/double-conversion.h>
 
+#if 1
 static float StringToSingle(std::string const& str)
 {
     double_conversion::StringToDoubleConverter conv(0, 0.0, 0.0, "inf", "nan");
@@ -14,6 +15,14 @@ static float StringToSingle(std::string const& str)
     int processed_characters_count = 0;
     return conv.StringToFloat(str.c_str(), static_cast<int>(str.size()), &processed_characters_count);
 }
+#else
+static float StringToSingle(std::string const& str)
+{
+    float d = 0;
+    base_conv::Strtod(d, str.c_str(), str.c_str() + str.size());
+    return d;
+}
+#endif
 
 #if 0
 static double StringToDouble(std::string const& str)
@@ -26,12 +35,37 @@ static double StringToDouble(std::string const& str)
 #else
 static double StringToDouble(std::string const& str)
 {
-    double d;
+    double d = 0;
     base_conv::Strtod(d, str.c_str(), str.c_str() + str.size());
     return d;
 }
 #endif
 
+#if 0
+static std::string SingleToString(float value)
+{
+    auto const& conv = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
+
+    char buf[32];
+    double_conversion::StringBuilder builder(buf, 32);
+    conv.ToShortestSingle(value, &builder);
+    builder.Finalize();
+
+    return buf;
+}
+
+static std::string DoubleToString(double value)
+{
+    auto const& conv = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
+
+    char buf[32];
+    double_conversion::StringBuilder builder(buf, 32);
+    conv.ToShortest(value, &builder);
+    builder.Finalize();
+
+    return buf;
+}
+#else
 static std::string SingleToString(float value)
 {
     char buf[32];
@@ -47,6 +81,7 @@ static std::string DoubleToString(double value)
     char* last  = base_conv::Dtoa(first, first + 32, value);
     return {first, last};
 }
+#endif
 
 template <typename Target, typename Source>
 static Target ReinterpretBits(Source source)
@@ -152,8 +187,13 @@ static double MakeDouble(uint64_t f, int e)
     return ReinterpretBits<double>(bits);
 }
 
+#if 0
+#define CHECK_SINGLE(VALUE) { auto const str = SingleToString(VALUE); auto const flt = StringToSingle(str); auto const bits1 = ReinterpretBits<uint32_t>(VALUE); auto const bits2 = ReinterpretBits<uint32_t>(flt); CAPTURE(bits1); CAPTURE(bits2); CHECK(VALUE == flt); }
+#define CHECK_DOUBLE(VALUE) { auto const str = DoubleToString(VALUE); auto const flt = StringToDouble(str); auto const bits1 = ReinterpretBits<uint64_t>(VALUE); auto const bits2 = ReinterpretBits<uint64_t>(flt); CAPTURE(bits1); CAPTURE(bits2); CHECK(VALUE == flt); }
+#else
 #define CHECK_SINGLE(VALUE) CHECK(VALUE == StringToSingle(SingleToString(VALUE)))
 #define CHECK_DOUBLE(VALUE) CHECK(VALUE == StringToDouble(DoubleToString(VALUE)))
+#endif
 
 TEST_CASE("Dtoa - single 1")
 {
@@ -174,6 +214,7 @@ TEST_CASE("Dtoa - single 1")
 
     for (int e = 2; e < 254; ++e)
     {
+        CAPTURE(e);
         CHECK_SINGLE(MakeSingle(0, e-1, 0x007FFFFF));
         CHECK_SINGLE(MakeSingle(0, e,   0x00000000));
         CHECK_SINGLE(MakeSingle(0, e,   0x00000001));
@@ -231,6 +272,7 @@ TEST_CASE("Dtoa - double 1")
 
     for (int e = 2; e < 2046; ++e)
     {
+        CAPTURE(e);
         CHECK_DOUBLE(MakeDouble(0, e-1, 0x000FFFFFFFFFFFFF));
         CHECK_DOUBLE(MakeDouble(0, e,   0x0000000000000000));
         CHECK_DOUBLE(MakeDouble(0, e,   0x0000000000000001));
