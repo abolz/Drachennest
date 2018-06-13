@@ -35,6 +35,9 @@
 #define DTOA_ASSERT(X) assert(X)
 #endif
 
+#if DTOA_UNNAMED_NAMESPACE
+namespace {
+#endif
 namespace base_conv {
 
 //==================================================================================================
@@ -1455,6 +1458,9 @@ inline char* Dtoa(
 }
 
 } // namespace base_conv
+#if DTOA_UNNAMED_NAMESPACE
+} // namespace
+#endif
 
 /*
 Copyright (c) 2009 Florian Loitsch
