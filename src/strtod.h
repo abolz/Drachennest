@@ -228,27 +228,33 @@ inline void Normalize(DiyFpWithError& num)
 // Any integer with at most 19 decimal digits will hence fit into an uint64_t.
 constexpr int kMaxUint64DecimalDigits = 19;
 
-inline uint64_t ReadU64(char const* f, char const* l)
+template <typename Int>
+inline Int ReadInt(char const* f, char const* l)
 {
-    DTOA_ASSERT(l - f <= kMaxUint64DecimalDigits);
+    DTOA_ASSERT(l - f <= std::numeric_limits<Int>::digits10);
 
-    uint64_t value = 0;
-#if 0 // _MSC_VER
+    Int value = 0;
+#if 1
     for ( ; l - f >= 8; f += 8)
     {
-        value = 10 * value + static_cast<uint32_t>(f[0]);
-        value = 10 * value + static_cast<uint32_t>(f[1]);
-        value = 10 * value + static_cast<uint32_t>(f[2]);
-        value = 10 * value + static_cast<uint32_t>(f[3]);
-        value = 10 * value + static_cast<uint32_t>(f[4]);
-        value = 10 * value + static_cast<uint32_t>(f[5]);
-        value = 10 * value + static_cast<uint32_t>(f[6]);
-        value = 10 * value + static_cast<uint32_t>(f[7]) - 533333328u;
+        value = 10 * value + static_cast<unsigned char>(f[0]);
+        value = 10 * value + static_cast<unsigned char>(f[1]);
+        value = 10 * value + static_cast<unsigned char>(f[2]);
+        value = 10 * value + static_cast<unsigned char>(f[3]);
+        value = 10 * value + static_cast<unsigned char>(f[4]);
+        value = 10 * value + static_cast<unsigned char>(f[5]);
+        value = 10 * value + static_cast<unsigned char>(f[6]);
+        value = 10 * value + static_cast<unsigned char>(f[7]) - Int{533333328};
     }
 #endif
     for ( ; f != l; ++f)
     {
-        value = 10 * value + static_cast<uint8_t>(DigitValue(*f));
+#if 1
+        DTOA_ASSERT(IsDigit(*f));
+        value = 10 * value + static_cast<unsigned char>(*f) - '0';
+#else
+        value = 10 * value + static_cast<uint32_t>(DigitValue(*f));
+#endif
     }
 
     return value;
@@ -395,7 +401,7 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
 
     DiyFpWithError input;
 
-    input.x.f = ReadU64(digits, digits + read_digits);
+    input.x.f = ReadInt<uint64_t>(digits, digits + read_digits);
     input.x.e = 0;
     input.error = 0;
 
@@ -765,19 +771,6 @@ inline void MulAddU32(DiyInt& x, uint32_t A, uint32_t B = 0)
     }
 }
 
-inline uint32_t ReadU32(char const* f, char const* l)
-{
-    DTOA_ASSERT(l - f <= 9);
-
-    uint32_t value = 0;
-    for ( ; f != l; ++f)
-    {
-        value = 10 * value + static_cast<uint32_t>(DigitValue(*f));
-    }
-
-    return value;
-}
-
 inline void AssignDecimalDigits(DiyInt& x, char const* digits, int num_digits)
 {
     static constexpr uint32_t kPow10[] = {
@@ -798,7 +791,7 @@ inline void AssignDecimalDigits(DiyInt& x, char const* digits, int num_digits)
     while (num_digits > 0)
     {
         int const n = Min(num_digits, 9);
-        MulAddU32(x, kPow10[n], ReadU32(digits, digits + n));
+        MulAddU32(x, kPow10[n], ReadInt<uint32_t>(digits, digits + n));
         digits     += n;
         num_digits -= n;
     }
@@ -1019,30 +1012,6 @@ inline double NextFloat(double v)
     return IEEE<double>(v).NextValue();
 }
 
-inline int CountLeadingZeros(char const* digits, int num_digits)
-{
-    DTOA_ASSERT(num_digits >= 0);
-
-    int i = 0;
-    for ( ; i < num_digits && DigitValue(digits[i]) == 0; ++i)
-    {
-    }
-
-    return i;
-}
-
-inline int CountTrailingZeros(char const* digits, int num_digits)
-{
-    DTOA_ASSERT(num_digits >= 0);
-
-    int i = num_digits;
-    for ( ; i > 0 && DigitValue(digits[i - 1]) == 0; --i)
-    {
-    }
-
-    return num_digits - i;
-}
-
 // Convert the decimal representation 'digits * 10^exponent' into an IEEE
 // double-precision number.
 //
@@ -1054,20 +1023,19 @@ inline double DecimalToDouble(char const* digits, int num_digits, int exponent, 
     DTOA_ASSERT(num_digits >= 0);
     DTOA_ASSERT(exponent <= INT_MAX - num_digits);
 
-    if (num_digits < 0)
-        return 0.0;
-    if (exponent > INT_MAX - num_digits)
-        return 0.0;
-
     // Ignore leading zeros
-    int const lz = CountLeadingZeros(digits, num_digits);
-    digits     += lz;
-    num_digits -= lz;
+    while (num_digits > 0 && digits[0] == '0')
+    {
+        digits++;
+        num_digits--;
+    }
 
     // Move trailing zeros into the exponent
-    int const tz = CountTrailingZeros(digits, num_digits);
-    num_digits -= tz;
-    exponent   += tz;
+    while (num_digits > 0 && digits[num_digits - 1] == '0')
+    {
+        num_digits--;
+        exponent++;
+    }
 
     if (num_digits > kMaxSignificantDigits)
     {
@@ -1081,9 +1049,11 @@ inline double DecimalToDouble(char const* digits, int num_digits, int exponent, 
 
 #if 0
         // Move trailing zeros into the exponent
-        int const tz2 = CountTrailingZeros(digits, num_digits);
-        num_digits -= tz2;
-        exponent   += tz2;
+        while (num_digits > 0 && digits[num_digits - 1] == '0')
+        {
+            num_digits--;
+            exponent++;
+        }
 #endif
     }
 
