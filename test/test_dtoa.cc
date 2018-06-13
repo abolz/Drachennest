@@ -35,9 +35,7 @@ static double StringToDouble(std::string const& str)
 #else
 static double StringToDouble(std::string const& str)
 {
-    double d = 0;
-    base_conv::Strtod(d, str.c_str(), str.c_str() + str.size());
-    return d;
+    return base_conv::Strtod(str.c_str(), str.c_str() + str.size());
 }
 #endif
 
@@ -212,7 +210,7 @@ TEST_CASE("Dtoa - single 1")
     CHECK_SINGLE(MakeSingle(0, 254, 0x007FFFFE));
     CHECK_SINGLE(MakeSingle(0, 254, 0x007FFFFF)); // max normal
 
-    for (int e = 2; e < 254; ++e)
+    for (uint32_t e = 2; e < 254; ++e)
     {
         CAPTURE(e);
         CHECK_SINGLE(MakeSingle(0, e-1, 0x007FFFFF));
@@ -270,7 +268,7 @@ TEST_CASE("Dtoa - double 1")
     CHECK_DOUBLE(MakeDouble(0, 2046, 0x000FFFFFFFFFFFFE));
     CHECK_DOUBLE(MakeDouble(0, 2046, 0x000FFFFFFFFFFFFF)); // max normal
 
-    for (int e = 2; e < 2046; ++e)
+    for (uint64_t e = 2; e < 2046; ++e)
     {
         CAPTURE(e);
         CHECK_DOUBLE(MakeDouble(0, e-1, 0x000FFFFFFFFFFFFF));
