@@ -89,7 +89,7 @@ workspace "Grisu"
     else
         configuration { "gmake" }
             buildoptions {
-                "-std=c++14",
+                "-std=c++11",
             }
     end
 
@@ -145,6 +145,41 @@ project "test"
     links {
         "double-conversion",
     }
+    configuration { "gmake" }
+        buildoptions {
+            "-Wsign-compare",
+            "-Wsign-conversion",
+        }
+
+-- project "test_all_float32"
+--     language "C++"
+--     kind "ConsoleApp"
+--     files {
+--         "src/**.h",
+--         "src/**.cc",
+--         "test/test_all_float32.cc",
+--     }
+--     includedirs {
+--         "ext/",
+--     }
+--     links {
+--         "double-conversion",
+--     }
+
+-- project "test_float64"
+--     language "C++"
+--     kind "ConsoleApp"
+--     files {
+--         "src/**.h",
+--         "src/**.cc",
+--         "test/test_float64.cc",
+--     }
+--     includedirs {
+--         "ext/",
+--     }
+--     links {
+--         "double-conversion",
+--     }
 
 --project "bench_dtoa"
 --    language "C++"
@@ -152,24 +187,25 @@ project "test"
 --    files {
 --        "src/**.h",
 --        "src/**.cc",
---        "test/bench_dtoa.cc",
+--        "bench/bench_dtoa.cc",
 --    }
 --    includedirs {
 --        "ext/",
 --    }
 --    links {
 --        "benchmark",
+--        "double-conversion",
 --    }
 --    configuration { "windows" }
 --        links { "shlwapi" }
---
+
 --project "bench_strtod"
 --    language "C++"
 --    kind "ConsoleApp"
 --    files {
 --        "src/**.h",
 --        "src/**.cc",
---        "test/bench_strtod.cc",
+--        "bench/bench_strtod.cc",
 --    }
 --    includedirs {
 --        "ext/",
