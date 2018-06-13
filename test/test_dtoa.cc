@@ -81,6 +81,22 @@ static std::string DoubleToString(double value)
 }
 #endif
 
+static std::string Dtostr(float value, bool force_trailing_dot_zero = false)
+{
+    char buf[32];
+    char* first = buf;
+    char* last  = base_conv::Dtoa(first, first + 32, value, force_trailing_dot_zero);
+    return {first, last};
+}
+
+static std::string Dtostr(double value, bool force_trailing_dot_zero = false)
+{
+    char buf[32];
+    char* first = buf;
+    char* last  = base_conv::Dtoa(first, first + 32, value, force_trailing_dot_zero);
+    return {first, last};
+}
+
 template <typename Target, typename Source>
 static Target ReinterpretBits(Source source)
 {
@@ -341,3 +357,27 @@ TEST_CASE("Dtoa - double 1")
     CHECK_DOUBLE(MakeDouble(8549497411294502, -448)); // digits 22, bits 66
 }
 
+TEST_CASE("Dtoa format special")
+{
+    CHECK("NaN" == SingleToString(std::numeric_limits<float>::quiet_NaN()));
+    CHECK("NaN" == DoubleToString(std::numeric_limits<double>::quiet_NaN()));
+    CHECK("Infinity" == SingleToString(std::numeric_limits<float>::infinity()));
+    CHECK("Infinity" == DoubleToString(std::numeric_limits<double>::infinity()));
+    CHECK("-Infinity" == SingleToString(-std::numeric_limits<float>::infinity()));
+    CHECK("-Infinity" == DoubleToString(-std::numeric_limits<double>::infinity()));
+    CHECK("-0" == SingleToString(-0.0f));
+    CHECK("-0" == DoubleToString(-0.0));
+}
+
+TEST_CASE("Dtoa format trailing dot-zero")
+{
+    CHECK("0" == Dtostr(0.0f, false));
+    CHECK("0.0" == Dtostr(0.0f, true));
+    CHECK("10" == Dtostr(10.0f, false));
+    CHECK("10.0" == Dtostr(10.0f, true));
+
+    CHECK("0" == Dtostr(0.0, false));
+    CHECK("0.0" == Dtostr(0.0, true));
+    CHECK("10" == Dtostr(10.0, false));
+    CHECK("10.0" == Dtostr(10.0, true));
+}

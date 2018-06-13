@@ -1440,18 +1440,21 @@ inline char* Dtoa(
         return base_conv::impl::StrCopy(next, last, inf_string);
     }
 
-    if (v.IsZero())
-    {
-        if (v.SignBit())
-            return base_conv::impl::StrCopy(next, last, "-0.0");
-        *next++ = '0';
-        return next;
-    }
-
     if (v.SignBit())
     {
         value = v.AbsValue();
         *next++ = '-';
+    }
+
+    if (v.IsZero())
+    {
+        *next++ = '0';
+        if (force_trailing_dot_zero)
+        {
+            *next++ = '.';
+            *next++ = '0';
+        }
+        return next;
     }
 
     return base_conv::PositiveDtoa(next, last, value, force_trailing_dot_zero);
