@@ -228,14 +228,27 @@ inline void Normalize(DiyFpWithError& num)
 // Any integer with at most 19 decimal digits will hence fit into an uint64_t.
 constexpr int kMaxUint64DecimalDigits = 19;
 
-inline uint64_t ReadU64(char const* digits, int num_digits)
+inline uint64_t ReadU64(char const* f, char const* l)
 {
-    DTOA_ASSERT(num_digits <= kMaxUint64DecimalDigits);
+    DTOA_ASSERT(l - f <= kMaxUint64DecimalDigits);
 
     uint64_t value = 0;
-    for (int i = 0; i < num_digits; ++i)
+#if 0 // _MSC_VER
+    for ( ; l - f >= 8; f += 8)
     {
-        value = 10 * value + static_cast<uint32_t>(DigitValue(digits[i]));
+        value = 10 * value + static_cast<uint32_t>(f[0]);
+        value = 10 * value + static_cast<uint32_t>(f[1]);
+        value = 10 * value + static_cast<uint32_t>(f[2]);
+        value = 10 * value + static_cast<uint32_t>(f[3]);
+        value = 10 * value + static_cast<uint32_t>(f[4]);
+        value = 10 * value + static_cast<uint32_t>(f[5]);
+        value = 10 * value + static_cast<uint32_t>(f[6]);
+        value = 10 * value + static_cast<uint32_t>(f[7]) - 533333328u;
+    }
+#endif
+    for ( ; f != l; ++f)
+    {
+        value = 10 * value + static_cast<uint8_t>(DigitValue(*f));
     }
 
     return value;
@@ -382,7 +395,7 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
 
     DiyFpWithError input;
 
-    input.x.f = ReadU64(digits, read_digits);
+    input.x.f = ReadU64(digits, digits + read_digits);
     input.x.e = 0;
     input.error = 0;
 
@@ -538,7 +551,7 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
         int const s = excess_bits - (DiyFp::SignificandSize - kLogULP - 1);
         DTOA_ASSERT(s > 0);
 
-#if 0
+#if 1
         uint64_t const discarded_bits = input.x.f & ((uint64_t{1} << s) - 1);
 
         // Move the discarded bits into the error: (f + err) * 2^e = (f - d + err + d) * 2^e
@@ -752,6 +765,19 @@ inline void MulAddU32(DiyInt& x, uint32_t A, uint32_t B = 0)
     }
 }
 
+inline uint32_t ReadU32(char const* f, char const* l)
+{
+    DTOA_ASSERT(l - f <= 9);
+
+    uint32_t value = 0;
+    for ( ; f != l; ++f)
+    {
+        value = 10 * value + static_cast<uint32_t>(DigitValue(*f));
+    }
+
+    return value;
+}
+
 inline void AssignDecimalDigits(DiyInt& x, char const* digits, int num_digits)
 {
     static constexpr uint32_t kPow10[] = {
@@ -772,7 +798,7 @@ inline void AssignDecimalDigits(DiyInt& x, char const* digits, int num_digits)
     while (num_digits > 0)
     {
         int const n = Min(num_digits, 9);
-        MulAddU32(x, kPow10[n], static_cast<uint32_t>(ReadU64(digits, n)));
+        MulAddU32(x, kPow10[n], ReadU32(digits, digits + n));
         digits     += n;
         num_digits -= n;
     }
