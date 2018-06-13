@@ -386,14 +386,6 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
     input.x.e = 0;
     input.error = 0;
 
-#if 0
-    if (num_digits <= kMaxUint64DecimalDigits && exponent == 0)
-    {
-        result = static_cast<double>(input.x.f);
-        return true;
-    }
-#endif
-
     if (num_digits <= kMaxExactDoubleIntegerDecimalDigits)
     {
         if (FastPath(result, input.x.f, num_digits, exponent))
