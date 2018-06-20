@@ -518,7 +518,11 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
     // Since all cached powers have an error of less than 1/2 ulp, err_y = 1/2,
     // and the error is therefore less than 1/2 + (err_x + err_y).
 
+#if 0
+    input.error += kULP / 2 + (0 <= exponent && exponent <= 27 ? 0 : kULP / 2);
+#else
     input.error += kULP / 2 + kULP / 2;
+#endif
 
     DTOA_ASSERT(input.error <= 36 * (kULP / 2));
 
