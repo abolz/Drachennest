@@ -420,7 +420,7 @@ inline DiyFp LowerBoundary(Float value)
     DTOA_ASSERT(value > 0);
 
     auto const v = DiyFpFromFloat(value);
-    return DiyFp(4*v.f - 2 + LowerBoundaryIsCloser(value) ? 1 : 0, v.e - 2);
+    return DiyFp(4*v.f - 2 + (LowerBoundaryIsCloser(value) ? 1 : 0), v.e - 2);
 }
 
 struct Boundaries {
@@ -1141,13 +1141,8 @@ inline void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, 
     // And DigitGen generates the shortest possible such number in [L, H].
     // Note that this does not mean that Grisu2 always generates the shortest
     // possible number in the interval (m-, m+).
-#if 0
     DiyFp const L(w_minus.f + 1, w_minus.e);
     DiyFp const H(w_plus.f  - 1, w_plus.e );
-#else
-    auto const L = w_minus;
-    auto const H = w_plus;
-#endif
 
     Grisu2DigitGen(digits, num_digits, exponent, L, w, H);
     // w = buffer * 10^exponent
