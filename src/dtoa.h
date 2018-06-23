@@ -1204,7 +1204,7 @@ namespace impl {
 // Returns a pointer to the element following the digits.
 //
 // PRE: -1000 < value < 1000
-inline char* Itoa1000(char* buffer, int value)
+inline char* ExponentToDecimal(char* buffer, int value)
 {
     DTOA_ASSERT(value > -1000);
     DTOA_ASSERT(value <  1000);
@@ -1280,7 +1280,7 @@ inline char* FormatFixed(char* buffer, int length, int decimal_point, bool force
     }
 }
 
-inline char* FormatExponential(char* buffer, int length, int decimal_point, char exponent_char = 'e')
+inline char* FormatExponential(char* buffer, int length, int exponent, char exponent_char = 'e')
 {
     DTOA_ASSERT(buffer != nullptr);
     DTOA_ASSERT(length >= 1);
@@ -1309,8 +1309,7 @@ inline char* FormatExponential(char* buffer, int length, int decimal_point, char
 
     *buffer++ = exponent_char;
 
-    int const exponent = decimal_point - 1;
-    return Itoa1000(buffer, exponent);
+    return ExponentToDecimal(buffer, exponent);
 }
 
 } // namespace impl
@@ -1334,16 +1333,16 @@ inline char* PositiveDtoa(char* next, char* last, Float value, bool force_traili
     // Compute v = buffer * 10^exponent.
     // The decimal digits are stored in the buffer, which needs to be
     // interpreted as an unsigned decimal integer.
-    // length is the length of the buffer, i.e. the number of decimal digits.
-    int length = 0;
+    // num_digits is the length of the buffer, i.e. the number of decimal digits.
+    int num_digits = 0;
     int exponent = 0;
-    base_conv::DoubleToDecimal(next, last, length, exponent, value);
+    base_conv::DoubleToDecimal(next, last, num_digits, exponent, value);
 
     // Grisu2 generates at most max_digits10 decimal digits.
-    DTOA_ASSERT(length <= std::numeric_limits<Float>::max_digits10);
+    DTOA_ASSERT(num_digits <= std::numeric_limits<Float>::max_digits10);
 
     // The position of the decimal point relative to the start of the buffer.
-    int const decimal_point = length + exponent;
+    int const decimal_point = num_digits + exponent;
 
     // Just appending the exponent would yield a correct decimal representation
     // for the input value.
@@ -1368,8 +1367,8 @@ inline char* PositiveDtoa(char* next, char* last, Float value, bool force_traili
 #endif
 
     char* const end = use_fixed
-        ? base_conv::impl::FormatFixed(next, length, decimal_point, force_trailing_dot_zero)
-        : base_conv::impl::FormatExponential(next, length, decimal_point);
+        ? base_conv::impl::FormatFixed(next, num_digits, decimal_point, force_trailing_dot_zero)
+        : base_conv::impl::FormatExponential(next, num_digits, decimal_point - 1);
 
     DTOA_ASSERT(end - next <= kPositiveDtoaMaxLength);
     return end;
