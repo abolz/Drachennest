@@ -205,10 +205,10 @@ struct DiyFpWithError // value = (x.f + delta) * 2^x.e, where |delta| <= error
     static constexpr int kDenominator = 1 << kDenominatorLog;
 
     DiyFp x;
-    uint64_t error = 0;
+    uint32_t error = 0;
 
     constexpr DiyFpWithError() = default;
-    constexpr DiyFpWithError(DiyFp x_, uint64_t error_) : x(x_), error(error_) {}
+    constexpr DiyFpWithError(DiyFp x_, uint32_t error_) : x(x_), error(error_) {}
 };
 
 // Normalize x
@@ -417,7 +417,7 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
         input.x.f += (DigitValue(digits[read_digits]) >= 5);
 
         // The error is <= 1/2 ULP.
-        input.error = DiyFpWithError::kDenominator / 2;
+        input.error = kULP / 2;
     }
 
     // x = f * 2^0
@@ -565,7 +565,8 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
         uint64_t const discarded_bits = input.x.f & ((uint64_t{1} << s) - 1);
 
         // Move the discarded bits into the error: (f + err) * 2^e = (f - d + err + d) * 2^e
-        input.error += discarded_bits;
+        DTOA_ASSERT(discarded_bits <= UINT32_MAX);
+        input.error += static_cast<uint32_t>(discarded_bits);
         // Scale the error such that input.error is in ULP(input.x) again.
         input.error >>= s;
         // And add 1 so that input.error is still an upper bound.
