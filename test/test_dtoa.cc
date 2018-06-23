@@ -7,79 +7,113 @@
 
 #include <double-conversion/double-conversion.h>
 
-#if 1
-static float StringToSingle(std::string const& str)
-{
-    double_conversion::StringToDoubleConverter conv(0, 0.0, 0.0, "inf", "nan");
+#define USE_DOUBLE_CONVERSION_DTOA 0
+#define TEST_HEX 0
 
-    int processed_characters_count = 0;
-    return conv.StringToFloat(str.c_str(), static_cast<int>(str.size()), &processed_characters_count);
-}
-#else
-static float StringToSingle(std::string const& str)
+static bool CheckSingle(float f)
 {
-    float d = 0;
-    base_conv::Strtod(d, str.c_str(), str.c_str() + str.size());
-    return d;
-}
+    // decimal
+    {
+#if USE_DOUBLE_CONVERSION_DTOA
+        auto const& f2s = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
+
+        char buf[32];
+        double_conversion::StringBuilder builder(buf, 32);
+        f2s.ToShortestSingle(f, &builder);
+        int const length = builder.position();
+        builder.Finalize();
+#else
+        char buf[32];
+        char* first = buf;
+        char* last  = base_conv::Dtoa(first, first + 32, f);
+        int const length = static_cast<int>(last - first);
 #endif
 
-#if 0
-static double StringToDouble(std::string const& str)
-{
-    double_conversion::StringToDoubleConverter conv(0, 0.0, 0.0, "inf", "nan");
+        double_conversion::StringToDoubleConverter s2f(0, 0.0, 0.0, "inf", "nan");
 
-    int processed_characters_count = 0;
-    return conv.StringToDouble(str.c_str(), static_cast<int>(str.size()), &processed_characters_count);
-}
-#else
-static double StringToDouble(std::string const& str)
-{
-    return base_conv::Strtod(str.c_str(), str.c_str() + str.size());
-}
+        int processed_characters_count = 0;
+        auto const f_out = s2f.StringToFloat(buf, length, &processed_characters_count);
+
+        CHECK(f == f_out);
+    }
+
+#if TEST_HEX
+    // hex
+    {
+        uint32_t f_bits = base_conv::impl::ReinterpretBits<uint32_t>(f);
+        CAPTURE(f_bits);
+
+        char buf[32] = {0};
+        char* first = buf;
+        char* last  = base_conv::HexDtoa(first, first + 32, f);
+
+        std::string str = {first, last};
+        if (str[0] == '-')
+            str.insert(1, "0x");
+        else
+            str.insert(0, "0x");
+
+        CAPTURE(str);
+
+        auto const f_out = std::strtof(str.c_str(), nullptr);
+        uint32_t f_out_bits = base_conv::impl::ReinterpretBits<uint32_t>(f_out);
+        CAPTURE(f_out_bits);
+
+        CHECK(f == f_out);
+    }
 #endif
 
-#if 0
-static std::string SingleToString(float value)
-{
-    auto const& conv = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
-
-    char buf[32];
-    double_conversion::StringBuilder builder(buf, 32);
-    conv.ToShortestSingle(value, &builder);
-    builder.Finalize();
-
-    return buf;
+    return true;
 }
 
-static std::string DoubleToString(double value)
+static bool CheckDouble(double f)
 {
-    auto const& conv = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
+    // decimal
+    {
+#if USE_DOUBLE_CONVERSION_DTOA
+        auto const& f2s = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
 
-    char buf[32];
-    double_conversion::StringBuilder builder(buf, 32);
-    conv.ToShortest(value, &builder);
-    builder.Finalize();
-
-    return buf;
-}
+        char buf[32];
+        double_conversion::StringBuilder builder(buf, 32);
+        f2s.ToShortestSingle(f, &builder);
+        int const length = builder.position();
+        builder.Finalize();
 #else
-static std::string SingleToString(float value)
-{
-    char buf[32];
-    char* first = buf;
-    char* last  = base_conv::Dtoa(first, first + 32, value);
-    return {first, last};
-}
-
-static std::string DoubleToString(double value)
-{
-    char buf[32];
-    char* first = buf;
-    char* last  = base_conv::Dtoa(first, first + 32, value);
-    return {first, last};
-}
+        char buf[32];
+        char* first = buf;
+        char* last  = base_conv::Dtoa(first, first + 32, f);
+        int const length = static_cast<int>(last - first);
 #endif
+
+        double_conversion::StringToDoubleConverter s2f(0, 0.0, 0.0, "inf", "nan");
+
+        int processed_characters_count = 0;
+        auto const f_out = s2f.StringToDouble(buf, length, &processed_characters_count);
+
+        CHECK(f == f_out);
+    }
+
+#if TEST_HEX
+    // hex
+    {
+        char buf[32] = {0};
+        char* first = buf;
+        char* last  = base_conv::HexDtoa(first, first + 32, f);
+
+        std::string str = {first, last};
+        if (str[0] == '-')
+            str.insert(1, "0x");
+        else
+            str.insert(0, "0x");
+
+        auto const f_out = std::strtod(str.c_str(), nullptr);
+
+        CHECK(f == f_out);
+    }
+#endif
+
+    return true;
+}
 
 static std::string Dtostr(float value, bool force_trailing_dot_zero = false)
 {
@@ -201,13 +235,8 @@ static double MakeDouble(uint64_t f, int e)
     return ReinterpretBits<double>(bits);
 }
 
-#if 0
-#define CHECK_SINGLE(VALUE) { auto const str = SingleToString(VALUE); auto const flt = StringToSingle(str); auto const bits1 = ReinterpretBits<uint32_t>(VALUE); auto const bits2 = ReinterpretBits<uint32_t>(flt); CAPTURE(bits1); CAPTURE(bits2); CHECK(VALUE == flt); }
-#define CHECK_DOUBLE(VALUE) { auto const str = DoubleToString(VALUE); auto const flt = StringToDouble(str); auto const bits1 = ReinterpretBits<uint64_t>(VALUE); auto const bits2 = ReinterpretBits<uint64_t>(flt); CAPTURE(bits1); CAPTURE(bits2); CHECK(VALUE == flt); }
-#else
-#define CHECK_SINGLE(VALUE) CHECK(VALUE == StringToSingle(SingleToString(VALUE)))
-#define CHECK_DOUBLE(VALUE) CHECK(VALUE == StringToDouble(DoubleToString(VALUE)))
-#endif
+#define CHECK_SINGLE(VALUE) CHECK(CheckSingle(VALUE))
+#define CHECK_DOUBLE(VALUE) CHECK(CheckDouble(VALUE))
 
 TEST_CASE("Dtoa - single 1")
 {
@@ -359,14 +388,14 @@ TEST_CASE("Dtoa - double 1")
 
 TEST_CASE("Dtoa format special")
 {
-    CHECK("NaN" == SingleToString(std::numeric_limits<float>::quiet_NaN()));
-    CHECK("NaN" == DoubleToString(std::numeric_limits<double>::quiet_NaN()));
-    CHECK("Infinity" == SingleToString(std::numeric_limits<float>::infinity()));
-    CHECK("Infinity" == DoubleToString(std::numeric_limits<double>::infinity()));
-    CHECK("-Infinity" == SingleToString(-std::numeric_limits<float>::infinity()));
-    CHECK("-Infinity" == DoubleToString(-std::numeric_limits<double>::infinity()));
-    CHECK("-0" == SingleToString(-0.0f));
-    CHECK("-0" == DoubleToString(-0.0));
+    CHECK("NaN" == Dtostr(std::numeric_limits<float>::quiet_NaN()));
+    CHECK("NaN" == Dtostr(std::numeric_limits<double>::quiet_NaN()));
+    CHECK("Infinity" == Dtostr(std::numeric_limits<float>::infinity()));
+    CHECK("Infinity" == Dtostr(std::numeric_limits<double>::infinity()));
+    CHECK("-Infinity" == Dtostr(-std::numeric_limits<float>::infinity()));
+    CHECK("-Infinity" == Dtostr(-std::numeric_limits<double>::infinity()));
+    CHECK("-0" == Dtostr(-0.0f));
+    CHECK("-0" == Dtostr(-0.0));
 }
 
 TEST_CASE("Dtoa format trailing dot-zero")
