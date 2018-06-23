@@ -1280,7 +1280,7 @@ inline char* FormatFixed(char* buffer, int length, int decimal_point, bool force
     }
 }
 
-inline char* FormatExponential(char* buffer, int length, int decimal_point)
+inline char* FormatExponential(char* buffer, int length, int decimal_point, char exponent_char = 'e')
 {
     DTOA_ASSERT(buffer != nullptr);
     DTOA_ASSERT(length >= 1);
@@ -1307,7 +1307,7 @@ inline char* FormatExponential(char* buffer, int length, int decimal_point)
         buffer += 1 + length;
     }
 
-    *buffer++ = 'e';
+    *buffer++ = exponent_char;
 
     int const exponent = decimal_point - 1;
     return Itoa1000(buffer, exponent);
