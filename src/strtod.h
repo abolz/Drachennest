@@ -110,12 +110,12 @@ inline int DigitValue(char ch)
 #endif
 #endif
 
-#if DTOA_CORRECT_DOUBLE_OPERATIONS
-
 // 2^53 = 9007199254740992.
 // Any integer with at most 15 decimal digits will hence fit into a double
 // (which has a 53bit significand) without loss of precision.
 constexpr int kMaxExactDoubleIntegerDecimalDigits = 15;
+
+#if DTOA_CORRECT_DOUBLE_OPERATIONS
 
 inline bool FastPath(double& result, uint64_t digits, int num_digits, int exponent)
 {
@@ -187,7 +187,7 @@ inline bool FastPath(double& result, uint64_t digits, int num_digits, int expone
 
 #else // ^^^ DTOA_CORRECT_DOUBLE_OPERATIONS
 
-inline bool StrtodFast(double& /*result*/, char const* /*digits*/, int /*num_digits*/, int /*exponent*/)
+inline bool FastPath(double& /*result*/, uint64_t /*digits*/, int /*num_digits*/, int /*exponent*/)
 {
     return false;
 }
@@ -518,8 +518,8 @@ inline bool StrtodApprox(double& result, char const* digits, int num_digits, int
     // Since all cached powers have an error of less than 1/2 ulp, err_y = 1/2,
     // and the error is therefore less than 1/2 + (err_x + err_y).
 
-#if 0
-    input.error += kULP / 2 + (0 <= exponent && exponent <= 27 ? 0 : kULP / 2);
+#if 1
+    input.error += static_cast<unsigned>(kULP / 2 + (0 <= exponent && exponent <= 27 ? 0 : kULP / 2));
 #else
     input.error += kULP / 2 + kULP / 2;
 #endif
