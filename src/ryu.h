@@ -27,41 +27,41 @@
 #include <limits>
 #include <type_traits>
 
-#ifndef RYU_ASSERT
-#define RYU_ASSERT(X) assert(X)
+#ifndef DTOA_ASSERT
+#define DTOA_ASSERT(X) assert(X)
 #endif
 
 // ABSL avoids uint128_t on Win32 even if __SIZEOF_INT128__ is defined.
 // Let's do the same for now.
 #if defined(__SIZEOF_INT128__) && !defined(_MSC_VER)
-#define RYU_HAS_UINT128 1
+#define DTOA_HAS_UINT128 1
 #elif defined(_MSC_VER) && defined(_M_X64) && !defined(__clang__) // https://bugs.llvm.org/show_bug.cgi?id=37755
-#define RYU_HAS_64_BIT_INTRINSICS 1
+#define DTOA_HAS_64_BIT_INTRINSICS 1
 #endif
 
-#if RYU_HAS_64_BIT_INTRINSICS
+#if DTOA_HAS_64_BIT_INTRINSICS
 #include <intrin.h>
 #endif
 
 #if _MSC_VER
-#define RYU_INLINE __forceinline
+#define DTOA_INLINE __forceinline
 #else
-#define RYU_INLINE inline
+#define DTOA_INLINE inline
 #endif
 
-#ifndef RYU_OPTIMIZE_SIZE
-#define RYU_OPTIMIZE_SIZE 1
+#ifndef DTOA_OPTIMIZE_SIZE
+#define DTOA_OPTIMIZE_SIZE 1
 #endif
 
-#if RYU_UNNAMED_NAMESPACE
+#if DTOA_UNNAMED_NAMESPACE
 namespace {
 #endif
-namespace ryu {
+namespace base_conv {
 
-namespace impl {
+namespace dtoa_impl {
 
 template <typename Dest, typename Source>
-RYU_INLINE Dest ReinterpretBits(Source source)
+DTOA_INLINE Dest ReinterpretBits(Source source)
 {
     static_assert(sizeof(Dest) == sizeof(Source), "size mismatch");
 
@@ -142,7 +142,7 @@ struct IEEE
     }
 };
 
-} // namespace impl
+} // namespace dtoa_impl
 
 //==================================================================================================
 // DoubleToDecimal
@@ -162,7 +162,7 @@ struct IEEE
 //      https://dl.acm.org/citation.cfm?id=3192369
 //==================================================================================================
 
-namespace impl {
+namespace dtoa_impl {
 
 constexpr int kPow5InvDoubleBitLength = 122;
 constexpr int kPow5DoubleBitLength = 121;
@@ -172,35 +172,35 @@ struct Uint64x2 {
     uint64_t hi;
 };
 
-#if RYU_HAS_64_BIT_INTRINSICS
+#if DTOA_HAS_64_BIT_INTRINSICS
 
-RYU_INLINE unsigned char AddCarry(uint64_t a, uint64_t b, uint64_t* sum)
+DTOA_INLINE unsigned char AddCarry(uint64_t a, uint64_t b, uint64_t* sum)
 {
     return _addcarry_u64(0, a, b, sum);
 }
 
-RYU_INLINE uint64_t Mul128(uint64_t a, uint64_t b, uint64_t* productHi)
+DTOA_INLINE uint64_t Mul128(uint64_t a, uint64_t b, uint64_t* productHi)
 {
     return _umul128(a, b, productHi);
 }
 
-RYU_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int dist)
+DTOA_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int dist)
 {
-    RYU_ASSERT(dist >= 0);
-    RYU_ASSERT(dist < 64);
+    DTOA_ASSERT(dist >= 0);
+    DTOA_ASSERT(dist < 64);
     return __shiftright128(lo, hi, static_cast<unsigned char>(dist));
 }
 
-#else // ^^^ RYU_HAS_64_BIT_INTRINSICS
+#else // ^^^ DTOA_HAS_64_BIT_INTRINSICS
 
-RYU_INLINE unsigned char AddCarry(uint64_t a, uint64_t b, uint64_t* sum)
+DTOA_INLINE unsigned char AddCarry(uint64_t a, uint64_t b, uint64_t* sum)
 {
     uint64_t const s = a + b;
     *sum = s;
     return s < a;
 }
 
-RYU_INLINE uint64_t Mul128(uint64_t a, uint64_t b, uint64_t* productHi)
+DTOA_INLINE uint64_t Mul128(uint64_t a, uint64_t b, uint64_t* productHi)
 {
     uint32_t const aLo = static_cast<uint32_t>(a);
     uint32_t const aHi = static_cast<uint32_t>(a >> 32);
@@ -222,25 +222,25 @@ RYU_INLINE uint64_t Mul128(uint64_t a, uint64_t b, uint64_t* productHi)
     return productLo;
 }
 
-RYU_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int dist)
+DTOA_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int dist)
 {
-    RYU_ASSERT(dist > 0);
-    RYU_ASSERT(dist < 128);
+    DTOA_ASSERT(dist > 0);
+    DTOA_ASSERT(dist < 128);
     return (dist >= 64)
         ? hi >> (dist - 64)
         : (hi << (64 - dist)) | (lo >> dist);
 }
 
-#endif // ^^^ !RYU_HAS_64_BIT_INTRINSICS
+#endif // ^^^ !DTOA_HAS_64_BIT_INTRINSICS
 
-RYU_INLINE int Pow5BitLength(int e) // e == 0 ? 1 : ceil(log_2(5^e))
+DTOA_INLINE int Pow5BitLength(int e) // e == 0 ? 1 : ceil(log_2(5^e))
 {
-    RYU_ASSERT(e >= 0);
-    RYU_ASSERT(e <= 1500); // Only tested for e <= 1500
+    DTOA_ASSERT(e >= 0);
+    DTOA_ASSERT(e <= 1500); // Only tested for e <= 1500
     return ((e * 1217359) >> 19) + 1;
 }
 
-#if RYU_OPTIMIZE_SIZE
+#if DTOA_OPTIMIZE_SIZE
 // sizeof(tables) = 756 bytes
 
 constexpr int kSmallPow5Size = 26;
@@ -348,9 +348,9 @@ static constexpr uint32_t kPow5InvDoubleAdjust[20 /*80 bytes*/] = {
 };
 
 // Computes 5^i in the form required by Ryu.
-RYU_INLINE Uint64x2 ComputePow5(int i)
+DTOA_INLINE Uint64x2 ComputePow5(int i)
 {
-    RYU_ASSERT(i >= 0);
+    DTOA_ASSERT(i >= 0);
 
     Uint64x2 result;
 
@@ -369,10 +369,10 @@ RYU_INLINE Uint64x2 ComputePow5(int i)
         uint32_t const adjust = (kPow5DoubleAdjust[base] >> offset) & 1;
 
         int const delta = Pow5BitLength(i) - Pow5BitLength(base2);
-        RYU_ASSERT(delta >= 0);
-        RYU_ASSERT(delta <= 64);
+        DTOA_ASSERT(delta >= 0);
+        DTOA_ASSERT(delta <= 64);
 
-#if RYU_HAS_UINT128
+#if DTOA_HAS_UINT128
         __extension__ using uint128_t = unsigned __int128;
 
         uint128_t const b0 = static_cast<uint128_t>(m) * mul.lo;
@@ -399,9 +399,9 @@ RYU_INLINE Uint64x2 ComputePow5(int i)
 }
 
 // Computes 5^-i in the form required by Ryu.
-RYU_INLINE Uint64x2 ComputePow5Inv(int i)
+DTOA_INLINE Uint64x2 ComputePow5Inv(int i)
 {
-    RYU_ASSERT(i >= 0);
+    DTOA_ASSERT(i >= 0);
 
     Uint64x2 result;
 
@@ -420,12 +420,12 @@ RYU_INLINE Uint64x2 ComputePow5Inv(int i)
         uint32_t const adjust = ( kPow5InvDoubleAdjust[static_cast<uint32_t>(i) / 16] >> ((static_cast<uint32_t>(i) % 16) << 1) ) & 3;
 
         int const delta = Pow5BitLength(base2) - Pow5BitLength(i);
-        RYU_ASSERT(delta >= 0);
-        RYU_ASSERT(delta <= 64);
+        DTOA_ASSERT(delta >= 0);
+        DTOA_ASSERT(delta <= 64);
 
         // 1/5^base2 * 5^offset = 1/5^(base2-offset) = 1/5^i
 
-#if RYU_HAS_UINT128
+#if DTOA_HAS_UINT128
         __extension__ using uint128_t = unsigned __int128;
 
         uint128_t const b0 = static_cast<uint128_t>(m) * (mul.lo - 1);
@@ -451,7 +451,7 @@ RYU_INLINE Uint64x2 ComputePow5Inv(int i)
     return result;
 }
 
-#else // ^^^ RYU_OPTIMIZE_SIZE
+#else // ^^^ DTOA_OPTIMIZE_SIZE
 // sizeof(tables) = 9888 bytes
 
 constexpr int kPow5InvDoubleSize = 292;
@@ -1081,7 +1081,7 @@ static constexpr Uint64x2 kPow5Double[326] = { // 5216 bytes
     {0x278E1316E60A4831, 0x018B40A4EEC437C5},
 };
 
-#endif // ^^^ !RYU_OPTIMIZE_SIZE
+#endif // ^^^ !DTOA_OPTIMIZE_SIZE
 
 // We need a 64x128 bit multiplication and a subsequent 128-bit shift.
 // Multiplication:
@@ -1121,33 +1121,33 @@ static constexpr Uint64x2 kPow5Double[326] = { // 5216 bytes
 //       no internal overflow, but requires extra work since the intermediate
 //       results are not perfectly aligned.
 
-#if RYU_HAS_UINT128
+#if DTOA_HAS_UINT128
 
-RYU_INLINE uint64_t MulShift(uint64_t m, Uint64x2 mul, int j)
+DTOA_INLINE uint64_t MulShift(uint64_t m, Uint64x2 mul, int j)
 {
     __extension__ using uint128_t = unsigned __int128;
 
-    RYU_ASSERT((m >> 55) == 0); // m is maximum 55 bits
+    DTOA_ASSERT((m >> 55) == 0); // m is maximum 55 bits
 
     uint128_t const b0 = static_cast<uint128_t>(m) * mul.lo;
     uint128_t const b2 = static_cast<uint128_t>(m) * mul.hi;
 
-    RYU_ASSERT(j >= 64);
+    DTOA_ASSERT(j >= 64);
     return static_cast<uint64_t>(((b0 >> 64) + b2) >> (j - 64));
 }
 
-RYU_INLINE uint64_t MulShiftAll(uint64_t m2, Uint64x2 mul, int j, uint64_t* vp, uint64_t* vm, uint32_t mmShift)
+DTOA_INLINE uint64_t MulShiftAll(uint64_t m2, Uint64x2 mul, int j, uint64_t* vp, uint64_t* vm, uint32_t mmShift)
 {
     *vp = MulShift(4 * m2 + 2, mul, j);
     *vm = MulShift(4 * m2 - 1 - mmShift, mul, j);
     return MulShift(4 * m2, mul, j);
 }
 
-#elif RYU_HAS_64_BIT_INTRINSICS
+#elif DTOA_HAS_64_BIT_INTRINSICS
 
-RYU_INLINE uint64_t MulShift(uint64_t m, Uint64x2 mul, int j)
+DTOA_INLINE uint64_t MulShift(uint64_t m, Uint64x2 mul, int j)
 {
-    RYU_ASSERT((m >> 55) == 0); // m is maximum 55 bits
+    DTOA_ASSERT((m >> 55) == 0); // m is maximum 55 bits
 
     uint64_t b0_hi;
     uint64_t b2_hi;
@@ -1160,7 +1160,7 @@ RYU_INLINE uint64_t MulShift(uint64_t m, Uint64x2 mul, int j)
     return ShiftRight128(sum, b2_hi, j - 64);
 }
 
-RYU_INLINE uint64_t MulShiftAll(uint64_t m2, Uint64x2 mul, int j, uint64_t* vp, uint64_t* vm, uint32_t mmShift)
+DTOA_INLINE uint64_t MulShiftAll(uint64_t m2, Uint64x2 mul, int j, uint64_t* vp, uint64_t* vm, uint32_t mmShift)
 {
     *vp = MulShift(4 * m2 + 2, mul, j);
     *vm = MulShift(4 * m2 - 1 - mmShift, mul, j);
@@ -1169,9 +1169,9 @@ RYU_INLINE uint64_t MulShiftAll(uint64_t m2, Uint64x2 mul, int j, uint64_t* vp, 
 
 #else
 
-RYU_INLINE uint64_t MulShiftAll(uint64_t m2, Uint64x2 mul, int j, uint64_t* vp, uint64_t* vm, uint32_t mmShift)
+DTOA_INLINE uint64_t MulShiftAll(uint64_t m2, Uint64x2 mul, int j, uint64_t* vp, uint64_t* vm, uint32_t mmShift)
 {
-    RYU_ASSERT((m2 >> 55) == 0); // m2 is maximum 55 bits
+    DTOA_ASSERT((m2 >> 55) == 0); // m2 is maximum 55 bits
 
     m2 *= 2;
 
@@ -1209,38 +1209,38 @@ RYU_INLINE uint64_t MulShiftAll(uint64_t m2, Uint64x2 mul, int j, uint64_t* vp, 
 
 #endif
 
-RYU_INLINE int Max0(int y)
+DTOA_INLINE int Max0(int y)
 {
     return y < 0 ? 0 : y;
 }
 
-RYU_INLINE int Log10Pow2(int e) // floor(log_10(2^e))
+DTOA_INLINE int Log10Pow2(int e) // floor(log_10(2^e))
 {
-    RYU_ASSERT(e >= 0);
-    RYU_ASSERT(e <= 1500); // Only tested for e <= 1500
+    DTOA_ASSERT(e >= 0);
+    DTOA_ASSERT(e <= 1500); // Only tested for e <= 1500
     return static_cast<int>((static_cast<uint32_t>(e) * 78913) >> 18);
 }
 
-RYU_INLINE int Log10Pow5(int e) // floor(log_10(5^e))
+DTOA_INLINE int Log10Pow5(int e) // floor(log_10(5^e))
 {
-    RYU_ASSERT(e >= 0);
-    RYU_ASSERT(e <= 1500); // Only tested for e <= 1500
+    DTOA_ASSERT(e >= 0);
+    DTOA_ASSERT(e <= 1500); // Only tested for e <= 1500
     return static_cast<int>((static_cast<uint32_t>(e) * 732923) >> 20);
 }
 
-RYU_INLINE int ComputeQForNonNegativeExponent(int e)
+DTOA_INLINE int ComputeQForNonNegativeExponent(int e)
 {
     // return Max0(Log10Pow2(e) - 1);
     return Log10Pow2(e) - (e > 3);
 }
 
-RYU_INLINE int ComputeQForNegativeExponent(int e)
+DTOA_INLINE int ComputeQForNegativeExponent(int e)
 {
     // return Max0(Log10Pow5(e) - 1);
     return Log10Pow5(e) - (e > 1);
 }
 
-RYU_INLINE int Pow5Factor(uint64_t value)
+DTOA_INLINE int Pow5Factor(uint64_t value)
 {
     // For 64-bit integers: result <= 27
     // Since value here has at most 55-bits: result <= 23
@@ -1248,8 +1248,8 @@ RYU_INLINE int Pow5Factor(uint64_t value)
     int factor = 0;
     for (;;)
     {
-        RYU_ASSERT(value != 0);
-        RYU_ASSERT(factor <= 23);
+        DTOA_ASSERT(value != 0);
+        DTOA_ASSERT(factor <= 23);
 
         if (value % 5 != 0)
             return factor;
@@ -1258,9 +1258,9 @@ RYU_INLINE int Pow5Factor(uint64_t value)
     }
 }
 
-RYU_INLINE int DecimalLength(uint64_t v)
+DTOA_INLINE int DecimalLength(uint64_t v)
 {
-    RYU_ASSERT(v < 100000000000000000ull);
+    DTOA_ASSERT(v < 100000000000000000ull);
 
     if (v >= 10000000000000000ull) { return 17; }
     if (v >= 1000000000000000ull) { return 16; }
@@ -1281,7 +1281,7 @@ RYU_INLINE int DecimalLength(uint64_t v)
     return 1;
 }
 
-RYU_INLINE char* Utoa100(char* buf, uint32_t digits)
+DTOA_INLINE char* Utoa100(char* buf, uint32_t digits)
 {
     static constexpr char const* kDigits100 =
         "00010203040506070809"
@@ -1295,23 +1295,26 @@ RYU_INLINE char* Utoa100(char* buf, uint32_t digits)
         "80818283848586878889"
         "90919293949596979899";
 
-    RYU_ASSERT(digits < 100);
+    DTOA_ASSERT(digits < 100);
     std::memcpy(buf, kDigits100 + 2*digits, 2);
     return buf + 2;
 }
 
-RYU_INLINE int PrintDecimalDigits(char* digits, uint64_t output)
+DTOA_INLINE int PrintDecimalDigits(char* next, char* last, uint64_t output)
 {
     // The average output length is 16.38 digits.
     int const output_length = DecimalLength(output);
 
-    char* end = digits + output_length;
+    DTOA_ASSERT(last - next >= output_length);
+    static_cast<void>(last); // Fix warning
+
+    char* end = next + output_length;
 
 #if 1
 #if 1
     while (output >= 100000000)
     {
-        RYU_ASSERT(end - digits >= 8);
+        DTOA_ASSERT(end - next >= 8);
         uint32_t const c0 = static_cast<uint32_t>(output % 10000);
         output /= 10000;
         uint32_t const c1 = static_cast<uint32_t>(output % 10000);
@@ -1330,7 +1333,7 @@ RYU_INLINE int PrintDecimalDigits(char* digits, uint64_t output)
 
     while (output >= 10000)
     {
-        RYU_ASSERT(end - digits >= 4);
+        DTOA_ASSERT(end - next >= 4);
         uint32_t const c = static_cast<uint32_t>(output % 10000);
         output /= 10000;
         uint32_t const c0 = c % 100;
@@ -1343,7 +1346,7 @@ RYU_INLINE int PrintDecimalDigits(char* digits, uint64_t output)
 
     while (output >= 100)
     {
-        RYU_ASSERT(end - digits >= 2);
+        DTOA_ASSERT(end - next >= 2);
         uint32_t const c = static_cast<uint32_t>(output % 100);
         output /= 100;
         Utoa100(end - 2, c);
@@ -1352,26 +1355,32 @@ RYU_INLINE int PrintDecimalDigits(char* digits, uint64_t output)
 
     if (output >= 10)
     {
-        RYU_ASSERT(end - digits >= 2);
+        DTOA_ASSERT(end - next >= 2);
         Utoa100(end - 2, static_cast<uint32_t>(output));
     }
     else
     {
-        RYU_ASSERT(end - digits >= 1);
+        DTOA_ASSERT(end - next >= 1);
         end[-1] = static_cast<char>('0' + output);
     }
 
     return output_length;
 }
 
-} // namespace impl
+} // namespace dtoa_impl
 
 constexpr int kDoubleToDecimalMaxLength = 17;
 
-inline void DoubleToDecimal(char* digits, int& num_digits, int& exponent, double value)
+inline void DoubleToDecimal(char* next, char* last, int& num_digits, int& exponent, double value)
 {
-    using Double = impl::IEEE<double>;
-    using namespace impl;
+    using Double = dtoa_impl::IEEE<double>;
+    using namespace dtoa_impl;
+
+    DTOA_ASSERT(last - next >= kDoubleToDecimalMaxLength);
+    DTOA_ASSERT(Double(value).IsFinite());
+    DTOA_ASSERT(value > 0);
+
+    static_cast<void>(last); // Fix warning
 
     //
     // Step 1:
@@ -1379,9 +1388,6 @@ inline void DoubleToDecimal(char* digits, int& num_digits, int& exponent, double
     //
 
     Double const ieee_value(value);
-
-    RYU_ASSERT(ieee_value.IsFinite());
-    RYU_ASSERT(value > 0);
 
     // Decode bits into mantissa, and exponent.
     uint64_t const ieeeMantissa = ieee_value.PhysicalSignificand();
@@ -1437,16 +1443,16 @@ inline void DoubleToDecimal(char* digits, int& num_digits, int& exponent, double
     {
         // I tried special-casing q == 0, but there was no effect on performance.
         int const q = ComputeQForNonNegativeExponent(e2);
-        RYU_ASSERT(q >= 0);
+        DTOA_ASSERT(q >= 0);
         int const k = kPow5InvDoubleBitLength + Pow5BitLength(q) - 1;
         int const j = -e2 + q + k;
-        RYU_ASSERT(j >= 114 + (q == 0 ? 1 : 0));
+        DTOA_ASSERT(j >= 114 + (q == 0 ? 1 : 0));
 
         e10 = q;
 
-#if RYU_OPTIMIZE_SIZE
+#if DTOA_OPTIMIZE_SIZE
         auto const pow5 = ComputePow5Inv(q);
-        RYU_ASSERT((pow5.hi >> (kPow5InvDoubleBitLength - 64 + (q == 0 ? 1 : 0))) == 0);
+        DTOA_ASSERT((pow5.hi >> (kPow5InvDoubleBitLength - 64 + (q == 0 ? 1 : 0))) == 0);
 #else
         auto const pow5 = kPow5InvDouble[q];
 #endif
@@ -1480,17 +1486,17 @@ inline void DoubleToDecimal(char* digits, int& num_digits, int& exponent, double
     else
     {
         int const q = ComputeQForNegativeExponent(-e2);
-        RYU_ASSERT(q >= 0);
+        DTOA_ASSERT(q >= 0);
         int const i = -e2 - q;
         int const k = Pow5BitLength(i) - kPow5DoubleBitLength;
         int const j = q - k;
-        RYU_ASSERT(j >= 114);
+        DTOA_ASSERT(j >= 114);
 
         e10 = e2 + q;
 
-#if RYU_OPTIMIZE_SIZE
+#if DTOA_OPTIMIZE_SIZE
         auto const pow5 = ComputePow5(i);
-        RYU_ASSERT((pow5.hi >> (kPow5DoubleBitLength - 64)) == 0);
+        DTOA_ASSERT((pow5.hi >> (kPow5DoubleBitLength - 64)) == 0);
 #else
         auto const pow5 = kPow5Double[i];
 #endif
@@ -1604,7 +1610,7 @@ inline void DoubleToDecimal(char* digits, int& num_digits, int& exponent, double
     //
 
     // The average output length is 16.38 digits.
-    num_digits = PrintDecimalDigits(digits, output);
+    num_digits = PrintDecimalDigits(next, last, output);
     exponent = e10;
 }
 
@@ -1612,12 +1618,12 @@ inline void DoubleToDecimal(char* digits, int& num_digits, int& exponent, double
 // PositiveDtoa
 //==================================================================================================
 
-namespace impl {
+namespace dtoa_impl {
 
-RYU_INLINE char* ExponentToDecimal(char* buffer, int value)
+DTOA_INLINE char* ExponentToDecimal(char* buffer, int value)
 {
-    RYU_ASSERT(value > -1000);
-    RYU_ASSERT(value <  1000);
+    DTOA_ASSERT(value > -1000);
+    DTOA_ASSERT(value <  1000);
 
     if (value < 0)
     {
@@ -1649,10 +1655,10 @@ RYU_INLINE char* ExponentToDecimal(char* buffer, int value)
     return buffer;
 }
 
-RYU_INLINE char* FormatFixed(char* buffer, int length, int decimal_point, bool force_trailing_dot_zero)
+DTOA_INLINE char* FormatFixed(char* buffer, int length, int decimal_point, bool force_trailing_dot_zero)
 {
-    RYU_ASSERT(buffer != nullptr);
-    RYU_ASSERT(length >= 1);
+    DTOA_ASSERT(buffer != nullptr);
+    DTOA_ASSERT(length >= 1);
 
     if (length <= decimal_point)
     {
@@ -1687,10 +1693,10 @@ RYU_INLINE char* FormatFixed(char* buffer, int length, int decimal_point, bool f
     }
 }
 
-RYU_INLINE char* FormatExponential(char* buffer, int length, int exponent, char exponent_char = 'e')
+DTOA_INLINE char* FormatExponential(char* buffer, int length, int exponent, char exponent_char = 'e')
 {
-    RYU_ASSERT(buffer != nullptr);
-    RYU_ASSERT(length >= 1);
+    DTOA_ASSERT(buffer != nullptr);
+    DTOA_ASSERT(length >= 1);
 
     if (length == 1)
     {
@@ -1716,32 +1722,33 @@ RYU_INLINE char* FormatExponential(char* buffer, int length, int exponent, char 
     return buffer;
 }
 
-} // namespace impl
+} // namespace dtoa_impl
 
 constexpr int kPositiveDtoaMaxLength = 24;
 
-inline char* PositiveDtoa(char* buffer, double value, bool force_trailing_dot_zero = false)
+inline char* PositiveDtoa(char* next, char* last, double value, bool force_trailing_dot_zero = false)
 {
-    RYU_ASSERT(value > 0);
+    DTOA_ASSERT(last - next >= kPositiveDtoaMaxLength);
+    DTOA_ASSERT(value > 0);
 
     int num_digits = 0;
     int exponent = 0;
-    ryu::DoubleToDecimal(buffer, num_digits, exponent, value);
+    base_conv::DoubleToDecimal(next, last, num_digits, exponent, value);
 
-    RYU_ASSERT(num_digits <= std::numeric_limits<double>::max_digits10);
+    DTOA_ASSERT(num_digits <= std::numeric_limits<double>::max_digits10);
 
 #if 0//test
-    char* end = buffer + num_digits;
+    char* end = next + num_digits;
     if (exponent != 0)
     {
         end[0] = 'e';
-        end = impl::ExponentToDecimal(end + 1, exponent);
+        end = base_conv::dtoa_impl::ExponentToDecimal(end + 1, exponent);
     }
 #else
     int const decimal_point = num_digits + exponent;
 
 #if 0//test
-    char* const end = ryu::impl::FormatExponential(buffer, num_digits, decimal_point - 1);
+    char* const end = base_conv::dtoa_impl::FormatExponential(next, num_digits, decimal_point - 1);
 #else
     // Changing these constants requires changing kPositiveDtoaMaxLength too.
     // XXX:
@@ -1752,12 +1759,12 @@ inline char* PositiveDtoa(char* buffer, double value, bool force_trailing_dot_ze
     bool const use_fixed = kMinExp < decimal_point && decimal_point <= kMaxExp;
 
     char* const end = use_fixed
-        ? ryu::impl::FormatFixed(buffer, num_digits, decimal_point, force_trailing_dot_zero)
-        : ryu::impl::FormatExponential(buffer, num_digits, decimal_point - 1);
+        ? base_conv::dtoa_impl::FormatFixed(next, num_digits, decimal_point, force_trailing_dot_zero)
+        : base_conv::dtoa_impl::FormatExponential(next, num_digits, decimal_point - 1);
 #endif
 #endif
 
-    RYU_ASSERT(end - buffer <= kPositiveDtoaMaxLength);
+    DTOA_ASSERT(end - next <= kPositiveDtoaMaxLength);
     return end;
 }
 
@@ -1765,67 +1772,74 @@ inline char* PositiveDtoa(char* buffer, double value, bool force_trailing_dot_ze
 // Dtoa
 //==================================================================================================
 
-namespace impl {
+namespace dtoa_impl {
 
-RYU_INLINE char* StrCopy(char* buffer, char const* source)
+DTOA_INLINE char* StrCopy(char* next, char* last, char const* source)
 {
-    RYU_ASSERT(buffer != nullptr);
-    RYU_ASSERT(source != nullptr);
+    static_cast<void>(last); // Fix warning
+
+    DTOA_ASSERT(source != nullptr);
 
     auto const len = std::strlen(source);
-    std::memcpy(buffer, source, len);
-    return buffer + len;
+    DTOA_ASSERT(next <= last);
+    DTOA_ASSERT(static_cast<size_t>(last - next) >= len);
+
+    std::memcpy(next, source, len);
+    return next + len;
 }
 
-} // namespace impl
+} // namespace dtoa_impl
 
 constexpr int kDtoaMaxLength = 1/* minus-sign */ + kPositiveDtoaMaxLength;
 
 inline char* Dtoa(
-    char*       buffer,
+    char*       next,
+    char*       last,
     double      value,
     bool        force_trailing_dot_zero = false,
     char const* nan_string = "NaN",
     char const* inf_string = "Infinity")
 {
-    using Double = impl::IEEE<double>;
+    using Double = dtoa_impl::IEEE<double>;
 
-    RYU_ASSERT(buffer != nullptr);
-    RYU_ASSERT(std::strlen(nan_string) <= size_t{kPositiveDtoaMaxLength});
-    RYU_ASSERT(std::strlen(inf_string) <= size_t{kPositiveDtoaMaxLength});
+    DTOA_ASSERT(next != nullptr);
+    DTOA_ASSERT(last != nullptr);
+    DTOA_ASSERT(last - next >= kDtoaMaxLength);
+    DTOA_ASSERT(std::strlen(nan_string) <= size_t{kPositiveDtoaMaxLength});
+    DTOA_ASSERT(std::strlen(inf_string) <= size_t{kPositiveDtoaMaxLength});
 
     Double const v(value);
 
     if (!v.IsFinite())
     {
         if (v.IsNaN())
-            return ryu::impl::StrCopy(buffer, nan_string);
+            return base_conv::dtoa_impl::StrCopy(next, last, nan_string);
         if (v.SignBit())
-            *buffer++ = '-';
-        return ryu::impl::StrCopy(buffer, inf_string);
+            *next++ = '-';
+        return base_conv::dtoa_impl::StrCopy(next, last, inf_string);
     }
 
     if (v.SignBit())
     {
         value = v.AbsValue();
-        *buffer++ = '-';
+        *next++ = '-';
     }
 
     if (v.IsZero())
     {
-        *buffer++ = '0';
+        *next++ = '0';
         if (force_trailing_dot_zero)
         {
-            *buffer++ = '.';
-            *buffer++ = '0';
+            *next++ = '.';
+            *next++ = '0';
         }
-        return buffer;
+        return next;
     }
 
-    return ryu::PositiveDtoa(buffer, value, force_trailing_dot_zero);
+    return base_conv::PositiveDtoa(next, last, value, force_trailing_dot_zero);
 }
 
-} // namespace ryu
-#if RYU_UNNAMED_NAMESPACE
+} // namespace base_conv
+#if DTOA_UNNAMED_NAMESPACE
 } // namespace
 #endif
