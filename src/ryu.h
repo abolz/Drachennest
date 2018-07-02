@@ -43,10 +43,12 @@
 #include <intrin.h>
 #endif
 
+#ifndef DTOA_INLINE
 #if _MSC_VER
 #define DTOA_INLINE __forceinline
 #else
 #define DTOA_INLINE inline
+#endif
 #endif
 
 #ifndef DTOA_OPTIMIZE_SIZE
