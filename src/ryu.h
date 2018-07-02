@@ -21,16 +21,11 @@
 #pragma once
 
 #include <cassert>
-#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <limits>
-
-static_assert(std::numeric_limits<double>::is_iec559 &&
-              std::numeric_limits<double>::digits == 53 &&
-              std::numeric_limits<double>::max_exponent == 1024,
-    "IEEE-754 double-precision implementation required");
+#include <type_traits>
 
 #ifndef RYU_ASSERT
 #define RYU_ASSERT(X) assert(X)
@@ -62,6 +57,92 @@ static_assert(std::numeric_limits<double>::is_iec559 &&
 namespace {
 #endif
 namespace ryu {
+
+namespace impl {
+
+template <typename Dest, typename Source>
+RYU_INLINE Dest ReinterpretBits(Source source)
+{
+    static_assert(sizeof(Dest) == sizeof(Source), "size mismatch");
+
+    Dest dest;
+    std::memcpy(&dest, &source, sizeof(Source));
+    return dest;
+}
+
+template <typename Float>
+struct IEEE
+{
+    // NB:
+    // Works for double == long double.
+    static_assert(std::numeric_limits<Float>::is_iec559 &&
+                  ((std::numeric_limits<Float>::digits == 24 && std::numeric_limits<Float>::max_exponent == 128) ||
+                   (std::numeric_limits<Float>::digits == 53 && std::numeric_limits<Float>::max_exponent == 1024)),
+        "IEEE-754 single- or double-precision implementation required");
+
+    using ieee_type = Float;
+    using bits_type = typename std::conditional<std::numeric_limits<Float>::digits == 24, uint32_t, uint64_t>::type;
+
+    static constexpr int       SignificandSize         = std::numeric_limits<ieee_type>::digits;  // = p   (includes the hidden bit)
+    static constexpr int       PhysicalSignificandSize = SignificandSize - 1;                     // = p-1 (excludes the hidden bit)
+    static constexpr int       UnbiasedMinExponent     = 1;
+    static constexpr int       UnbiasedMaxExponent     = 2 * std::numeric_limits<Float>::max_exponent - 1 - 1;
+    static constexpr int       ExponentBias            = 2 * std::numeric_limits<Float>::max_exponent / 2 - 1 + (SignificandSize - 1);
+    static constexpr int       MinExponent             = UnbiasedMinExponent - ExponentBias;
+    static constexpr int       MaxExponent             = UnbiasedMaxExponent - ExponentBias;
+    static constexpr bits_type HiddenBit               = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
+    static constexpr bits_type SignificandMask         = HiddenBit - 1;                           // = 2^(p-1) - 1
+    static constexpr bits_type ExponentMask            = bits_type{2 * std::numeric_limits<Float>::max_exponent - 1} << PhysicalSignificandSize;
+    static constexpr bits_type SignMask                = ~(~bits_type{0} >> 1);
+
+    bits_type bits;
+
+    explicit IEEE(bits_type bits_) : bits(bits_) {}
+    explicit IEEE(ieee_type value) : bits(ReinterpretBits<bits_type>(value)) {}
+
+    bits_type PhysicalSignificand() const {
+        return bits & SignificandMask;
+    }
+
+    bits_type PhysicalExponent() const {
+        return (bits & ExponentMask) >> PhysicalSignificandSize;
+    }
+
+    bool IsFinite() const {
+        return (bits & ExponentMask) != ExponentMask;
+    }
+
+    bool IsInf() const {
+        return (bits & ExponentMask) == ExponentMask && (bits & SignificandMask) == 0;
+    }
+
+    bool IsNaN() const {
+        return (bits & ExponentMask) == ExponentMask && (bits & SignificandMask) != 0;
+    }
+
+    bool IsZero() const {
+        return (bits & ~SignMask) == 0;
+    }
+
+    bool SignBit() const {
+        return (bits & SignMask) != 0;
+    }
+
+    ieee_type Value() const {
+        return ReinterpretBits<ieee_type>(bits);
+    }
+
+    ieee_type AbsValue() const {
+        return ReinterpretBits<ieee_type>(bits & ~SignMask);
+    }
+
+    ieee_type NextValue() const {
+        STRTOD_ASSERT(!SignBit());
+        return ReinterpretBits<ieee_type>(IsInf() ? bits : bits + 1);
+    }
+};
+
+} // namespace impl
 
 //==================================================================================================
 // DoubleToDecimal
@@ -126,10 +207,10 @@ RYU_INLINE uint64_t Mul128(uint64_t a, uint64_t b, uint64_t* productHi)
     uint32_t const bLo = static_cast<uint32_t>(b);
     uint32_t const bHi = static_cast<uint32_t>(b >> 32);
 
-    uint64_t const b00 = static_cast<uint64_t>(aLo) * bLo;
-    uint64_t const b01 = static_cast<uint64_t>(aLo) * bHi;
-    uint64_t const b10 = static_cast<uint64_t>(aHi) * bLo;
-    uint64_t const b11 = static_cast<uint64_t>(aHi) * bHi;
+    uint64_t const b00 = uint64_t{aLo} * bLo;
+    uint64_t const b01 = uint64_t{aLo} * bHi;
+    uint64_t const b10 = uint64_t{aHi} * bLo;
+    uint64_t const b11 = uint64_t{aHi} * bHi;
 
     uint64_t midSum;
     uint64_t const midSumCarry = AddCarry(b01, b10, &midSum);
@@ -1283,28 +1364,13 @@ RYU_INLINE int PrintDecimalDigits(char* digits, uint64_t output)
     return output_length;
 }
 
-constexpr int      kDoubleMantissaBits = 52;
-constexpr int      kDoubleExponentBits = 11;
-constexpr int      kDoubleExponentBias = (1 << (kDoubleExponentBits - 1)) - 1;
-constexpr uint64_t kDoubleHiddenBit = 1ull << kDoubleMantissaBits;
-
-RYU_INLINE uint64_t CastF64ToU64(double d)
-{
-#if 1
-    uint64_t bits;
-    std::memcpy(&bits, &d, sizeof(double));
-    return bits;
-#else
-    return _castf64_u64(d);
-#endif
-}
-
 } // namespace impl
 
 constexpr int kDoubleToDecimalMaxLength = 17;
 
 inline void DoubleToDecimal(char* digits, int& num_digits, int& exponent, double value)
 {
+    using Double = impl::IEEE<double>;
     using namespace impl;
 
     //
@@ -1312,28 +1378,25 @@ inline void DoubleToDecimal(char* digits, int& num_digits, int& exponent, double
     // Decode the floating point number, and unify normalized and subnormal cases.
     //
 
-    uint64_t const ieeeBits = CastF64ToU64(value);
+    Double const ieee_value(value);
+
+    RYU_ASSERT(ieee_value.IsFinite());
+    RYU_ASSERT(value > 0);
 
     // Decode bits into mantissa, and exponent.
-    uint64_t const ieeeMantissa = ieeeBits & (kDoubleHiddenBit - 1);
-    uint32_t const ieeeExponent = static_cast<uint32_t>(ieeeBits >> kDoubleMantissaBits);
-
-    // value must be finite and non-negative.
-    RYU_ASSERT(ieeeExponent < ((1u << kDoubleExponentBits) - 1));
+    uint64_t const ieeeMantissa = ieee_value.PhysicalSignificand();
+    uint64_t const ieeeExponent = ieee_value.PhysicalExponent();
 
     uint64_t m2;
     int e2;
     if (ieeeExponent == 0)
     {
-        // value must be > 0.
-        RYU_ASSERT(ieeeMantissa != 0);
-
         m2 = ieeeMantissa;
         e2 = 1;
     }
     else
     {
-        m2 = kDoubleHiddenBit | ieeeMantissa;
+        m2 = Double::HiddenBit | ieeeMantissa;
         e2 = static_cast<int>(ieeeExponent);
     }
 
@@ -1346,10 +1409,10 @@ inline void DoubleToDecimal(char* digits, int& num_digits, int& exponent, double
     //
 
     // We subtract 2 so that the bounds computation has 2 additional bits.
-    e2 -= kDoubleExponentBias + kDoubleMantissaBits + 2;
+    e2 -= Double::ExponentBias + 2;
 
     uint64_t const mv = 4 * m2;
-    uint32_t const mmShift = (m2 != kDoubleHiddenBit || ieeeExponent <= 1) ? 1 : 0;
+    uint32_t const mmShift = (ieeeMantissa != 0 || ieeeExponent <= 1) ? 1 : 0;
 #if 0
     // We would compute mp and mm like this:
     uint64_t const mp = mv + 2;
@@ -1449,7 +1512,7 @@ inline void DoubleToDecimal(char* digits, int& num_digits, int& exponent, double
             }
         }
 //      else if (q <= 64)
-        else if (q <= kDoubleMantissaBits + 2)
+        else if (q <= Double::SignificandSize + 2)
         {
             // TODO(ulfjack): Use a tighter bound here.
 
@@ -1725,27 +1788,30 @@ inline char* Dtoa(
     char const* nan_string = "NaN",
     char const* inf_string = "Infinity")
 {
+    using Double = impl::IEEE<double>;
+
     RYU_ASSERT(buffer != nullptr);
     RYU_ASSERT(std::strlen(nan_string) <= size_t{kPositiveDtoaMaxLength});
     RYU_ASSERT(std::strlen(inf_string) <= size_t{kPositiveDtoaMaxLength});
 
-#if 1//test
-    if (!std::isfinite(value))
+    Double const v(value);
+
+    if (!v.IsFinite())
     {
-        if (std::isnan(value))
+        if (v.IsNaN())
             return ryu::impl::StrCopy(buffer, nan_string);
-        if (std::signbit(value))
+        if (v.SignBit())
             *buffer++ = '-';
         return ryu::impl::StrCopy(buffer, inf_string);
     }
 
-    if (std::signbit(value))
+    if (v.SignBit())
     {
-        value = -value;
+        value = v.AbsValue();
         *buffer++ = '-';
     }
 
-    if (value == 0)
+    if (v.IsZero())
     {
         *buffer++ = '0';
         if (force_trailing_dot_zero)
@@ -1755,7 +1821,6 @@ inline char* Dtoa(
         }
         return buffer;
     }
-#endif
 
     return ryu::PositiveDtoa(buffer, value, force_trailing_dot_zero);
 }
