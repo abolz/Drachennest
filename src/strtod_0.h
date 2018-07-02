@@ -1016,7 +1016,7 @@ STRTOD_INLINE bool StrtodApprox(double& result, char const* digits, int num_digi
     // Truncate the significand to p = q - n bits and move the discarded bits into the (binary) exponent.
     // (Right shift of >= bit-width is undefined.)
     input.x.f = (excess_bits < 64) ? (input.x.f >> excess_bits) : 0;
-    input.x.e  += excess_bits;
+    input.x.e += excess_bits;
 
     // Split up error into high (integral) and low (fractional) parts,
     // since half * kULP might overflow.
@@ -1024,7 +1024,7 @@ STRTOD_INLINE bool StrtodApprox(double& result, char const* digits, int num_digi
     uint64_t const error_lo = input.error % kULP;
 
     STRTOD_ASSERT(input.error > 0);
-    STRTOD_ASSERT(half >= error_hi && (half - error_hi) * kULP >= error_lo);
+    STRTOD_ASSERT(half >= error_hi && half - error_hi <= UINT64_MAX / kULP && (half - error_hi) * kULP >= error_lo);
     STRTOD_ASSERT(half <= UINT64_MAX - error_hi);
     static_cast<void>(error_lo);
 
