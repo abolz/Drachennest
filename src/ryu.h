@@ -135,11 +135,6 @@ struct IEEE
     ieee_type AbsValue() const {
         return ReinterpretBits<ieee_type>(bits & ~SignMask);
     }
-
-    ieee_type NextValue() const {
-        STRTOD_ASSERT(!SignBit());
-        return ReinterpretBits<ieee_type>(IsInf() ? bits : bits + 1);
-    }
 };
 
 } // namespace dtoa_impl
