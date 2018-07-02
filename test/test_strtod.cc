@@ -1,6 +1,9 @@
-#include "../src/strtod.h"
+#include "base_conv.h"
 
 #include "catch.hpp"
+
+#include <cstring>
+#include <limits>
 
 #define HAS_FLOAT 0
 
@@ -10,17 +13,17 @@
 #define ATTRIBUTE_NOINLINE __attribute__((noinline))
 #endif
 
-static double ATTRIBUTE_NOINLINE div_double(double x, double y)
-{
-    return x / y;
-}
-
-TEST_CASE("Div_double")
-{
-#if DTOA_CORRECT_DOUBLE_OPERATIONS
-    CHECK(89255e-22 == div_double(89255.0, 1e22));
-#endif
-}
+//static double ATTRIBUTE_NOINLINE div_double(double x, double y)
+//{
+//    return x / y;
+//}
+//
+//TEST_CASE("Div_double")
+//{
+//#if DTOA_CORRECT_DOUBLE_OPERATIONS || STRTOD_CORRECT_DOUBLE_OPERATIONS
+//    CHECK(89255e-22 == div_double(89255.0, 1e22));
+//#endif
+//}
 
 #if 0
 #include <double-conversion/double-conversion.h>
@@ -52,22 +55,21 @@ static double Strtod(char const* str)
 
     double d = 0.0;
 
-    auto const status = base_conv::Strtod(d, str, end);
-    CHECK(str == end);
-    CHECK(status == base_conv::StrtodStatus::success);
+    auto const success = base_conv_Strtod(d, str, end);
+    CHECK(success);
 
     return d;
 }
 
 static double Strtod(char const* str, int exponent)
 {
-    return base_conv::DecimalToDouble(str, static_cast<int>(strlen(str)), exponent);
+    return base_conv_DecimalToDouble(str, static_cast<int>(strlen(str)), exponent);
 }
 
 #if HAS_FLOAT
 static float Strtof(char const* str, int exponent)
 {
-    return base_conv::DecimalToSingle(str, static_cast<int>(strlen(str)), exponent);
+    return base_conv_DecimalToSingle(str, static_cast<int>(strlen(str)), exponent);
 }
 #endif
 #endif

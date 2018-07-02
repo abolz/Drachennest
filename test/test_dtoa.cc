@@ -1,14 +1,24 @@
-#include "../src/dtoa.h"
-#include "../src/strtod.h"
+#include "base_conv.h"
 
 #include "catch.hpp"
 
 #include <string>
+#include <limits>
 
 #include <double-conversion/double-conversion.h>
 
 #define USE_DOUBLE_CONVERSION_DTOA 0
 #define TEST_HEX 0
+
+template <typename Dest, typename Source>
+inline Dest ReinterpretBits(Source source)
+{
+    static_assert(sizeof(Dest) == sizeof(Source), "size mismatch");
+
+    Dest dest;
+    std::memcpy(&dest, &source, sizeof(Source));
+    return dest;
+}
 
 static bool CheckSingle(float f)
 {
@@ -25,7 +35,8 @@ static bool CheckSingle(float f)
 #else
         char buf[32];
         char* first = buf;
-        char* last  = base_conv::Dtoa(first, first + 32, f);
+        char* last  = base_conv_Dtoa(first, first + 32, f);
+        *last = '\0';
         int const length = static_cast<int>(last - first);
 #endif
 
@@ -34,18 +45,23 @@ static bool CheckSingle(float f)
         int processed_characters_count = 0;
         auto const f_out = s2f.StringToFloat(buf, length, &processed_characters_count);
 
+        const uint32_t f_bits = ReinterpretBits<uint32_t>(f);
+        const uint32_t f_out_bits = ReinterpretBits<uint32_t>(f_out);
+        CAPTURE(f_bits);
+        CAPTURE(f_out_bits);
+        CAPTURE(&buf[0]);
         CHECK(f == f_out);
     }
 
 #if TEST_HEX
     // hex
     {
-        uint32_t f_bits = base_conv::impl::ReinterpretBits<uint32_t>(f);
+        uint32_t f_bits = ReinterpretBits<uint32_t>(f);
         CAPTURE(f_bits);
 
         char buf[32] = {0};
         char* first = buf;
-        char* last  = base_conv::HexDtoa(first, first + 32, f);
+        char* last  = base_conv_HexDtoa(first, first + 32, f);
 
         std::string str = {first, last};
         if (str[0] == '-')
@@ -56,7 +72,7 @@ static bool CheckSingle(float f)
         CAPTURE(str);
 
         auto const f_out = std::strtof(str.c_str(), nullptr);
-        uint32_t f_out_bits = base_conv::impl::ReinterpretBits<uint32_t>(f_out);
+        uint32_t f_out_bits = ReinterpretBits<uint32_t>(f_out);
         CAPTURE(f_out_bits);
 
         CHECK(f == f_out);
@@ -75,14 +91,25 @@ static bool CheckDouble(double f)
 
         char buf[32];
         double_conversion::StringBuilder builder(buf, 32);
-        f2s.ToShortestSingle(f, &builder);
+        f2s.ToShortest(f, &builder);
         int const length = builder.position();
         builder.Finalize();
 #else
         char buf[32];
         char* first = buf;
-        char* last  = base_conv::Dtoa(first, first + 32, f);
+        char* last  = base_conv_Dtoa(first, first + 32, f);
+        *last = '\0';
         int const length = static_cast<int>(last - first);
+        {
+            auto const& f2s = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
+
+            char bufdc[32];
+            double_conversion::StringBuilder builder(bufdc, 32);
+            f2s.ToShortest(f, &builder);
+            builder.Finalize();
+
+            CHECK(std::string(buf) == std::string(bufdc));
+        }
 #endif
 
         double_conversion::StringToDoubleConverter s2f(0, 0.0, 0.0, "inf", "nan");
@@ -90,6 +117,11 @@ static bool CheckDouble(double f)
         int processed_characters_count = 0;
         auto const f_out = s2f.StringToDouble(buf, length, &processed_characters_count);
 
+        const uint64_t f_bits = ReinterpretBits<uint64_t>(f);
+        const uint64_t f_out_bits = ReinterpretBits<uint64_t>(f_out);
+        CAPTURE(f_bits);
+        CAPTURE(f_out_bits);
+        CAPTURE(&buf[0]);
         CHECK(f == f_out);
     }
 
@@ -98,7 +130,7 @@ static bool CheckDouble(double f)
     {
         char buf[32] = {0};
         char* first = buf;
-        char* last  = base_conv::HexDtoa(first, first + 32, f);
+        char* last  = base_conv_HexDtoa(first, first + 32, f);
 
         std::string str = {first, last};
         if (str[0] == '-')
@@ -119,7 +151,7 @@ static std::string Dtostr(float value, bool force_trailing_dot_zero = false)
 {
     char buf[32];
     char* first = buf;
-    char* last  = base_conv::Dtoa(first, first + 32, value, force_trailing_dot_zero);
+    char* last  = base_conv_Dtoa(first, first + 32, value, force_trailing_dot_zero);
     return {first, last};
 }
 
@@ -127,18 +159,8 @@ static std::string Dtostr(double value, bool force_trailing_dot_zero = false)
 {
     char buf[32];
     char* first = buf;
-    char* last  = base_conv::Dtoa(first, first + 32, value, force_trailing_dot_zero);
+    char* last  = base_conv_Dtoa(first, first + 32, value, force_trailing_dot_zero);
     return {first, last};
-}
-
-template <typename Target, typename Source>
-static Target ReinterpretBits(Source source)
-{
-    static_assert(sizeof(Target) == sizeof(Source), "ouch");
-
-    Target target;
-    std::memcpy(&target, &source, sizeof(Source));
-    return target;
 }
 
 static float MakeSingle(uint32_t sign_bit, uint32_t biased_exponent, uint32_t significand)
@@ -409,4 +431,22 @@ TEST_CASE("Dtoa format trailing dot-zero")
     CHECK("0.0" == Dtostr(0.0, true));
     CHECK("10" == Dtostr(10.0, false));
     CHECK("10.0" == Dtostr(10.0, true));
+}
+
+TEST_CASE("From Ryu")
+{
+    // SwitchToSubnormal
+    CHECK_DOUBLE(2.2250738585072014E-308);
+
+    // LotsOfTrailingZeros
+    CHECK_DOUBLE(2.98023223876953125E-8);
+
+    // Regression
+    CHECK_DOUBLE(-2.109808898695963E16);
+    CHECK_DOUBLE(4.940656E-318);
+    CHECK_DOUBLE(1.18575755E-316);
+    CHECK_DOUBLE(2.989102097996E-312);
+    CHECK_DOUBLE(9.0608011534336E15);
+    CHECK_DOUBLE(4.708356024711512E18);
+    CHECK_DOUBLE(9.409340012568248E18);
 }
