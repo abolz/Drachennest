@@ -52,47 +52,7 @@ namespace {
 #endif
 namespace base_conv {
 
-//==================================================================================================
-// DecimalToDouble
-//
-// Derived from the double-conversion library:
-// https://github.com/google/double-conversion
-//
-// The original license can be found at the end of this file.
-//
-// [1] Clinger, "How to read floating point numbers accurately",
-//     PLDI '90 Proceedings of the ACM SIGPLAN 1990 conference on Programming language design and
-//     implementation, Pages 92-101
-//==================================================================================================
-
-// Maximum number of significant digits in decimal representation.
-//
-// The longest possible double in decimal representation is (2^53 - 1) * 5^1074 / 10^1074,
-// which has 767 digits.
-// If we parse a number whose first digits are equal to a mean of 2 adjacent doubles (that
-// could have up to 768 digits) the result must be rounded to the bigger one unless the tail
-// consists of zeros, so we don't need to preserve all the digits.
-constexpr int kMaxSignificantDigits = 767 + 1;
-
 namespace strtod_impl {
-
-STRTOD_INLINE constexpr int Min(int x, int y) { return y < x ? y : x; }
-STRTOD_INLINE constexpr int Max(int x, int y) { return y < x ? x : y; }
-
-STRTOD_INLINE bool IsDigit(char ch)
-{
-#if 0
-    return static_cast<unsigned>(ch - '0') < 10;
-#else
-    return '0' <= ch && ch <= '9';
-#endif
-}
-
-STRTOD_INLINE int DigitValue(char ch)
-{
-    STRTOD_ASSERT(IsDigit(ch));
-    return ch - '0';
-}
 
 template <typename Dest, typename Source>
 STRTOD_INLINE Dest ReinterpretBits(Source source)
@@ -175,6 +135,50 @@ struct IEEE
         return ReinterpretBits<ieee_type>(IsInf() ? bits : bits + 1);
     }
 };
+
+} // namespace strtod_impl
+
+//==================================================================================================
+// DecimalToDouble
+//
+// Derived from the double-conversion library:
+// https://github.com/google/double-conversion
+//
+// The original license can be found at the end of this file.
+//
+// [1] Clinger, "How to read floating point numbers accurately",
+//     PLDI '90 Proceedings of the ACM SIGPLAN 1990 conference on Programming language design and
+//     implementation, Pages 92-101
+//==================================================================================================
+
+// Maximum number of significant digits in decimal representation.
+//
+// The longest possible double in decimal representation is (2^53 - 1) * 5^1074 / 10^1074,
+// which has 767 digits.
+// If we parse a number whose first digits are equal to a mean of 2 adjacent doubles (that
+// could have up to 768 digits) the result must be rounded to the bigger one unless the tail
+// consists of zeros, so we don't need to preserve all the digits.
+constexpr int kMaxSignificantDigits = 767 + 1;
+
+namespace strtod_impl {
+
+STRTOD_INLINE constexpr int Min(int x, int y) { return y < x ? y : x; }
+STRTOD_INLINE constexpr int Max(int x, int y) { return y < x ? x : y; }
+
+STRTOD_INLINE bool IsDigit(char ch)
+{
+#if 0
+    return static_cast<unsigned>(ch - '0') < 10;
+#else
+    return '0' <= ch && ch <= '9';
+#endif
+}
+
+STRTOD_INLINE int DigitValue(char ch)
+{
+    STRTOD_ASSERT(IsDigit(ch));
+    return ch - '0';
+}
 
 //--------------------------------------------------------------------------------------------------
 // StrtodFast
