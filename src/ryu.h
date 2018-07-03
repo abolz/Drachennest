@@ -55,9 +55,6 @@
 #define DTOA_OPTIMIZE_SIZE 1
 #endif
 
-#if DTOA_UNNAMED_NAMESPACE
-namespace {
-#endif
 namespace base_conv {
 
 namespace dtoa_impl {
@@ -1837,6 +1834,3 @@ inline char* Dtoa(
 }
 
 } // namespace base_conv
-#if DTOA_UNNAMED_NAMESPACE
-} // namespace
-#endif

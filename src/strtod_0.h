@@ -47,9 +47,6 @@
 #define STRTOD_OPTIMIZE_SIZE 1
 #endif
 
-#if STRTOD_UNNAMED_NAMESPACE
-namespace {
-#endif
 namespace base_conv {
 
 namespace strtod_impl {
@@ -2457,9 +2454,6 @@ STRTOD_INLINE double Strtod(char const* first, char const* last)
 }
 
 } // namespace base_conv
-#if STRTOD_UNNAMED_NAMESPACE
-} // namespace
-#endif
 
 /*
 Copyright 2006-2011, the V8 project authors. All rights reserved.
