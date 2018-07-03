@@ -1,5 +1,9 @@
 #include "base_conv.h"
 
+#ifdef _MSC_VER
+#define DTOA_INLINE inline
+#define STRTOD_INLINE inline
+#endif
 #if 1
 #include "../src/ryu.h"
 #include "../src/strtod_0.h"
