@@ -37,7 +37,7 @@
 #define DTOA_HAS_UINT128 1
 #elif defined(_MSC_VER) && defined(_M_X64) && !defined(__clang__) // https://bugs.llvm.org/show_bug.cgi?id=37755
 #define DTOA_HAS_64_BIT_INTRINSICS 1
-#define DTOA_USE_64_BIT_CARRY_INTRINSICS 1
+#define DTOA_USE_64_BIT_CARRY_INTRINSICS 0
 #endif
 
 #if DTOA_HAS_64_BIT_INTRINSICS
