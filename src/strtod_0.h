@@ -357,13 +357,8 @@ STRTOD_INLINE DiyFp Multiply(DiyFp x, DiyFp y)
 
     __extension__ using Uint128 = unsigned __int128;
 
-    Uint128 const p = Uint128{x.f} * Uint128{y.f};
-
-    uint64_t h = static_cast<uint64_t>(p >> 64);
-    uint64_t l = static_cast<uint64_t>(p);
-    h += l >> 63; // round, ties up: [h, l] += 2^q / 2
-
-    return DiyFp(h, x.e + y.e + 64);
+    Uint128 const p = Uint128{x.f} * y.f + (uint64_t{1} << 63);
+    return DiyFp(static_cast<uint64_t>(p >> 64), x.e + y.e + 64);
 
 #else
 
