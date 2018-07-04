@@ -1,10 +1,14 @@
 #include "base_conv.h"
 
+#if 0
 #ifdef _MSC_VER
 #define DTOA_INLINE inline
 #define STRTOD_INLINE inline
 #endif
+#endif
 #if 1
+#define DTOA_OPTIMIZE_SIZE 0
+#define STRTOD_OPTIMIZE_SIZE 0
 #include "../src/ryu.h"
 #include "../src/strtod_0.h"
 #else

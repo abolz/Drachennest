@@ -37,6 +37,7 @@
 #define DTOA_HAS_UINT128 1
 #elif defined(_MSC_VER) && defined(_M_X64) && !defined(__clang__) // https://bugs.llvm.org/show_bug.cgi?id=37755
 #define DTOA_HAS_64_BIT_INTRINSICS 1
+#define DTOA_USE_64_BIT_CARRY_INTRINSICS 1
 #endif
 
 #if DTOA_HAS_64_BIT_INTRINSICS
@@ -168,11 +169,6 @@ struct Uint64x2 {
 
 #if DTOA_HAS_64_BIT_INTRINSICS
 
-DTOA_INLINE unsigned char AddCarry(uint64_t a, uint64_t b, uint64_t* sum)
-{
-    return _addcarry_u64(0, a, b, sum);
-}
-
 DTOA_INLINE uint64_t Mul128(uint64_t a, uint64_t b, uint64_t* productHi)
 {
     return _umul128(a, b, productHi);
@@ -187,13 +183,6 @@ DTOA_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int dist)
 
 #else // ^^^ DTOA_HAS_64_BIT_INTRINSICS
 
-DTOA_INLINE unsigned char AddCarry(uint64_t a, uint64_t b, uint64_t* sum)
-{
-    uint64_t const s = a + b;
-    *sum = s;
-    return s < a;
-}
-
 DTOA_INLINE uint64_t Mul128(uint64_t a, uint64_t b, uint64_t* productHi)
 {
     uint32_t const aLo = static_cast<uint32_t>(a);
@@ -206,11 +195,11 @@ DTOA_INLINE uint64_t Mul128(uint64_t a, uint64_t b, uint64_t* productHi)
     uint64_t const b10 = uint64_t{aHi} * bLo;
     uint64_t const b11 = uint64_t{aHi} * bHi;
 
-    uint64_t midSum;
-    uint64_t const midSumCarry = AddCarry(b01, b10, &midSum);
+    uint64_t const midSum = b01 + b10;
+    uint64_t const midSumCarry = midSum < b01;
 
-    uint64_t productLo;
-    uint64_t const productLoCarry = AddCarry(b00, midSum << 32, &productLo);
+    uint64_t const productLo = b00 + (midSum << 32);
+    uint64_t const productLoCarry = productLo < b00;
 
     *productHi = b11 + (midSum >> 32) + (midSumCarry << 32) + productLoCarry;
     return productLo;
@@ -364,25 +353,57 @@ DTOA_INLINE Uint64x2 ComputePow5(int i)
 
         int const delta = Pow5BitLength(i) - Pow5BitLength(base2);
         DTOA_ASSERT(delta >= 0);
-        DTOA_ASSERT(delta <= 64);
+        DTOA_ASSERT(delta < 64);
 
 #if DTOA_HAS_UINT128
         __extension__ using uint128_t = unsigned __int128;
 
+#if 1
+        uint128_t const b0 = static_cast<uint128_t>(m) * mul.lo;
+        uint128_t const b2 = static_cast<uint128_t>(m) * mul.hi;
+
+        uint64_t const b0_lo = static_cast<uint64_t>(b0);
+        uint64_t const b0_hi = static_cast<uint64_t>(b0 >> 64);
+        uint64_t const b2_lo = static_cast<uint64_t>(b2);
+        uint64_t       b2_hi = static_cast<uint64_t>(b2 >> 64);
+
+        uint64_t const sum = b0_hi + b2_lo;
+        b2_hi += (sum < b0_hi);
+
+#if 1
+        uint64_t const lo = (b0_lo >> delta) | (sum   << (64 - delta));
+        uint64_t const hi = (sum   >> delta) | (b2_hi << (64 - delta));
+
+        result.lo = lo + adjust;
+        result.hi = hi;
+#else
+        uint128_t const c0 = (uint128_t{sum  } << 64) | b0_lo;
+        uint128_t const c1 = (uint128_t{b2_hi} << 64) | sum;
+
+        result.lo = static_cast<uint64_t>(c0 >> delta) + adjust;
+        result.hi = static_cast<uint64_t>(c1 >> delta);
+#endif
+#else
         uint128_t const b0 = static_cast<uint128_t>(m) * mul.lo;
         uint128_t const b2 = static_cast<uint128_t>(m) * mul.hi;
         uint128_t const shiftedSum = (b0 >> delta) + (b2 << (64 - delta)) + adjust;
 
         result.lo = static_cast<uint64_t>(shiftedSum);
         result.hi = static_cast<uint64_t>(shiftedSum >> 64);
+#endif
 #else
         uint64_t b0_hi;
         uint64_t b2_hi;
         uint64_t const b0_lo = Mul128(m, mul.lo, &b0_hi);
         uint64_t const b2_lo = Mul128(m, mul.hi, &b2_hi);
 
+#if DTOA_USE_64_BIT_CARRY_INTRINSICS
         uint64_t sum;
-        b2_hi += AddCarry(b0_hi, b2_lo, &sum);
+        _addcarryx_u64(_addcarryx_u64(0, b0_hi, b2_lo, &sum), b2_hi, 0, &b2_hi);
+#else
+        uint64_t const sum = b0_hi + b2_lo;
+        b2_hi += (sum < b0_hi);
+#endif
 
         result.lo = ShiftRight128(b0_lo, sum, delta) + adjust;
         result.hi = ShiftRight128(sum, b2_hi, delta);
@@ -422,20 +443,52 @@ DTOA_INLINE Uint64x2 ComputePow5Inv(int i)
 #if DTOA_HAS_UINT128
         __extension__ using uint128_t = unsigned __int128;
 
+#if 1
         uint128_t const b0 = static_cast<uint128_t>(m) * (mul.lo - 1);
         uint128_t const b2 = static_cast<uint128_t>(m) * (mul.hi    );
-        uint128_t const shiftedSum = ((b0 >> delta) + (b2 << (64 - delta))) + 1 + adjust;
+
+        uint64_t const b0_lo = static_cast<uint64_t>(b0);
+        uint64_t const b0_hi = static_cast<uint64_t>(b0 >> 64);
+        uint64_t const b2_lo = static_cast<uint64_t>(b2);
+        uint64_t       b2_hi = static_cast<uint64_t>(b2 >> 64);
+
+        uint64_t const sum = b0_hi + b2_lo;
+        b2_hi += (sum < b0_hi);
+
+#if 1
+        uint64_t const lo = (b0_lo >> delta) | (sum   << (64 - delta));
+        uint64_t const hi = (sum   >> delta) | (b2_hi << (64 - delta));
+
+        result.lo = lo + adjust;
+        result.hi = hi;
+#else
+        uint128_t const c0 = (uint128_t{sum  } << 64) | b0_lo;
+        uint128_t const c1 = (uint128_t{b2_hi} << 64) | sum;
+
+        result.lo = static_cast<uint64_t>(c0 >> delta) + adjust + 1;
+        result.hi = static_cast<uint64_t>(c1 >> delta);
+#endif
+#else
+        uint128_t const b0 = static_cast<uint128_t>(m) * (mul.lo - 1);
+        uint128_t const b2 = static_cast<uint128_t>(m) * (mul.hi    );
+        uint128_t const shiftedSum = (b0 >> delta) + (b2 << (64 - delta)) + 1 + adjust;
 
         result.lo = static_cast<uint64_t>(shiftedSum);
         result.hi = static_cast<uint64_t>(shiftedSum >> 64);
+#endif
 #else
         uint64_t b0_hi;
         uint64_t b2_hi;
         uint64_t const b0_lo = Mul128(m, mul.lo - 1, &b0_hi);
         uint64_t const b2_lo = Mul128(m, mul.hi,     &b2_hi);
 
+#if DTOA_USE_64_BIT_CARRY_INTRINSICS
         uint64_t sum;
-        b2_hi += AddCarry(b0_hi, b2_lo, &sum);
+        _addcarryx_u64(_addcarryx_u64(0, b0_hi, b2_lo, &sum), b2_hi, 0, &b2_hi);
+#else
+        uint64_t const sum = b0_hi + b2_lo;
+        b2_hi += (sum < b0_hi);
+#endif
 
         result.lo = ShiftRight128(b0_lo, sum, delta) + 1 + adjust;
         result.hi = ShiftRight128(sum, b2_hi, delta);
@@ -1127,7 +1180,19 @@ DTOA_INLINE uint64_t MulShift(uint64_t m, Uint64x2 mul, int j)
     uint128_t const b2 = static_cast<uint128_t>(m) * mul.hi;
 
     DTOA_ASSERT(j >= 64);
+#if 0
+//  uint64_t const b0_lo = static_cast<uint64_t>(b0);
+    uint64_t const b0_hi = static_cast<uint64_t>(b0 >> 64);
+    uint64_t const b2_lo = static_cast<uint64_t>(b2);
+    uint64_t       b2_hi = static_cast<uint64_t>(b2 >> 64);
+
+    uint64_t const sum = b0_hi + b2_lo;
+    b2_hi += (sum < b0_hi);
+
+    return ((uint128_t{b2_hi} << 64) | sum) >> (j - 64);
+#else
     return static_cast<uint64_t>(((b0 >> 64) + b2) >> (j - 64));
+#endif
 }
 
 DTOA_INLINE uint64_t MulShiftAll(uint64_t m2, Uint64x2 mul, int j, uint64_t* vp, uint64_t* vm, uint32_t mmShift)
@@ -1148,8 +1213,13 @@ DTOA_INLINE uint64_t MulShift(uint64_t m, Uint64x2 mul, int j)
 /*  uint64_t const b0_lo =*/ Mul128(m, mul.lo, &b0_hi);
     uint64_t const b2_lo =   Mul128(m, mul.hi, &b2_hi);
 
+#if DTOA_USE_64_BIT_CARRY_INTRINSICS
     uint64_t sum;
-    b2_hi += AddCarry(b0_hi, b2_lo, &sum);
+    _addcarryx_u64(_addcarryx_u64(0, b0_hi, b2_lo, &sum), b2_hi, 0, &b2_hi);
+#else
+    uint64_t const sum = b0_hi + b2_lo;
+    b2_hi += (sum < b0_hi);
+#endif
 
     return ShiftRight128(sum, b2_hi, j - 64);
 }
@@ -1224,13 +1294,13 @@ DTOA_INLINE int Log10Pow5(int e) // floor(log_10(5^e))
 
 DTOA_INLINE int ComputeQForNonNegativeExponent(int e)
 {
-    // return Max0(Log10Pow2(e) - 1);
+    //return Max0(Log10Pow2(e) - 1);
     return Log10Pow2(e) - (e > 3);
 }
 
 DTOA_INLINE int ComputeQForNegativeExponent(int e)
 {
-    // return Max0(Log10Pow5(e) - 1);
+    //return Max0(Log10Pow5(e) - 1);
     return Log10Pow5(e) - (e > 1);
 }
 
@@ -1455,12 +1525,11 @@ inline void DoubleToDecimal(char* next, char* last, int& num_digits, int& expone
 //      if (q <= 21) // Why 21?
         if (q <= 23) // 23 = floor(log_5(2^(53+2)))
         {
+            int const mv_pow5 = Pow5Factor(mv);
+            vrIsTrailingZeros = mv_pow5 >= q;
+
             // Only one of mp, mv, and mm can be a multiple of 5, if any.
-            if (mv % 5 == 0)
-            {
-                vrIsTrailingZeros = Pow5Factor(mv) >= q;
-            }
-            else
+            if (mv_pow5 == 0)
             {
                 if (acceptBounds)
                 {
