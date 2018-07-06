@@ -459,7 +459,7 @@ DTOA_INLINE Uint64x2 ComputePow5Inv(int i)
         uint64_t const lo = (b0_lo >> delta) | (sum   << (64 - delta));
         uint64_t const hi = (sum   >> delta) | (b2_hi << (64 - delta));
 
-        result.lo = lo + adjust;
+        result.lo = lo + adjust + 1;
         result.hi = hi;
 #else
         uint128_t const c0 = (uint128_t{sum  } << 64) | b0_lo;

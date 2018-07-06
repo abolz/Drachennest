@@ -7,8 +7,8 @@
 #endif
 #endif
 #if 1
-#define DTOA_OPTIMIZE_SIZE 0
-#define STRTOD_OPTIMIZE_SIZE 0
+#define DTOA_OPTIMIZE_SIZE 1
+#define STRTOD_OPTIMIZE_SIZE 1
 #include "../src/ryu.h"
 #include "../src/strtod_0.h"
 #else
