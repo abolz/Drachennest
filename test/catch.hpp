@@ -9582,18 +9582,21 @@ namespace Detail {
 
 template<typename T>
 std::string fpToString( T value, int precision ) {
-    std::ostringstream oss;
-    oss << std::setprecision( precision )
-        << std::fixed
-        << value;
-    std::string d = oss.str();
-    std::size_t i = d.find_last_not_of( '0' );
-    if( i != std::string::npos && i != d.size()-1 ) {
-        if( d[i] == '.' )
-            i++;
-        d = d.substr( 0, i+1 );
-    }
-    return d;
+    char buf[32];
+    std::snprintf(buf, 32, "%.*g", precision, value);
+    return buf;
+    //std::ostringstream oss;
+    //oss << std::setprecision( precision )
+    //    << std::fixed
+    //    << value;
+    //std::string d = oss.str();
+    //std::size_t i = d.find_last_not_of( '0' );
+    //if( i != std::string::npos && i != d.size()-1 ) {
+    //    if( d[i] == '.' )
+    //        i++;
+    //    d = d.substr( 0, i+1 );
+    //}
+    //return d;
 }
 
 //// ======================================================= ////
@@ -9726,10 +9729,10 @@ std::string StringMaker<std::nullptr_t>::convert(std::nullptr_t) {
 }
 
 std::string StringMaker<float>::convert(float value) {
-    return fpToString(value, 5) + 'f';
+    return fpToString(value, 9) + 'f';
 }
 std::string StringMaker<double>::convert(double value) {
-    return fpToString(value, 10);
+    return fpToString(value, 17);
 }
 
 } // end namespace Catch

@@ -1,14 +1,67 @@
-#include "base_conv.h"
+// #include "floaxie.h"
+#include "grisu2.h"
+// #include "milo.h"
 
 #include "catch.hpp"
 
 #include <string>
 #include <limits>
+#include <iostream>
 
 #include <double-conversion/double-conversion.h>
 
 #define USE_DOUBLE_CONVERSION_DTOA 0
 #define TEST_HEX 0
+#define TEST_STRTOD_FOR_SINGLE 0
+
+static inline char* Float32ToChars(char* buf, int buflen, float f)
+{
+    auto const& f2s = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
+    double_conversion::StringBuilder builder(buf, buflen);
+    f2s.ToShortestSingle(f, &builder);
+    int const length = builder.position();
+    builder.Finalize();
+    return buf + length;
+}
+
+static inline char* Float64ToChars(char* buf, int buflen, double f)
+{
+    auto const& f2s = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
+    double_conversion::StringBuilder builder(buf, buflen);
+    f2s.ToShortest(f, &builder);
+    int const length = builder.position();
+    builder.Finalize();
+    return buf + length;
+}
+
+static inline std::string Float32ToString(float f)
+{
+    char buf[32];
+    Float32ToChars(buf, 32, f);
+    return buf;
+}
+
+static inline std::string Float64ToString(double f)
+{
+    char buf[32];
+    Float64ToChars(buf, 64, f);
+    return buf;
+}
+
+static inline char* Dtoa(char* next, char* last, double value)
+{
+    // return Float64ToChars(next, (int)(last - next), value);
+    return grisu2_Dtoa(next, last, value);
+    // return milo_Dtoa(next, last, value);
+    // return floaxie_Dtoa(next, last, value);         // FAIL: incorrect (lower) boundary ?!!! TODO: https://github.com/aclex/floaxie/issues
+}
+
+static inline char* Ftoa(char* next, char* last, float value)
+{
+    // return Float32ToChars(next, (int)(last - next), value);
+    return grisu2_Ftoa(next, last, value);
+    // return floaxie_Ftoa(next, last, value);         // FAIL: incorrect (lower) boundary ?!!! TODO: https://github.com/aclex/floaxie/issues
+}
 
 template <typename Dest, typename Source>
 inline Dest ReinterpretBits(Source source)
@@ -35,7 +88,7 @@ static bool CheckSingle(float f)
 #else
         char buf[32];
         char* first = buf;
-        char* last  = base_conv_Dtoa(first, first + 32, f);
+        char* last  = Ftoa(first, first + 32, f);
         *last = '\0';
         int const length = static_cast<int>(last - first);
 #endif
@@ -43,14 +96,29 @@ static bool CheckSingle(float f)
         double_conversion::StringToDoubleConverter s2f(0, 0.0, 0.0, "inf", "nan");
 
         int processed_characters_count = 0;
-        auto const f_out = s2f.StringToFloat(buf, length, &processed_characters_count);
+        {
+            auto const f_out = s2f.StringToFloat(buf, length, &processed_characters_count);
 
-        const uint32_t f_bits = ReinterpretBits<uint32_t>(f);
-        const uint32_t f_out_bits = ReinterpretBits<uint32_t>(f_out);
-        CAPTURE(f_bits);
-        CAPTURE(f_out_bits);
-        CAPTURE(&buf[0]);
-        CHECK(f == f_out);
+            const uint32_t f_bits = ReinterpretBits<uint32_t>(f);
+            const uint32_t f_out_bits = ReinterpretBits<uint32_t>(f_out);
+            CAPTURE(f_bits);
+            CAPTURE(f_out_bits);
+            CAPTURE(&buf[0]);
+            CHECK(f == f_out);
+        }
+#if TEST_STRTOD_FOR_SINGLE
+        {
+            auto const d_out = s2f.StringToDouble(buf, length, &processed_characters_count);
+            auto const f_out = static_cast<float>(d_out);
+
+            const uint32_t f_bits = ReinterpretBits<uint32_t>(f);
+            const uint32_t f_out_bits = ReinterpretBits<uint32_t>(f_out);
+            CAPTURE(f_bits);
+            CAPTURE(f_out_bits);
+            CAPTURE(&buf[0]);
+            CHECK(f == f_out);
+        }
+#endif
     }
 
 #if TEST_HEX
@@ -97,9 +165,10 @@ static bool CheckDouble(double f)
 #else
         char buf[32];
         char* first = buf;
-        char* last  = base_conv_Dtoa(first, first + 32, f);
+        char* last  = Dtoa(first, first + 32, f);
         *last = '\0';
         int const length = static_cast<int>(last - first);
+#if 0
         {
             auto const& f2s = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
 
@@ -110,6 +179,7 @@ static bool CheckDouble(double f)
 
             CHECK(std::string(buf) == std::string(bufdc));
         }
+#endif
 #endif
 
         double_conversion::StringToDoubleConverter s2f(0, 0.0, 0.0, "inf", "nan");
@@ -151,7 +221,7 @@ static std::string Dtostr(float value, bool force_trailing_dot_zero = false)
 {
     char buf[32];
     char* first = buf;
-    char* last  = base_conv_Dtoa(first, first + 32, value, force_trailing_dot_zero);
+    char* last  = grisu2_Dtoa(first, first + 32, value, force_trailing_dot_zero);
     return {first, last};
 }
 
@@ -159,7 +229,7 @@ static std::string Dtostr(double value, bool force_trailing_dot_zero = false)
 {
     char buf[32];
     char* first = buf;
-    char* last  = base_conv_Dtoa(first, first + 32, value, force_trailing_dot_zero);
+    char* last  = grisu2_Dtoa(first, first + 32, value, force_trailing_dot_zero);
     return {first, last};
 }
 
@@ -259,6 +329,11 @@ static double MakeDouble(uint64_t f, int e)
 
 #define CHECK_SINGLE(VALUE) CHECK(CheckSingle(VALUE))
 #define CHECK_DOUBLE(VALUE) CHECK(CheckDouble(VALUE))
+
+TEST_CASE("Single - xxx")
+{
+    CHECK_SINGLE(7.0385307e-26f);
+}
 
 TEST_CASE("Dtoa - single 1")
 {
@@ -433,25 +508,7 @@ TEST_CASE("Dtoa format trailing dot-zero")
     CHECK("10.0" == Dtostr(10.0, true));
 }
 
-TEST_CASE("From Ryu")
-{
-    // SwitchToSubnormal
-    CHECK_DOUBLE(2.2250738585072014E-308);
-
-    // LotsOfTrailingZeros
-    CHECK_DOUBLE(2.98023223876953125E-8);
-
-    // Regression
-    CHECK_DOUBLE(-2.109808898695963E16);
-    CHECK_DOUBLE(4.940656E-318);
-    CHECK_DOUBLE(1.18575755E-316);
-    CHECK_DOUBLE(2.989102097996E-312);
-    CHECK_DOUBLE(9.0608011534336E15);
-    CHECK_DOUBLE(4.708356024711512E18);
-    CHECK_DOUBLE(9.409340012568248E18);
-}
-
-TEST_CASE("Bugs")
-{
-    CHECK("1.2345e+21" == Dtostr(1.2345e+21));
-}
+//TEST_CASE("XXX")
+//{
+//    CHECK("1.2345e+21" == Dtostr(1.2345e+21));
+//}

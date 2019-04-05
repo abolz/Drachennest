@@ -1,0 +1,42 @@
+Run on (4 X 1992 MHz CPU s)
+CPU Caches:
+  L1 Data 32K (x2)
+  L1 Instruction 32K (x2)
+  L2 Unified 262K (x2)
+  L3 Unified 3145K (x1)
+--------------------------------------------------------------------
+Benchmark                             Time           CPU Iterations
+--------------------------------------------------------------------
+BM_RandomBits_double                100 ns        100 ns    6400000
+BM_RandomBits_double                100 ns        100 ns    6400000
+BM_RandomBits_double                 98 ns         98 ns    6400000
+BM_RandomDigit/_1_1                  37 ns         37 ns   18666667
+BM_RandomDigit/_1_2                  47 ns         47 ns   14933333
+BM_RandomDigit/_1_3                  46 ns         46 ns   14451613
+BM_RandomDigit/_1_4                  46 ns         46 ns   15448276
+BM_RandomDigit/_1_5                  40 ns         40 ns   17230769
+BM_RandomDigit/_1_6                  42 ns         42 ns   16592593
+BM_RandomDigit/_1_7                  46 ns         46 ns   15448276
+BM_RandomDigit/_1_8                  50 ns         50 ns   10000000
+BM_RandomDigit/_1_9                  46 ns         46 ns   14933333
+BM_RandomDigit/_1_10                 49 ns         49 ns   14451613
+BM_RandomDigit/_1_11                 52 ns         52 ns   10000000
+BM_RandomDigit/_1_12                 55 ns         55 ns   10000000
+BM_RandomDigit/_1_13                 56 ns         56 ns   11200000
+BM_RandomDigit/_1_14                 60 ns         60 ns   11200000
+BM_RandomDigit/_1_15                 61 ns         61 ns   11200000
+BM_RandomDigit/_1_over_10e8          45 ns         45 ns   16000000
+BM_RandomDigit/_2_over_10e8          52 ns         52 ns   10000000
+BM_RandomDigit/_3_over_10e8          59 ns         59 ns   11200000
+BM_RandomDigit/_4_over_10e8          61 ns         61 ns   10000000
+BM_RandomDigit/_5_over_10e8          60 ns         60 ns   11200000
+BM_RandomDigit/_6_over_10e8          47 ns         47 ns   11200000
+BM_RandomDigit/_7_over_10e8          50 ns         50 ns   10000000
+BM_RandomDigit/_8_over_10e8          44 ns         45 ns   15448276
+BM_RandomDigit/_9_over_10e8          47 ns         47 ns   15448276
+BM_RandomDigit/_10_over_10e8         47 ns         47 ns   15448276
+BM_RandomDigit/_11_over_10e8         49 ns         49 ns   14451613
+BM_RandomDigit/_12_over_10e8         48 ns         48 ns   14451613
+BM_RandomDigit/_13_over_10e8         59 ns         59 ns   11200000
+BM_RandomDigit/_14_over_10e8         59 ns         59 ns   11200000
+BM_RandomDigit/_15_over_10e8         59 ns         59 ns   11200000

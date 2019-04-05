@@ -1,8 +1,7 @@
 /.vs/
 /.vscode/
 /backups/
-/bench/
 /build/
 /doc/
-/ext/benchmark/
 /scratch/
+/vs/

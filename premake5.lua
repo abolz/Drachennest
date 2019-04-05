@@ -34,13 +34,13 @@ workspace "Grisu"
     configuration { "release" }
         defines { "NDEBUG" }
         symbols "On" -- for profiling...
-        optimize "Full"
+        optimize "On"
             -- On ==> -O2
             -- Full ==> -O3
 
     configuration { "gmake" }
         buildoptions {
-            "-std=c++11",
+            "-std=c++14",
             "-march=native",
             "-Wformat",
             -- "-Wsign-compare",
@@ -88,9 +88,14 @@ workspace "Grisu"
             }
     else
         configuration { "gmake" }
-            buildoptions {
-                "-std=c++11",
-            }
+            -- buildoptions {
+            --     "-std=c++17",
+            -- }
+        configuration { "vs*" }
+            -- buildoptions {
+            --     "/std:c++latest",
+            --     -- "/arch:AVX2",
+            -- }
     end
 
     if _OPTIONS["linkflags"] then
@@ -102,23 +107,6 @@ workspace "Grisu"
 
 --------------------------------------------------------------------------------
 group "Libs"
-
---project "absl"
---    language "C++"
---    kind "StaticLib"
---    files {
---        "ext/absl/**.cc",
---        "ext/absl/**.h",
---    }
---    excludes {
---        "ext/absl/**_test*.cc",
---        "ext/absl/**_test*.h",
---        "ext/absl/**_benchmark*.cc",
---        "ext/absl/**_benchmark*.h",
---    }
---    includedirs {
---        "ext/",
---    }
 
 project "benchmark"
     language "C++"
@@ -149,17 +137,19 @@ project "test"
     language "C++"
     kind "ConsoleApp"
     files {
-        "src/**.h",
+        -- "lib/**.cc",
+        -- "lib/**.h",
+        "lib/grisu2.cc",
+        "lib/grisu2.h",
         "src/**.cc",
-        "test/base_conv.h",
-        "test/base_conv.cc",
-        "test/catch.hpp",
+        "src/**.h",
         "test/catch_main.cc",
+        "test/catch.hpp",
         "test/test_dtoa.cc",
-        "test/test_strtod.cc",
     }
     includedirs {
         "ext/",
+        "lib/",
     }
     links {
         "double-conversion",
@@ -170,73 +160,23 @@ project "test"
             "-Wsign-conversion",
         }
 
--- project "test_all_float32"
---     language "C++"
---     kind "ConsoleApp"
---     files {
---         "src/**.h",
---         "src/**.cc",
---         "test/test_all_float32.cc",
---     }
---     includedirs {
---         "ext/",
---     }
---     links {
---         "double-conversion",
---     }
-
--- project "test_float64"
---     language "C++"
---     kind "ConsoleApp"
---     files {
---         "src/**.h",
---         "src/**.cc",
---         "test/test_float64.cc",
---     }
---     includedirs {
---         "ext/",
---     }
---     links {
---         "double-conversion",
---     }
-
---project "bench_dtoa"
---    language "C++"
---    kind "ConsoleApp"
---    files {
---        "src/**.h",
---        "src/**.cc",
---        "test/base_conv.h",
---        "test/base_conv.cc",
---        "bench/bench_dtoa.cc",
---    }
---    includedirs {
---        "ext/",
---        "test/",
---    }
---    links {
---        "benchmark",
---        "double-conversion",
---    }
---    configuration { "windows" }
---        links { "shlwapi" }
---
---project "bench_strtod"
---    language "C++"
---    kind "ConsoleApp"
---    files {
---        "src/**.h",
---        "src/**.cc",
---        "test/base_conv.h",
---        "test/base_conv.cc",
---        "bench/bench_strtod.cc",
---    }
---    includedirs {
---        "ext/",
---        "test/",
---    }
---    links {
---        "benchmark",
---    }
---    configuration { "windows" }
---        links { "shlwapi" }
+project "bench_dtoa"
+    language "C++"
+    kind "ConsoleApp"
+    files {
+        "bench/bench_dtoa.cc",
+        "lib/**.cc",
+        "lib/**.h",
+        "src/**.cc",
+        "src/**.h",
+    }
+    includedirs {
+        "ext/",
+        "lib/",
+    }
+    links {
+        "benchmark",
+        "double-conversion",
+    }
+    configuration { "windows" }
+        links { "shlwapi" }
