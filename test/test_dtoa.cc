@@ -1,4 +1,5 @@
 // #include "floaxie.h"
+// #include "fmt.h"
 #include "grisu2.h"
 // #include "milo.h"
 
@@ -50,17 +51,35 @@ static inline std::string Float64ToString(double f)
 
 static inline char* Dtoa(char* next, char* last, double value)
 {
-    // return Float64ToChars(next, (int)(last - next), value);
-    return grisu2_Dtoa(next, last, value);
-    // return milo_Dtoa(next, last, value);
-    // return floaxie_Dtoa(next, last, value);         // FAIL: incorrect (lower) boundary ?!!! TODO: https://github.com/aclex/floaxie/issues
+    // char* end = Float64ToChars(next, (int)(last - next), value);
+    char* end = grisu2_Dtoa(next, last, value);
+    // char* end = milo_Dtoa(next, last, value);
+    // char* end = fmt_Dtoa(next, last, value);
+    // char* end = floaxie_Dtoa(next, last, value);         // FAIL: incorrect (lower) boundary ?!!! TODO: https://github.com/aclex/floaxie/issues
+    end[0] = '\0';
+    return end;
+}
+static inline std::string Dtoa(double value)
+{
+    char buf[32];
+    Dtoa(buf, buf + 32, value);
+    return buf;
 }
 
 static inline char* Ftoa(char* next, char* last, float value)
 {
-    // return Float32ToChars(next, (int)(last - next), value);
-    return grisu2_Ftoa(next, last, value);
-    // return floaxie_Ftoa(next, last, value);         // FAIL: incorrect (lower) boundary ?!!! TODO: https://github.com/aclex/floaxie/issues
+    // char* end = Float32ToChars(next, (int)(last - next), value);
+    char* end = grisu2_Ftoa(next, last, value);
+    // char* end = fmt_Ftoa(next, last, value);
+    // char* end = floaxie_Ftoa(next, last, value);         // FAIL: incorrect (lower) boundary ?!!! TODO: https://github.com/aclex/floaxie/issues
+    end[0] = '\0';
+    return end;
+}
+static inline std::string Ftoa(float value)
+{
+    char buf[32];
+    Ftoa(buf, buf + 32, value);
+    return buf;
 }
 
 template <typename Dest, typename Source>
@@ -507,8 +526,3 @@ TEST_CASE("Dtoa format trailing dot-zero")
     CHECK("10" == Dtostr(10.0, false));
     CHECK("10.0" == Dtostr(10.0, true));
 }
-
-//TEST_CASE("XXX")
-//{
-//    CHECK("1.2345e+21" == Dtostr(1.2345e+21));
-//}

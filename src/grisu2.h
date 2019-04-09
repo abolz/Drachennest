@@ -1,32 +1,23 @@
-// Copyright 2009 Florian Loitsch
-// Copyright 2017 Alexander Bolz
+// Copyright 2019 Alexander Bolz
 //
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
+//     http://www.apache.org/licenses/LICENSE-2.0
 //
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-// SOFTWARE.
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #pragma once
 
 #include <cassert>
 #include <cstdint>
 #include <cstring>
-#include <climits>
 #include <limits>
-#include <type_traits>
 #ifdef _MSC_VER
 #include <intrin.h>
 #endif
@@ -45,13 +36,9 @@ namespace {
 namespace grisu2 {
 
 //==================================================================================================
-// DoubleToDecimal
+// DoubleToDigits
 //
 // Implements the Grisu2 algorithm for (IEEE) binary to decimal floating-point conversion.
-//
-// This implementation is a slightly modified version of the reference
-// implementation by Florian Loitsch which can be obtained from
-// http://florian.loitsch.com/publications (bench.tar.gz)
 //
 // References:
 //
@@ -104,14 +91,6 @@ struct DiyFp // f * 2^e
     constexpr DiyFp() = default;
     constexpr DiyFp(uint64_t f_, int e_) : f(f_), e(e_) {}
 };
-
-// Returns whether the given floating point value is normalized.
-inline bool IsNormalized(DiyFp x)
-{
-    static_assert(DiyFp::SignificandSize == 64, "internal error");
-
-    return x.f >= (uint64_t{1} << 63);
-}
 
 // Returns x - y.
 // PRE: x.e == y.e and x.f >= y.f
@@ -228,6 +207,12 @@ inline DiyFp NormalizeTo(DiyFp x, int e)
     return DiyFp(x.f << delta, e);
 }
 
+template <int Precision>
+struct BitsType;
+
+template <> struct BitsType<24> { using type = uint32_t; };
+template <> struct BitsType<53> { using type = uint64_t; };
+
 template <typename Float>
 struct IEEE
 {
@@ -239,18 +224,18 @@ struct IEEE
         "IEEE-754 single- or double-precision implementation required");
 
     using value_type = Float;
-    using bits_type = typename std::conditional<std::numeric_limits<Float>::digits == 24, uint32_t, uint64_t>::type;
+    using bits_type = typename BitsType<std::numeric_limits<Float>::digits>::type;
 
     static constexpr int       SignificandSize         = std::numeric_limits<value_type>::digits; // = p   (includes the hidden bit)
     static constexpr int       PhysicalSignificandSize = SignificandSize - 1;                     // = p-1 (excludes the hidden bit)
     static constexpr int       UnbiasedMinExponent     = 1;
-    static constexpr int       UnbiasedMaxExponent     = 2 * std::numeric_limits<Float>::max_exponent - 1 - 1;
-    static constexpr int       ExponentBias            = 2 * std::numeric_limits<Float>::max_exponent / 2 - 1 + (SignificandSize - 1);
+    static constexpr int       UnbiasedMaxExponent     = 2 * std::numeric_limits<value_type>::max_exponent - 1 - 1;
+    static constexpr int       ExponentBias            = std::numeric_limits<value_type>::max_exponent - 1 + (SignificandSize - 1);
     static constexpr int       MinExponent             = UnbiasedMinExponent - ExponentBias;
     static constexpr int       MaxExponent             = UnbiasedMaxExponent - ExponentBias;
     static constexpr bits_type HiddenBit               = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
     static constexpr bits_type SignificandMask         = HiddenBit - 1;                           // = 2^(p-1) - 1
-    static constexpr bits_type ExponentMask            = bits_type{2 * std::numeric_limits<Float>::max_exponent - 1} << PhysicalSignificandSize;
+    static constexpr bits_type ExponentMask            = bits_type{2 * std::numeric_limits<value_type>::max_exponent - 1} << PhysicalSignificandSize;
     static constexpr bits_type SignMask                = ~(~bits_type{0} >> 1);
 
     bits_type bits;
@@ -361,11 +346,10 @@ inline Boundaries ComputeBoundaries(Float value)
 
     auto const v = DiyFpFromFloat(value);
 
-    auto const m_minus_shift = (v.f == Fp::HiddenBit && v.e > Fp::MinExponent) ? 1u : 0u;
-
     // Compute the boundaries of v.
+    auto const lower_boundary_is_closer = (v.f == Fp::HiddenBit && v.e > Fp::MinExponent);
+    auto const m_minus = DiyFp(4*v.f - 2 + lower_boundary_is_closer, v.e - 2);
     auto const m_plus = DiyFp(4*v.f + 2, v.e - 2);
-    auto const m_minus = DiyFp(4*v.f - 2 + m_minus_shift, v.e - 2);
 
     // Determine the normalized w = v.
     auto const w = Normalize(v);
@@ -474,6 +458,8 @@ constexpr int kGamma = -32;
 //           -11        (normalize the DiyFp)
 //         = 960
 //
+// For IEEE single-precision the range is [-180, 96].
+//
 // This binary exponent range [-1137,960] results in a decimal exponent range
 // [-307,324]. One does not need to store a cached power for each k in this
 // range. For each such k it suffices to find a cached power such that the
@@ -527,7 +513,7 @@ inline CachedPower GetCachedPower(int index)
     // Negative powers of 10 are stored as: f = round_up(2^-e / 10^-k).
     // Positive powers of 10 are stored as: f = round_up(10^k / 2^e).
     static constexpr uint64_t kSignificands[/*632 bytes*/] = {
-        0xAB70FE17C79AC6CA, // e = -1060, k = -300 >>> double-precision (-1060 + 960 + 64 = -36)
+        0xAB70FE17C79AC6CA, // e = -1060, k = -300 >>> double-precision
         0xFF77B1FCBEBCDC4F, // e = -1034, k = -292
         0xBE5691EF416BD60C, // e = -1007, k = -284
         0x8DD01FAD907FFC3C, // e =  -980, k = -276
@@ -559,8 +545,8 @@ inline CachedPower GetCachedPower(int index)
         0x8A08F0F8BF0F156B, // e =  -289, k =  -68
         0xCDB02555653131B6, // e =  -263, k =  -60
         0x993FE2C6D07B7FAC, // e =  -236, k =  -52
-        0xE45C10C42A2B3B06, // e =  -210, k =  -44
-        0xAA242499697392D3, // e =  -183, k =  -36 >>> single-precision (-183 + 80 + 64 = -39)
+        0xE45C10C42A2B3B06, // e =  -210, k =  -44 >>> single-precision
+        0xAA242499697392D3, // e =  -183, k =  -36
         0xFD87B5F28300CA0E, // e =  -157, k =  -28
         0xBCE5086492111AEB, // e =  -130, k =  -20
         0x8CBCCC096F5088CC, // e =  -103, k =  -12
@@ -569,8 +555,8 @@ inline CachedPower GetCachedPower(int index)
         0xE8D4A51000000000, // e =   -24, k =   12
         0xAD78EBC5AC620000, // e =     3, k =   20
         0x813F3978F8940984, // e =    30, k =   28
-        0xC097CE7BC90715B3, // e =    56, k =   36
-        0x8F7E32CE7BEA5C70, // e =    83, k =   44 <<< single-precision (83 - 196 + 64 = -49)
+        0xC097CE7BC90715B3, // e =    56, k =   36 <<< single-precision
+        0x8F7E32CE7BEA5C70, // e =    83, k =   44
         0xD5D238A4ABE98068, // e =   109, k =   52
         0x9F4F2726179A2245, // e =   136, k =   60
         0xED63A231D4C4FB27, // e =   162, k =   68
@@ -605,7 +591,7 @@ inline CachedPower GetCachedPower(int index)
         0xBF21E44003ACDD2D, // e =   933, k =  300
         0x8E679C2F5E44FF8F, // e =   960, k =  308
         0xD433179D9C8CB841, // e =   986, k =  316
-        0x9E19DB92B4E31BA9, // e =  1013, k =  324 <<< double-precision (1013 - 1137 + 64 = -60)
+        0x9E19DB92B4E31BA9, // e =  1013, k =  324 <<< double-precision
     };
 
     GRISU2_ASSERT(index >= 0);
@@ -625,7 +611,10 @@ inline CachedPower GetCachedPower(int index)
 //
 inline CachedPower GetCachedPowerForBinaryExponent(int e)
 {
-    // For double: -1137 <= e <= 960 ==> -307 <= k <= 324
+    // For double: -1137 <= e <= 960 ==> -307 <= k <= 324 ==>  0 <= index <= 78
+    // For single:  -180 <= e <=  96 ==>  -47 <= k <= 36  ==> 32 <= index <= 42
+    GRISU2_ASSERT(e >= -1137);
+    GRISU2_ASSERT(e <=   960);
 
     int const k = CeilLog10Pow2(kAlpha - e - 1);
     GRISU2_ASSERT(k >= kCachedPowersMinDecExp - (kCachedPowersDecExpStep - 1));
@@ -697,12 +686,12 @@ L_2_digits:
         return buf;
     }
 
-    if (n >=  1000000) goto L_7_digits;
-    if (n >=   100000) goto L_6_digits;
-    if (n >=    10000) goto L_5_digits;
-    if (n >=     1000) goto L_4_digits;
-    if (n >=      100) goto L_3_digits;
-    if (n >=       10) goto L_2_digits;
+    if (n >= 1000000) goto L_7_digits;
+    if (n >=  100000) goto L_6_digits;
+    if (n >=   10000) goto L_5_digits;
+    if (n >=    1000) goto L_4_digits;
+    if (n >=     100) goto L_3_digits;
+    if (n >=      10) goto L_2_digits;
     goto L_1_digit;
 }
 
@@ -788,10 +777,10 @@ inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L
     // This routine generates the digits of H from left to right and stops as
     // soon as V is in [L, H].
 
-    GRISU2_ASSERT(w.e >= kAlpha);
-    GRISU2_ASSERT(w.e <= kGamma);
-    GRISU2_ASSERT(w.e == L.e);
-    GRISU2_ASSERT(w.e == H.e);
+    GRISU2_ASSERT(H.e >= kAlpha);
+    GRISU2_ASSERT(H.e <= kGamma);
+    GRISU2_ASSERT(H.e == L.e);
+    GRISU2_ASSERT(H.e == w.e);
 
     uint64_t distance = Subtract(H, w).f; // (significand of (H - w), implicit exponent is e)
     uint64_t delta    = Subtract(H, L).f; // (significand of (H - L), implicit exponent is e)
@@ -890,7 +879,7 @@ inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L
             //        = digits * 10^-m + 10^-m * (1/10 * (10 * p2)                   ) * 2^e
             //        = digits * 10^-m + 10^-m * (1/10 * ((10*p2 div 2^-e) * 2^-e + (10*p2 mod 2^-e)) * 2^e
             //
-            GRISU2_ASSERT(p2 <= UINT64_MAX / 10);
+            GRISU2_ASSERT(p2 <= 0xFFFFFFFFFFFFFFFFull / 10);
             p2 *= 10;
             uint64_t const d = p2 >> -one.e;     // d = (10 * p2) div 2^-e
             uint64_t const r = p2 & (one.f - 1); // r = (10 * p2) mod 2^-e
@@ -1002,8 +991,8 @@ inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L
 // The buffer must be large enough, i.e. >= max_digits10.
 inline void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, DiyFp v, DiyFp m_plus)
 {
-    GRISU2_ASSERT(v.e == m_minus.e);
-    GRISU2_ASSERT(v.e == m_plus.e);
+    GRISU2_ASSERT(m_plus.e == m_minus.e);
+    GRISU2_ASSERT(m_plus.e == v.e);
 
     //  --------+-----------------------+-----------------------+--------    (A)
     //          m-                      v                       m+
@@ -1014,7 +1003,7 @@ inline void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, 
     // First scale v (and m- and m+) such that the exponent is in the range
     // [alpha, gamma].
 
-    auto const cached = GetCachedPowerForBinaryExponent(v.e);
+    auto const cached = GetCachedPowerForBinaryExponent(m_plus.e);
 
     DiyFp const c_minus_k(cached.f, cached.e); // = c ~= 10^-k
 
@@ -1024,8 +1013,8 @@ inline void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, 
 
     // The exponent of the products is = v.e + c_minus_k.e + q and is in the
     // range [alpha, gamma].
-    GRISU2_ASSERT(w.e >= kAlpha);
-    GRISU2_ASSERT(w.e <= kGamma);
+    GRISU2_ASSERT(w_plus.e >= kAlpha);
+    GRISU2_ASSERT(w_plus.e <= kGamma);
 
     // Note:
     // The result of Multiply() is **NOT** neccessarily normalized.
@@ -1086,17 +1075,21 @@ inline char* DoubleToDigits(char* next, char* last, int& num_digits, int& expone
     GRISU2_ASSERT(value > 0);
     static_cast<void>(last); // Fix warning
 
-#if 0
-    // If the neighbors (and boundaries) of 'value' are always computed for
-    // double-precision numbers, all float's can be recovered using strtod
-    // (and strtof). However, the resulting decimal representations are not
-    // exactly "short".
-    auto const boundaries = grisu2::impl::ComputeBoundaries(static_cast<double>(value));
-#else
-    // If the neighbors are computed for single-precision numbers, there is a
-    // single float (7.0385307e-26f) which can't be recovered using strtod (instead of strtof).
+    // Compute the boundaries of 'value'.
+    // These boundaries obviously depend on the type 'Float'.
+    //
+    // If the boundaries of 'value' are always computed for double-precision numbers, regardless of
+    // type of 'Float', all single-precision numbers can be recovered using strtod (and strtof).
+    // However, the resulting decimal representations are not exactly "short".
+    //
+    // On the other hand, if the boundaries are computed for single-precision numbers, there is a
+    // single number (7.0385307e-26f) which can't be recovered using strtod (instead of strtof).
     // The resulting 'double' when cast to 'float' is off by 1 ulp, i.e. for f = 7.0385307e-26f,
     //      f != (float)strtod(ftoa(f))
+    // For all other single-precision numbers, equality holds.
+#if 0
+    auto const boundaries = grisu2::impl::ComputeBoundaries(static_cast<double>(value));
+#else
     auto const boundaries = grisu2::impl::ComputeBoundaries(value);
 #endif
 
@@ -1261,11 +1254,7 @@ inline char* PositiveDtoa(char* next, char* last, Float value, bool force_traili
     grisu2::DoubleToDigits(next, last, num_digits, exponent, value);
 
     // Grisu2 generates at most max_digits10 decimal digits.
-#if 0
-    GRISU2_ASSERT(num_digits <= std::numeric_limits<double>::max_digits10);
-#else
     GRISU2_ASSERT(num_digits <= std::numeric_limits<Float>::max_digits10);
-#endif
 
     // The position of the decimal point relative to the start of the buffer.
     int const decimal_point = num_digits + exponent;
@@ -1330,7 +1319,7 @@ constexpr int kDtoaMaxLength = 1/* minus-sign */ + kPositiveDtoaMaxLength;
 //
 // PRE: The buffer must be large enough.
 // Note:
-//   Max(1 + kPositiveDtoaMaxLength, len(nan_string), 1 + len(inf_string))
+//   Max(kDtoaMaxLength, strlen(nan_string), 1 + strlen(inf_string))
 // is sufficient.
 //
 // Note: The result is _not_ null-terminated.
@@ -1343,13 +1332,13 @@ inline char* Dtoa(
     char const* nan_string = "NaN",
     char const* inf_string = "Infinity")
 {
+    using Fp = grisu2::impl::IEEE<Float>;
+
     GRISU2_ASSERT(last - next >= kDtoaMaxLength);
     GRISU2_ASSERT(nan_string != nullptr);
     GRISU2_ASSERT(inf_string != nullptr);
-    GRISU2_ASSERT(std::strlen(nan_string) <= size_t{kPositiveDtoaMaxLength});
-    GRISU2_ASSERT(std::strlen(inf_string) <= size_t{kPositiveDtoaMaxLength});
 
-    grisu2::impl::IEEE<Float> const v(value);
+    Fp const v(value);
 
     if (!v.IsFinite())
     {
