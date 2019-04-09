@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "floaxie.h"
+//#include "fmt.h"
 #include "grisu2.h"
 #include "milo.h"
 
@@ -74,6 +75,15 @@ static inline char* Dtoa(char* buffer, int buffer_length, double value)
     return grisu2_Dtoa(buffer, buffer + buffer_length, value);
     //return milo_Dtoa(buffer, buffer + buffer_length, value);
     //return floaxie_Dtoa(buffer, buffer + buffer_length, value);
+    //return fmt_Dtoa(buffer, buffer + buffer_length, value);
+    //return std::to_chars(buffer, buffer + buffer_length, value, std::chars_format::general).ptr;
+}
+
+static inline char* Ftoa(char* buffer, int buffer_length, float value)
+{
+    return grisu2_Ftoa(buffer, buffer + buffer_length, value);
+    //return fmt_Ftoa(buffer, buffer + buffer_length, value);
+    //return floaxie_Ftoa(buffer, buffer + buffer_length, value);
     //return std::to_chars(buffer, buffer + buffer_length, value, std::chars_format::general).ptr;
 }
 
@@ -338,6 +348,53 @@ BENCHMARK_CAPTURE(BM_RandomDigit, _12_over_10e8, 12, 1e8);
 BENCHMARK_CAPTURE(BM_RandomDigit, _13_over_10e8, 13, 1e8);
 BENCHMARK_CAPTURE(BM_RandomDigit, _14_over_10e8, 14, 1e8);
 BENCHMARK_CAPTURE(BM_RandomDigit, _15_over_10e8, 15, 1e8);
+
+#endif
+
+//--------------------------------------------------------------------------------------------------
+//
+//--------------------------------------------------------------------------------------------------
+#if 1
+
+static void BM_RandomDigit32(benchmark::State& state, int digits, float scale)
+{
+    assert(digits >= 1);
+    assert(digits <= 7);
+
+    constexpr int const NumFloats = 1 << 12;
+
+    if (scale <= 0)
+        scale = static_cast<float>(kPow10[digits - 1]);
+
+    std::uniform_int_distribution<int32_t> gen(kPow10[digits - 1], kPow10[digits] - 1);
+    std::vector<float> numbers(NumFloats);
+    std::generate(numbers.begin(), numbers.end(), [&] {
+        return static_cast<float>(gen(random) | 1) / scale;
+    });
+
+    int index = 0;
+    for (auto _: state) {
+        char buffer[32];
+        benchmark::DoNotOptimize(Ftoa(buffer, 32, numbers[index]));
+        index = (index + 1) & (NumFloats - 1);
+    }
+}
+
+BENCHMARK_CAPTURE(BM_RandomDigit32, _1_1, 1, -1.0f);
+BENCHMARK_CAPTURE(BM_RandomDigit32, _1_2, 2, -1.0f);
+BENCHMARK_CAPTURE(BM_RandomDigit32, _1_3, 3, -1.0f);
+BENCHMARK_CAPTURE(BM_RandomDigit32, _1_4, 4, -1.0f);
+BENCHMARK_CAPTURE(BM_RandomDigit32, _1_5, 5, -1.0f);
+BENCHMARK_CAPTURE(BM_RandomDigit32, _1_6, 6, -1.0f);
+BENCHMARK_CAPTURE(BM_RandomDigit32, _1_7, 7, -1.0f);
+
+BENCHMARK_CAPTURE(BM_RandomDigit32, _1_over_10e4, 1, 1e4f);
+BENCHMARK_CAPTURE(BM_RandomDigit32, _2_over_10e4, 2, 1e4f);
+BENCHMARK_CAPTURE(BM_RandomDigit32, _3_over_10e4, 3, 1e4f);
+BENCHMARK_CAPTURE(BM_RandomDigit32, _4_over_10e4, 4, 1e4f);
+BENCHMARK_CAPTURE(BM_RandomDigit32, _5_over_10e4, 5, 1e4f);
+BENCHMARK_CAPTURE(BM_RandomDigit32, _6_over_10e4, 6, 1e4f);
+BENCHMARK_CAPTURE(BM_RandomDigit32, _7_over_10e4, 7, 1e4f);
 
 #endif
 
