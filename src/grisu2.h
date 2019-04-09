@@ -115,7 +115,7 @@ inline DiyFp Multiply(DiyFp x, DiyFp y)
 #if defined(__SIZEOF_INT128__)
     __extension__ using Uint128 = unsigned __int128;
 
-    Uint128 const p = Uint128{x.f} * Uint128{y.f};
+    const Uint128 p = Uint128{x.f} * Uint128{y.f};
 
     uint64_t h = static_cast<uint64_t>(p >> 64);
     uint64_t l = static_cast<uint64_t>(p);
@@ -129,29 +129,29 @@ inline DiyFp Multiply(DiyFp x, DiyFp y)
 
     return DiyFp(h, x.e + y.e + 64);
 #else
-    uint32_t const xLo = static_cast<uint32_t>(x.f);
-    uint32_t const xHi = static_cast<uint32_t>(x.f >> 32);
-    uint32_t const yLo = static_cast<uint32_t>(y.f);
-    uint32_t const yHi = static_cast<uint32_t>(y.f >> 32);
+    const uint32_t xLo = static_cast<uint32_t>(x.f);
+    const uint32_t xHi = static_cast<uint32_t>(x.f >> 32);
+    const uint32_t yLo = static_cast<uint32_t>(y.f);
+    const uint32_t yHi = static_cast<uint32_t>(y.f >> 32);
 
-    uint64_t const b00 = uint64_t{xLo} * yLo;
-    uint64_t const b01 = uint64_t{xLo} * yHi;
-    uint64_t const b10 = uint64_t{xHi} * yLo;
-    uint64_t const b11 = uint64_t{xHi} * yHi;
+    const uint64_t b00 = uint64_t{xLo} * yLo;
+    const uint64_t b01 = uint64_t{xLo} * yHi;
+    const uint64_t b10 = uint64_t{xHi} * yLo;
+    const uint64_t b11 = uint64_t{xHi} * yHi;
 
-    uint32_t const b00Hi = static_cast<uint32_t>(b00 >> 32);
+    const uint32_t b00Hi = static_cast<uint32_t>(b00 >> 32);
 
-    uint64_t const mid1 = b10 + b00Hi;
-    uint32_t const mid1Lo = static_cast<uint32_t>(mid1);
-    uint32_t const mid1Hi = static_cast<uint32_t>(mid1 >> 32);
+    const uint64_t mid1 = b10 + b00Hi;
+    const uint32_t mid1Lo = static_cast<uint32_t>(mid1);
+    const uint32_t mid1Hi = static_cast<uint32_t>(mid1 >> 32);
 
-    uint64_t const mid2 = b01 + mid1Lo;
-    uint32_t const mid2Lo = static_cast<uint32_t>(mid2);
-    uint32_t const mid2Hi = static_cast<uint32_t>(mid2 >> 32);
+    const uint64_t mid2 = b01 + mid1Lo;
+    const uint32_t mid2Lo = static_cast<uint32_t>(mid2);
+    const uint32_t mid2Hi = static_cast<uint32_t>(mid2 >> 32);
 
     // NB: mid2Lo has the upper 32 bits of the low part of the product.
-    uint32_t const r = mid2Lo >> 31;
-    uint64_t const h = b11 + mid1Hi + mid2Hi + r;
+    const uint32_t r = mid2Lo >> 31;
+    const uint64_t h = b11 + mid1Hi + mid2Hi + r;
 
     return DiyFp(h, x.e + y.e + 64);
 #endif
@@ -191,7 +191,7 @@ inline DiyFp Normalize(DiyFp x)
 {
     static_assert(DiyFp::SignificandSize == 64, "internal error");
 
-    int const lz = CountLeadingZeros64(x.f);
+    const int lz = CountLeadingZeros64(x.f);
     return DiyFp(x.f << lz, x.e - lz);
 }
 
@@ -199,7 +199,7 @@ inline DiyFp Normalize(DiyFp x)
 // PRE: e >= x.e and the upper e - x.e bits of x.f must be zero.
 inline DiyFp NormalizeTo(DiyFp x, int e)
 {
-    int const delta = x.e - e;
+    const int delta = x.e - e;
 
     GRISU2_ASSERT(delta >= 0);
     GRISU2_ASSERT(((x.f << delta) >> delta) == x.f);
@@ -288,13 +288,12 @@ inline DiyFp DiyFpFromFloat(Float value)
 {
     using Fp = IEEE<Float>;
 
-    auto const v = Fp(value);
-
+    const Fp v(value);
     GRISU2_ASSERT(v.IsFinite());
     GRISU2_ASSERT(!v.SignBit());
 
-    auto const F = v.PhysicalSignificand();
-    auto const E = v.PhysicalExponent();
+    const auto F = v.PhysicalSignificand();
+    const auto E = v.PhysicalExponent();
 
     // If v is denormal:
     //      value = 0.F * 2^(1 - bias) = (          F) * 2^(1 - bias - (p-1))
@@ -344,22 +343,22 @@ inline Boundaries ComputeBoundaries(Float value)
     GRISU2_ASSERT(Fp(value).IsFinite());
     GRISU2_ASSERT(value > 0);
 
-    auto const v = DiyFpFromFloat(value);
+    const auto v = DiyFpFromFloat(value);
 
     // Compute the boundaries of v.
-    auto const lower_boundary_is_closer = (v.f == Fp::HiddenBit && v.e > Fp::MinExponent);
-    auto const m_minus = DiyFp(4*v.f - 2 + lower_boundary_is_closer, v.e - 2);
-    auto const m_plus = DiyFp(4*v.f + 2, v.e - 2);
+    const bool lower_boundary_is_closer = (v.f == Fp::HiddenBit && v.e > Fp::MinExponent);
+    const auto m_minus = DiyFp(4*v.f - 2 + lower_boundary_is_closer, v.e - 2);
+    const auto m_plus = DiyFp(4*v.f + 2, v.e - 2);
 
     // Determine the normalized w = v.
-    auto const w = Normalize(v);
+    const auto w = Normalize(v);
 
     // Determine the normalized w+ = m+.
     // Since e_(w+) == e_(w), one can use NormalizeTo instead of Normalize.
-    auto const w_plus = NormalizeTo(m_plus, w.e);
+    const auto w_plus = NormalizeTo(m_plus, w.e);
 
     // Determine w- = m- such that e_(w-) = e_(w+).
-    auto const w_minus = NormalizeTo(m_minus, w_plus.e);
+    const auto w_minus = NormalizeTo(m_minus, w_plus.e);
 
     return {w, w_minus, w_plus};
 }
@@ -597,8 +596,8 @@ inline CachedPower GetCachedPower(int index)
     GRISU2_ASSERT(index >= 0);
     GRISU2_ASSERT(index < kCachedPowersSize);
 
-    int const k = kCachedPowersMinDecExp + index * kCachedPowersDecExpStep;
-    int const e = FloorLog2Pow10(k) + 1 - 64;
+    const int k = kCachedPowersMinDecExp + index * kCachedPowersDecExpStep;
+    const int e = FloorLog2Pow10(k) + 1 - 64;
 
     return {kSignificands[index], e, k};
 }
@@ -616,16 +615,16 @@ inline CachedPower GetCachedPowerForBinaryExponent(int e)
     GRISU2_ASSERT(e >= -1137);
     GRISU2_ASSERT(e <=   960);
 
-    int const k = CeilLog10Pow2(kAlpha - e - 1);
+    const int k = CeilLog10Pow2(kAlpha - e - 1);
     GRISU2_ASSERT(k >= kCachedPowersMinDecExp - (kCachedPowersDecExpStep - 1));
     GRISU2_ASSERT(k <= kCachedPowersMaxDecExp);
 
-    int const index = static_cast<int>( static_cast<unsigned>(k - (kCachedPowersMinDecExp - (kCachedPowersDecExpStep - 1))) / kCachedPowersDecExpStep );
+    const int index = static_cast<int>( static_cast<unsigned>(k - (kCachedPowersMinDecExp - (kCachedPowersDecExpStep - 1))) / kCachedPowersDecExpStep );
     GRISU2_ASSERT(index >= 0);
     GRISU2_ASSERT(index < kCachedPowersSize);
     static_cast<void>(kCachedPowersSize);
 
-    auto const cached = GetCachedPower(index);
+    const auto cached = GetCachedPower(index);
     GRISU2_ASSERT(kAlpha <= cached.e + e + 64);
     GRISU2_ASSERT(kGamma >= cached.e + e + 64);
 
@@ -794,7 +793,7 @@ inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L
     //           = ((p1        ) * 2^-e + (p2        )) * 2^e
     //           = p1 + p2 * 2^e
 
-    DiyFp const one(uint64_t{1} << -H.e, H.e); // one = 2^-e * 2^e
+    const DiyFp one(uint64_t{1} << -H.e, H.e); // one = 2^-e * 2^e
 
     uint32_t p1 = static_cast<uint32_t>(H.f >> -one.e); // p1 = f div 2^-e (Since -e >= 32, p1 fits into a 32-bit int.)
     uint64_t p2 = H.f & (one.f - 1);                    // p2 = f mod 2^-e
@@ -881,8 +880,8 @@ inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L
             //
             GRISU2_ASSERT(p2 <= 0xFFFFFFFFFFFFFFFFull / 10);
             p2 *= 10;
-            uint64_t const d = p2 >> -one.e;     // d = (10 * p2) div 2^-e
-            uint64_t const r = p2 & (one.f - 1); // r = (10 * p2) mod 2^-e
+            const uint64_t d = p2 >> -one.e;     // d = (10 * p2) div 2^-e
+            const uint64_t r = p2 & (one.f - 1); // r = (10 * p2) mod 2^-e
             GRISU2_ASSERT(d <= 9);
             //
             //      H = digits * 10^-m + 10^-m * (1/10 * (d * 2^-e + r) * 2^e
@@ -946,7 +945,7 @@ inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L
         //      rest * 2^e <= delta * 2^e
         //
 
-        int const k = num_digits;
+        const int k = num_digits;
         GRISU2_ASSERT(k >= 0);
         GRISU2_ASSERT(k <= 9);
 
@@ -965,8 +964,8 @@ inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L
             GRISU2_ASSERT(rest <= delta);
 
             // rn = d[n]...d[0] * 2^-e + p2
-            uint32_t const dn = static_cast<uint32_t>(digits[k - 1 - n] - '0');
-            uint64_t const rn = dn * ten_kappa + rest;
+            const uint32_t dn = static_cast<uint32_t>(digits[k - 1 - n] - '0');
+            const uint64_t rn = dn * ten_kappa + rest;
 
             if (rn > delta)
             {
@@ -1003,13 +1002,13 @@ inline void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, 
     // First scale v (and m- and m+) such that the exponent is in the range
     // [alpha, gamma].
 
-    auto const cached = GetCachedPowerForBinaryExponent(m_plus.e);
+    const auto cached = GetCachedPowerForBinaryExponent(m_plus.e);
 
-    DiyFp const c_minus_k(cached.f, cached.e); // = c ~= 10^-k
+    const DiyFp c_minus_k(cached.f, cached.e); // = c ~= 10^-k
 
-    DiyFp const w       = Multiply(v,       c_minus_k);
-    DiyFp const w_minus = Multiply(m_minus, c_minus_k);
-    DiyFp const w_plus  = Multiply(m_plus,  c_minus_k);
+    const DiyFp w       = Multiply(v,       c_minus_k);
+    const DiyFp w_minus = Multiply(m_minus, c_minus_k);
+    const DiyFp w_plus  = Multiply(m_plus,  c_minus_k);
 
     // The exponent of the products is = v.e + c_minus_k.e + q and is in the
     // range [alpha, gamma].
@@ -1043,8 +1042,8 @@ inline void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, 
     // And DigitGen generates the shortest possible such number in [L, H].
     // Note that this does not mean that Grisu2 always generates the shortest
     // possible number in the interval (m-, m+).
-    DiyFp const L(w_minus.f + 1, w_minus.e);
-    DiyFp const H(w_plus.f  - 1, w_plus.e );
+    const DiyFp L(w_minus.f + 1, w_minus.e);
+    const DiyFp H(w_plus.f  - 1, w_plus.e );
 
     Grisu2DigitGen(digits, num_digits, exponent, L, w, H);
     // w = buffer * 10^exponent
@@ -1088,9 +1087,9 @@ inline char* DoubleToDigits(char* next, char* last, int& num_digits, int& expone
     //      f != (float)strtod(ftoa(f))
     // For all other single-precision numbers, equality holds.
 #if 0
-    auto const boundaries = grisu2::impl::ComputeBoundaries(static_cast<double>(value));
+    const auto boundaries = grisu2::impl::ComputeBoundaries(static_cast<double>(value));
 #else
-    auto const boundaries = grisu2::impl::ComputeBoundaries(value);
+    const auto boundaries = grisu2::impl::ComputeBoundaries(value);
 #endif
 
     grisu2::impl::Grisu2(next, num_digits, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
@@ -1128,7 +1127,7 @@ inline char* ExponentToString(char* buffer, int value)
         buffer[n++] = '+';
     }
 
-    uint32_t const k = static_cast<uint32_t>(value);
+    const uint32_t k = static_cast<uint32_t>(value);
     if (k < 10)
     {
         buffer[n++] = static_cast<char>('0' + k);
@@ -1140,8 +1139,8 @@ inline char* ExponentToString(char* buffer, int value)
     }
     else
     {
-        uint32_t const r = k % 10;
-        uint32_t const q = k / 10;
+        const uint32_t r = k % 10;
+        const uint32_t q = k / 10;
         Utoa_2Digits(buffer + n, q);
         n += 2;
         buffer[n++] = static_cast<char>('0' + r);
@@ -1257,7 +1256,7 @@ inline char* PositiveDtoa(char* next, char* last, Float value, bool force_traili
     GRISU2_ASSERT(num_digits <= std::numeric_limits<Float>::max_digits10);
 
     // The position of the decimal point relative to the start of the buffer.
-    int const decimal_point = num_digits + exponent;
+    const int decimal_point = num_digits + exponent;
 
     // Just appending the exponent would yield a correct decimal representation
     // for the input value.
@@ -1271,14 +1270,14 @@ inline char* PositiveDtoa(char* next, char* last, Float value, bool force_traili
     constexpr int kMinExp = -6;
     constexpr int kMaxExp = 21;
 
-    bool const use_fixed = kMinExp < decimal_point && decimal_point <= kMaxExp;
+    const bool use_fixed = kMinExp < decimal_point && decimal_point <= kMaxExp;
 #else
     // NB:
     // Integers <= 2^p = kMaxVal are exactly representable as Float's.
     constexpr auto kMinExp = -6;
     constexpr auto kMaxVal = static_cast<Float>(uint64_t{1} << std::numeric_limits<Float>::digits); // <= 16 digits
 
-    bool const use_fixed = kMinExp < decimal_point && value <= kMaxVal;
+    const bool use_fixed = kMinExp < decimal_point && value <= kMaxVal;
 #endif
 
     char* const end = use_fixed
@@ -1295,13 +1294,13 @@ inline char* PositiveDtoa(char* next, char* last, Float value, bool force_traili
 
 namespace impl {
 
-inline char* StrCopy(char* next, char* last, char const* source)
+inline char* StrCopy(char* next, char* last, const char* source)
 {
     static_cast<void>(last); // Fix warning
 
     GRISU2_ASSERT(source != nullptr);
 
-    auto const len = std::strlen(source);
+    const auto len = std::strlen(source);
     GRISU2_ASSERT(next <= last);
     GRISU2_ASSERT(static_cast<size_t>(last - next) >= len);
 
@@ -1329,8 +1328,8 @@ inline char* Dtoa(
     char*       last,
     Float       value,
     bool        force_trailing_dot_zero = false,
-    char const* nan_string = "NaN",
-    char const* inf_string = "Infinity")
+    const char* nan_string = "NaN",
+    const char* inf_string = "Infinity")
 {
     using Fp = grisu2::impl::IEEE<Float>;
 
@@ -1338,7 +1337,7 @@ inline char* Dtoa(
     GRISU2_ASSERT(nan_string != nullptr);
     GRISU2_ASSERT(inf_string != nullptr);
 
-    Fp const v(value);
+    const Fp v(value);
 
     if (!v.IsFinite())
     {
