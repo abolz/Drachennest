@@ -698,7 +698,7 @@ L_2_digits:
 //  * digits of H/10^kappa in [digits, digits + num_digits)
 //  * distance    = (H - w) * unit
 //  * delta       = (H - L) * unit
-//  * rest        = (H - buffer * 10^kappa) * unit
+//  * rest        = (H - digits * 10^kappa) * unit
 //  * ten_kappa   = 10^kappa * unit
 inline void Grisu2Round(char* digits, int num_digits, uint64_t distance, uint64_t delta, uint64_t rest, uint64_t ten_kappa)
 {
@@ -712,12 +712,12 @@ inline void Grisu2Round(char* digits, int num_digits, uint64_t distance, uint64_
     // try to decrement the buffer.
     //
     //                                  <---- distance ----->
-    //               <--------------------------- delta ---->
-    //                                       <---- rest ---->
-    //                       <-- ten_kappa -->
-    // --------------[------------------+----+--------------]--------------
-    //               L                  w    B              H
-    //                                       = digits * 10^kappa
+    //              <---------------------------- delta ---->
+    //                                         <--- rest --->
+    //                       <--- ten_kappa --->
+    //  ----(---+---[---------------(---+---)--+------------]---+---)----
+    //              L                   w      B            H
+    //                                         = digits * 10^kappa
     //
     // ten_kappa represents a unit-in-the-last-place in the decimal
     // representation stored in the buffer.
@@ -767,9 +767,9 @@ inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L
     // alpha <= e <= gamma.
     //
     //                                  <---- distance ----->
-    //               <--------------------------- delta ---->
-    // --------------[------------------+-------------------]--------------
-    //               L                  w                   H
+    //              <---------------------------- delta ---->
+    //  ----(---+---[---------------(---+---)---------------]---+---)----
+    //              L                   w                   H
     //
     // This routine generates the digits of H from left to right and stops as
     // soon as V is in [L, H].
@@ -888,7 +888,7 @@ inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L
             //
             digits[num_digits++] = static_cast<char>('0' + d); // digits := digits * 10 + d
             //
-            //      H = buffer * 10^(-m-1) + 10^(-m-1) * r * 2^e
+            //      H = digits * 10^(-m-1) + 10^(-m-1) * r * 2^e
             //
             p2 = r;
             m++;
@@ -978,12 +978,12 @@ inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L
     }
 
     // The buffer now contains a correct decimal representation of the input
-    // number w = buffer * 10^exponent.
+    // number w = digits * 10^exponent.
 
     Grisu2Round(digits, num_digits, distance, delta, rest, ten_kappa);
 }
 
-// v = buffer * 10^exponent
+// v = digits * 10^exponent
 // length is the length of the buffer (number of decimal digits)
 // The buffer must be large enough, i.e. >= max_digits10.
 inline void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, DiyFp v, DiyFp m_plus)
@@ -1044,11 +1044,11 @@ inline void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, 
     const DiyFp H(w_plus.f  - 1, w_plus.e );
 
     Grisu2DigitGen(digits, num_digits, exponent, L, w, H);
-    // w = buffer * 10^exponent
+    // w = digits * 10^exponent
 
     // v = w * 10^k
     exponent += -cached.k; // cached.k = -k
-    // v = buffer * 10^exponent
+    // v = digits * 10^exponent
 }
 
 } // namespace impl
