@@ -226,17 +226,14 @@ struct IEEE
     using value_type = Float;
     using bits_type = typename BitsType<std::numeric_limits<Float>::digits>::type;
 
-    static constexpr int       SignificandSize         = std::numeric_limits<value_type>::digits; // = p   (includes the hidden bit)
-    static constexpr int       PhysicalSignificandSize = SignificandSize - 1;                     // = p-1 (excludes the hidden bit)
-    static constexpr int       UnbiasedMinExponent     = 1;
-    static constexpr int       UnbiasedMaxExponent     = 2 * std::numeric_limits<value_type>::max_exponent - 1 - 1;
-    static constexpr int       ExponentBias            = std::numeric_limits<value_type>::max_exponent - 1 + (SignificandSize - 1);
-    static constexpr int       MinExponent             = UnbiasedMinExponent - ExponentBias;
-    static constexpr int       MaxExponent             = UnbiasedMaxExponent - ExponentBias;
-    static constexpr bits_type HiddenBit               = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
-    static constexpr bits_type SignificandMask         = HiddenBit - 1;                           // = 2^(p-1) - 1
-    static constexpr bits_type ExponentMask            = bits_type{2 * std::numeric_limits<value_type>::max_exponent - 1} << PhysicalSignificandSize;
-    static constexpr bits_type SignMask                = ~(~bits_type{0} >> 1);
+    static constexpr int       SignificandSize = std::numeric_limits<value_type>::digits; // = p   (includes the hidden bit)
+    static constexpr int       ExponentBias    = std::numeric_limits<value_type>::max_exponent - 1 + (SignificandSize - 1);
+    static constexpr int       MaxExponent     = std::numeric_limits<value_type>::max_exponent - 1 - (SignificandSize - 1);
+    static constexpr int       MinExponent     = std::numeric_limits<value_type>::min_exponent - 1 - (SignificandSize - 1);
+    static constexpr bits_type HiddenBit       = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
+    static constexpr bits_type SignificandMask = HiddenBit - 1;                           // = 2^(p-1) - 1
+    static constexpr bits_type ExponentMask    = bits_type{2 * std::numeric_limits<value_type>::max_exponent - 1} << (SignificandSize - 1);
+    static constexpr bits_type SignMask        = ~(~bits_type{0} >> 1);
 
     bits_type bits;
 
@@ -248,7 +245,7 @@ struct IEEE
     }
 
     bits_type PhysicalExponent() const {
-        return (bits & ExponentMask) >> PhysicalSignificandSize;
+        return (bits & ExponentMask) >> (SignificandSize - 1);
     }
 
     bool IsFinite() const {
@@ -506,6 +503,7 @@ constexpr int kCachedPowersMinDecExp    = -300;
 constexpr int kCachedPowersMaxDecExp    =  324;
 constexpr int kCachedPowersDecExpStep   =    8;
 
+// Returns (an approximation) 10^(MinDecExp + index * DecExpStep) in the form f * 2^e.
 inline CachedPower GetCachedPower(int index)
 {
     // Let e = floor(log_2 10^k) + 1 - 64.

@@ -1,7 +1,7 @@
-// #include "floaxie.h"
-// #include "fmt.h"
+//#include "floaxie.h"
+//#include "fmt.h"
 #include "grisu2.h"
-// #include "milo.h"
+//#include "milo.h"
 
 #include "catch.hpp"
 
@@ -51,11 +51,11 @@ static inline std::string Float64ToString(double f)
 
 static inline char* Dtoa(char* next, char* last, double value)
 {
-    // char* end = Float64ToChars(next, (int)(last - next), value);
+    //char* end = Float64ToChars(next, (int)(last - next), value);
     char* end = grisu2_Dtoa(next, last, value);
-    // char* end = milo_Dtoa(next, last, value);
-    // char* end = fmt_Dtoa(next, last, value);
-    // char* end = floaxie_Dtoa(next, last, value);         // FAIL: incorrect (lower) boundary ?!!! TODO: https://github.com/aclex/floaxie/issues
+    //char* end = milo_Dtoa(next, last, value);
+    //char* end = fmt_Dtoa(next, last, value);
+    //char* end = floaxie_Dtoa(next, last, value);         // FAIL: incorrect (lower) boundary ?!!! TODO: https://github.com/aclex/floaxie/issues
     end[0] = '\0';
     return end;
 }
@@ -68,10 +68,10 @@ static inline std::string Dtoa(double value)
 
 static inline char* Ftoa(char* next, char* last, float value)
 {
-    // char* end = Float32ToChars(next, (int)(last - next), value);
+    //char* end = Float32ToChars(next, (int)(last - next), value);
     char* end = grisu2_Ftoa(next, last, value);
-    // char* end = fmt_Ftoa(next, last, value);
-    // char* end = floaxie_Ftoa(next, last, value);         // FAIL: incorrect (lower) boundary ?!!! TODO: https://github.com/aclex/floaxie/issues
+    //char* end = fmt_Ftoa(next, last, value);
+    //char* end = floaxie_Ftoa(next, last, value);         // FAIL: incorrect (lower) boundary ?!!! TODO: https://github.com/aclex/floaxie/issues
     end[0] = '\0';
     return end;
 }
