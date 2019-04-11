@@ -1,6 +1,7 @@
 //#include "floaxie.h"
 //#include "fmt.h"
 #include "grisu2.h"
+//#include "grisu3.h"
 //#include "milo.h"
 
 #include "catch.hpp"
@@ -53,6 +54,7 @@ static inline char* Dtoa(char* next, char* last, double value)
 {
     //char* end = Float64ToChars(next, (int)(last - next), value);
     char* end = grisu2_Dtoa(next, last, value);
+    //char* end = grisu3_Dtoa(next, last, value);
     //char* end = milo_Dtoa(next, last, value);
     //char* end = fmt_Dtoa(next, last, value);
     //char* end = floaxie_Dtoa(next, last, value);         // FAIL: incorrect (lower) boundary ?!!! TODO: https://github.com/aclex/floaxie/issues
@@ -70,6 +72,7 @@ static inline char* Ftoa(char* next, char* last, float value)
 {
     //char* end = Float32ToChars(next, (int)(last - next), value);
     char* end = grisu2_Ftoa(next, last, value);
+    //char* end = grisu3_Ftoa(next, last, value);
     //char* end = fmt_Ftoa(next, last, value);
     //char* end = floaxie_Ftoa(next, last, value);         // FAIL: incorrect (lower) boundary ?!!! TODO: https://github.com/aclex/floaxie/issues
     end[0] = '\0';
@@ -108,8 +111,33 @@ static bool CheckSingle(float f)
         char buf[32];
         char* first = buf;
         char* last  = Ftoa(first, first + 32, f);
+        if (first == last) {
+            printf("SKIP: 0x%08X %.9g\n", ReinterpretBits<uint32_t>(f), f);
+            return true; // skip test
+        }
         *last = '\0';
         int const length = static_cast<int>(last - first);
+#endif
+#if 1
+        {
+            auto const& f2s = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
+
+            char bufdc[32];
+            double_conversion::StringBuilder builder(bufdc, 32);
+            f2s.ToShortestSingle(f, &builder);
+            builder.Finalize();
+
+            const std::string s1(buf);
+            const std::string s2(bufdc);
+            if (s1.size() != s2.size())
+            {
+                printf("too long [0x%08X]\n  actual:   %s\n  expected: %s\n", ReinterpretBits<uint32_t>(f), s1.c_str(), s2.c_str());
+            }
+            else if (s1 != s2)
+            {
+                printf("inaccurate [0x%08X]\n  actual:   %s\n  expected: %s\n", ReinterpretBits<uint32_t>(f), s1.c_str(), s2.c_str());
+            }
+        }
 #endif
 
         double_conversion::StringToDoubleConverter s2f(0, 0.0, 0.0, "inf", "nan");
@@ -185,9 +213,13 @@ static bool CheckDouble(double f)
         char buf[32];
         char* first = buf;
         char* last  = Dtoa(first, first + 32, f);
+        if (first == last) {
+            printf("SKIP: 0x%016llX %.17g\n", ReinterpretBits<uint64_t>(f), f);
+            return true; // skip test
+        }
         *last = '\0';
         int const length = static_cast<int>(last - first);
-#if 0
+#if 1
         {
             auto const& f2s = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
 
@@ -196,7 +228,16 @@ static bool CheckDouble(double f)
             f2s.ToShortest(f, &builder);
             builder.Finalize();
 
-            CHECK(std::string(buf) == std::string(bufdc));
+            const std::string s1(buf);
+            const std::string s2(bufdc);
+            if (s1.size() != s2.size())
+            {
+                printf("too long [0x%016llX]\n  actual:   %s\n  expected: %s\n", ReinterpretBits<uint64_t>(f), s1.c_str(), s2.c_str());
+            }
+            else if (s1 != s2)
+            {
+                printf("inaccurate [0x%016llX]\n  actual:   %s\n  expected: %s\n", ReinterpretBits<uint64_t>(f), s1.c_str(), s2.c_str());
+            }
         }
 #endif
 #endif
@@ -374,9 +415,11 @@ TEST_CASE("Dtoa - single 1")
     for (uint32_t e = 2; e < 254; ++e)
     {
         CAPTURE(e);
+        CHECK_SINGLE(MakeSingle(0, e-1, 0x007FFFFE));
         CHECK_SINGLE(MakeSingle(0, e-1, 0x007FFFFF));
         CHECK_SINGLE(MakeSingle(0, e,   0x00000000));
         CHECK_SINGLE(MakeSingle(0, e,   0x00000001));
+        CHECK_SINGLE(MakeSingle(0, e,   0x00000002));
     }
 
     // V. Paxson and W. Kahan, "A Program for Testing IEEE Binary-Decimal Conversion", manuscript, May 1991,
@@ -432,9 +475,11 @@ TEST_CASE("Dtoa - double 1")
     for (uint64_t e = 2; e < 2046; ++e)
     {
         CAPTURE(e);
+        CHECK_DOUBLE(MakeDouble(0, e-1, 0x000FFFFFFFFFFFFE));
         CHECK_DOUBLE(MakeDouble(0, e-1, 0x000FFFFFFFFFFFFF));
         CHECK_DOUBLE(MakeDouble(0, e,   0x0000000000000000));
         CHECK_DOUBLE(MakeDouble(0, e,   0x0000000000000001));
+        CHECK_DOUBLE(MakeDouble(0, e,   0x0000000000000002));
     }
 
     // Some numbers to check different code paths in fast_dtoa
