@@ -137,10 +137,8 @@ project "test"
     language "C++"
     kind "ConsoleApp"
     files {
-        -- "lib/**.cc",
-        -- "lib/**.h",
-        "lib/grisu2.cc",
-        "lib/grisu2.h",
+        "lib/**.cc",
+        "lib/**.h",
         "src/**.cc",
         "src/**.h",
         "test/catch_main.cc",
