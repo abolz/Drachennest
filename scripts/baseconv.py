@@ -13,8 +13,8 @@ EXPONENT_BITS = 11
 
 HIDDEN_BIT = 2**(PRECISION - 1)
 BIAS = 2**(EXPONENT_BITS - 1) - 1 + (PRECISION - 1)
-MIN_EXPONENT = 1 - BIAS                    # -1074 / -1022
-MAX_EXPONENT = 2**EXPONENT_BITS - 2 - BIAS #   971 /  1023
+MIN_EXPONENT = 1 - BIAS
+MAX_EXPONENT = 2**EXPONENT_BITS - 2 - BIAS
 
 #===================================================================================================
 # Decimal to binary
@@ -123,123 +123,6 @@ def CeilLog10Pow2(e):
     assert e <=  1650
     return (int(e) * 78913 + (2**18 - 1)) // 2**18 # floor-division (SAR)
 
-# MAX_BITS = 1080 # 1128 + 4
-MAX_BITS = 1130 # 1128 + 4
-MAX_SIZE = MAX_BITS // 32
-
-max_bitlen = 0
-
-# Returns [c_out, x + y + c_in]
-def addc(c_in, x, y):
-    s = x + (y + c_in)
-    c_out = 1 if s >= 2**32 else 0
-    return c_out, s
-
-def Validate(x):
-    assert x >= 0
-    global max_bitlen
-    max_bitlen = max(max_bitlen, x.bit_length())
-
-def Pow2(e):
-    assert e >= 0
-    return 2**e
-
-def MulPow2(x, e):
-    Validate(x)
-    assert e >= 0
-    x = x * 2**e
-    Validate(x)
-    return x
-
-def Mul10(x):
-    Validate(x)
-    x = x * 10
-    Validate(x)
-    return x
-
-def Pow10(e):
-    assert e >= 0
-    return 10**e
-
-def MulPow5(x, e):
-    Validate(x)
-    assert e >= 0
-    x = x * 5**e
-    Validate(x)
-    return x
-
-###def MulPow10(x, e):
-###    Validate(x)
-###    assert e >= 0
-###    x = x * 10**e
-###    Validate(x)
-###    return x
-
-def Mul10DivMod(x, y):
-    Validate(x)
-    Validate(y)
-    x *= 10
-    Validate(x)
-    if x < y:
-        return 0, x
-    assert x >= y
-    q, r = divmod(x, y)
-    assert q >= 0
-    assert q <= 9
-    Validate(r)
-    return q, r
-
-def Compare(x, y):
-    Validate(x)
-    Validate(y)
-    return cmp(x, y)
-
-def CompareAdd(a, b, x):
-    s = a + b
-    return Compare(s, x)
-
-def CompareSub(x, a, b):
-    assert a >= b
-    s = a - b
-    return Compare(x, s)
-
-def CompareMul2Sub(x, a, b):
-    assert a >= b
-    s = x * 2
-    t = a - b
-    return Compare(s, t)
-
-# Computes the initial values 'r', 's', 'delta', and estimates the exponent 'k'.
-# Returns [r, s, delta, k]
-def ComputeInitialValuesAndEstimate(f, e, lowerBoundaryIsCloser):
-    boundaryShift = 2 if lowerBoundaryIsCloser else 1
-
-    p = EffectivePrecision(f)
-    k = CeilLog10Pow2(e + (p - 1))
-    assert k >= -323
-    assert k <=  308
-
-    if e >= 0:
-        assert 0 <= e and e <= 971
-        assert 0 <= k and k <= 308
-        r     = f * 2**(boundaryShift + e    )
-        s     =     2**(boundaryShift     + k) * 5**( k)
-        delta =     2**(                e    )
-    elif k < 0:
-        assert -1074 <= e and e <= -1
-        assert -323 <= k and k <= -1
-        r     = f * 2**(boundaryShift     - k) * 5**(-k)
-        s     =     2**(boundaryShift - e    )
-        delta =     2**(                  - k) * 5**(-k)
-    else:
-        assert -55 <= e and e <= -1
-        assert 0 <= k and k <= 16
-        r     = f * 2**(boundaryShift        )
-        s     =     2**(boundaryShift - e + k) * 5**( k)
-        delta = 1
-
-    return r, s, delta, k
-
 def BurgerDybvig(f, e):
     assert f > 0
     assert f < 2**PRECISION
@@ -247,85 +130,55 @@ def BurgerDybvig(f, e):
     assert e <= MAX_EXPONENT
 
     #
-    # Compute initial scaled values
+    # Init
     #
 
     isEven = (f % 2 == 0)
     acceptBounds = isEven
     lowerBoundaryIsCloser = (f == HIDDEN_BIT and e != MIN_EXPONENT)
 
-    r, s, delta, k = ComputeInitialValuesAndEstimate(f, e, lowerBoundaryIsCloser)
+    if e >= 0:
+        r, s, mp, mm = f * 2 * 2**e, 2, 2**e, 2**e
+    else:
+        r, s, mp, mm = f * 2, 2**(-e) * 2, 1, 1
 
-#     if e >= 0:
-#         assert 0 <= e and e <= 971
-#         assert 0 <= k and k <= 308
-#         r = MulPow2(f, boundaryShift + e)
-#         # <= f * 2**(2 + 971) < 2**53 * 2**973 = 2**1026
-# ##      assert r.bit_length() <= 1027
-#         assert r.bit_length() <= 1025
-#         s = Pow2(boundaryShift + k)
-#         # <= 2**(2 + 308) = 2**310
-#         assert s.bit_length() <= 311
-#         s = MulPow5(s, k)
-#         # <= 2**310 * 5**308 = 4 * 10**308
-#         # log_2(4 * 10**308) = 1025.15
-# ##      assert s.bit_length() <= 1026
-#         assert s.bit_length() <= 1025
-#         delta = Pow2(e)
-#         # <= 2**e <= 2**971
-#         assert delta.bit_length() <= 972
-#     elif k < 0:
-#         assert -1074 <= e and e <= -1
-#         assert  -323 <= k and k <= -1
-#         r = MulPow2(f, boundaryShift - k)
-#         # <= f * 2**(2 - (-323)) < 2**53 * 2**325 = 2**378
-#         assert r.bit_length() <= 379
-#         r = MulPow5(r, -k)
-#         # <= 2**53 * 4 * 10**323
-#         # log_2(2**53 * 4 * 10**323) = 1127.98
-# ##      assert r.bit_length() <= 1128
-#         assert r.bit_length() <= 1075
-#         s = Pow2(boundaryShift - e)
-#         # <= 2**(2 - (-1074)) = 2**1076
-# ##      assert s.bit_length() <= 1077
-#         assert s.bit_length() <= 1076
-#         delta = Pow2(-k)
-#         # <= 2**323
-#         assert delta.bit_length() <= 324
-#         delta = MulPow5(delta, -k)
-#         # <= 2**323 * 5**323 = 10**323
-#         # log_2(10**323) = 1072.98
-#         assert delta.bit_length() <= 1073
-#     else:
-#         assert -55 <= e and e <= -1
-#         assert   0 <= k and k <=  16
-#         r = MulPow2(f, boundaryShift)
-#         # <= f * 2**2 < 2**55
-#         assert r.bit_length() <= 56
-#         s = Pow2(boundaryShift - e + k)
-#         # <= 2**(2 - (-55) + 16) = 2**73
-#         assert s.bit_length() <= 74
-#         s = MulPow5(s, k)
-#         # <= 2**73 * 5**16
-#         # log_2(2**73 * 5**16) = 110.15
-#         assert s.bit_length() <= 111
-#         delta = 1
+    # Could do after scaling to keep the numbers a tiny bit smaller?!?!
+    if lowerBoundaryIsCloser:
+        r, s, mp = r * 2, s * 2, mp * 2
 
-    assert r.bit_length()     <= 1128 # 1075
-    assert s.bit_length()     <= 1077 # 1076
-    assert delta.bit_length() <= 1073
-    # log_2(2**1073 * 10**17) = 1129.47
+    #
+    # Scale into the range [0.1, 1.0)
+    #   aka: Find the smallest integer k, such that (r + m+) / s <= 10^k
+    #   aka: k = ceil(log_10((r + m+) / s))
+    #
 
-    # Fixup
-    cmpf = CompareAdd(r, delta, s)
-    if (cmpf >= 0) if acceptBounds else (cmpf > 0):
-        # print "Fixup"
-        s = Mul10(s)
-        k = k + 1
+    if False:
+        k = 0
+        while True:
+            rp = r + mp
+            if (rp >= s) if acceptBounds else (rp > s):
+                s, k = s * 10, k + 1
+            elif (rp * 10 < s) if acceptBounds else (rp * 10 <= s):
+                r, mp, mm, k = r * 10, mp * 10, mm * 10, k - 1
+            else:
+                break
+    else:
+#       p = f.bit_length() # Effective precision
+        p = EffectivePrecision(f)
 
-    assert s >= r
-    assert (r + delta < s) if acceptBounds else (r + delta <= s)
-    assert ((r + delta) * 10 >= s) if acceptBounds else ((r + delta) * 10 > s)
+        # Estimate:
+        k = CeilLog10Pow2(e + (p - 1))
+        if k >= 0:
+            s *= 10**k
+        else:
+            r, mp, mm = r * 10**(-k), mp * 10**(-k), mm * 10**(-k)
+
+        # Fixup:
+        if (r + mp >= s) if acceptBounds else (r + mp > s):
+            s, k = s * 10, k + 1
+
+    assert (r + mp < s) if acceptBounds else (r + mp <= s)
+    assert ((r + mp) * 10 >= s) if acceptBounds else ((r + mp) * 10 > s)
 
     #
     # Generate
@@ -335,24 +188,17 @@ def BurgerDybvig(f, e):
     while True:
         assert r > 0
 
-#       assert 10 * r >= s;
-        q, r = Mul10DivMod(r, s)
+        r, mp, mm = r * 10, mp * 10, mm * 10
+        q, r = divmod(r, s)
         assert q <= 9
-        assert s >= r
 
-        delta = Mul10(delta)
-
-        cmp1 = Compare(r, delta)
-        cmp2 = CompareMul2Sub(delta, s, r) if lowerBoundaryIsCloser else CompareSub(delta, s, r)
-
-        tc1 = (cmp1 <= 0) if acceptBounds else (cmp1 < 0)
-        tc2 = (cmp2 >= 0) if acceptBounds else (cmp2 > 0)
+        tc1 = (r <= mm) if acceptBounds else (r < mm)
+        tc2 = (r + mp >= s) if acceptBounds else (r + mp > s)
 
         if tc1 and tc2:
             # Return the number closer to v. If the two are equidistant
             # from v, use **some** strategy to break the tie.
-            cmpr = CompareSub(r, s, r)
-            if cmpr > 0 or (cmpr == 0 and q % 2 != 0):
+            if (r * 2 > s) or (r * 2 == s and q % 2 != 0):
                 q += 1
         elif not tc1 and tc2:
             q += 1
@@ -538,8 +384,3 @@ for e in range(MIN_EXPONENT, MAX_EXPONENT + 1):
 # #     PrintBinary(*BinaryFromFloat(v))
 # # TestFloat(0.3)
 # # TestFloat(0.1 + 0.2)
-
-
-
-print "max_bitlen    = {}".format(max_bitlen)
-print "max_bitlen/32 = {}".format(max_bitlen // 32)
