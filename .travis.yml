@@ -23,7 +23,7 @@ matrix:
       after_success:
         - lcov --directory . --capture --output-file coverage.info
         - lcov --extract coverage.info "$PWD/src/*" --output-file coverage.info
-        - lcov --remove coverage.info "$PWD/src/grisu3.h" --output-file coverage.info
+        - lcov --remove coverage.info "$PWD/src/grisu2.h" --output-file coverage.info
         - lcov --list coverage.info
         - bash <(curl -s https://codecov.io/bash) -X gcov
     - os: linux

@@ -22,15 +22,22 @@ def RoundUp(num, den):
         p += 1
     return p
 
-for k in range(MIN_EXPONENT, MAX_EXPONENT + 1, STEP):
-    e = FloorLog2Pow10(k) + 1 - BITS
+def ComputeGrisuPower(k, bits):
+    e = FloorLog2Pow10(k) + 1 - bits
     if k >= 0:
         if e > 0:
-            p = RoundUp(10**k, 2**e)
+            f = RoundUp(10**k, 2**e)
         else:
-            p = 10**k * 2**(-e)
+            f = 10**k * 2**(-e)
     else:
-        p = RoundUp(2**(-e), 10**(-k))
-    assert p < 2**BITS
-    assert p >= 2**(BITS - 1)
-    print "0x{:X}, // e = {:5d}, k = {:4d}".format(p, e, k)
+        f = RoundUp(2**(-e), 10**(-k))
+    assert f < 2**bits
+    assert f >= 2**(bits - 1)
+    return f, e
+
+def PrintGrisuPowers():
+    for k in range(MIN_EXPONENT, MAX_EXPONENT + 1, STEP):
+        f, e = ComputeGrisuPower(k, BITS)
+        print "0x{:X}, // e = {:5d}, k = {:4d}".format(f, e, k)
+
+PrintGrisuPowers()

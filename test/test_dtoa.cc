@@ -1,8 +1,9 @@
 //#include "floaxie.h"
 //#include "fmt.h"
 #include "grisu2.h"
-//#include "grisu3.h"
+#include "grisu3.h"
 //#include "milo.h"
+//#include "ryu.h"
 
 #include "catch.hpp"
 
@@ -15,6 +16,7 @@
 #define USE_DOUBLE_CONVERSION_DTOA 0
 #define TEST_HEX 0
 #define TEST_STRTOD_FOR_SINGLE 0
+#define TEST_OPTIMAL 1
 
 static inline char* Float32ToChars(char* buf, int buflen, float f)
 {
@@ -53,11 +55,12 @@ static inline std::string Float64ToString(double f)
 static inline char* Dtoa(char* next, char* last, double value)
 {
     //char* end = Float64ToChars(next, (int)(last - next), value);
-    char* end = grisu2_Dtoa(next, last, value);
-    //char* end = grisu3_Dtoa(next, last, value);
+    //char* end = grisu2_Dtoa(next, last, value);
+    char* end = grisu3_Dtoa(next, last, value);
     //char* end = milo_Dtoa(next, last, value);
     //char* end = fmt_Dtoa(next, last, value);
     //char* end = floaxie_Dtoa(next, last, value);         // FAIL: incorrect (lower) boundary ?!!! TODO: https://github.com/aclex/floaxie/issues
+    //char* end = ryu_Dtoa(next, last, value);
     end[0] = '\0';
     return end;
 }
@@ -71,8 +74,8 @@ static inline std::string Dtoa(double value)
 static inline char* Ftoa(char* next, char* last, float value)
 {
     //char* end = Float32ToChars(next, (int)(last - next), value);
-    char* end = grisu2_Ftoa(next, last, value);
-    //char* end = grisu3_Ftoa(next, last, value);
+    //char* end = grisu2_Ftoa(next, last, value);
+    char* end = grisu3_Ftoa(next, last, value);
     //char* end = fmt_Ftoa(next, last, value);
     //char* end = floaxie_Ftoa(next, last, value);         // FAIL: incorrect (lower) boundary ?!!! TODO: https://github.com/aclex/floaxie/issues
     end[0] = '\0';
@@ -118,7 +121,7 @@ static bool CheckSingle(float f)
         *last = '\0';
         int const length = static_cast<int>(last - first);
 #endif
-#if 1
+#if TEST_OPTIMAL
         {
             auto const& f2s = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
 
@@ -140,17 +143,18 @@ static bool CheckSingle(float f)
         }
 #endif
 
-        double_conversion::StringToDoubleConverter s2f(0, 0.0, 0.0, "inf", "nan");
+        double_conversion::StringToDoubleConverter s2f(0, 0.0, 1.0, "inf", "nan");
 
         int processed_characters_count = 0;
         {
             auto const f_out = s2f.StringToFloat(buf, length, &processed_characters_count);
+            CAPTURE(&buf[0]);
+            CHECK(length == processed_characters_count);
 
             const uint32_t f_bits = ReinterpretBits<uint32_t>(f);
             const uint32_t f_out_bits = ReinterpretBits<uint32_t>(f_out);
             CAPTURE(f_bits);
             CAPTURE(f_out_bits);
-            CAPTURE(&buf[0]);
             CHECK(f == f_out);
         }
 #if TEST_STRTOD_FOR_SINGLE
@@ -219,7 +223,7 @@ static bool CheckDouble(double f)
         }
         *last = '\0';
         int const length = static_cast<int>(last - first);
-#if 1
+#if TEST_OPTIMAL
         {
             auto const& f2s = double_conversion::DoubleToStringConverter::EcmaScriptConverter();
 
@@ -242,16 +246,17 @@ static bool CheckDouble(double f)
 #endif
 #endif
 
-        double_conversion::StringToDoubleConverter s2f(0, 0.0, 0.0, "inf", "nan");
+        double_conversion::StringToDoubleConverter s2f(0, 0.0, 1.0, "inf", "nan");
 
         int processed_characters_count = 0;
         auto const f_out = s2f.StringToDouble(buf, length, &processed_characters_count);
+        CAPTURE(&buf[0]);
+        CHECK(length == processed_characters_count);
 
         const uint64_t f_bits = ReinterpretBits<uint64_t>(f);
         const uint64_t f_out_bits = ReinterpretBits<uint64_t>(f_out);
         CAPTURE(f_bits);
         CAPTURE(f_out_bits);
-        CAPTURE(&buf[0]);
         CHECK(f == f_out);
     }
 
@@ -501,16 +506,16 @@ TEST_CASE("Dtoa - double 1")
     // Table 3: Stress Inputs for Converting 53-bit Binary to Decimal, < 1/2 ULP
     CHECK_DOUBLE(MakeDouble(8511030020275656,  -342)); // digits  1, bits 63
     CHECK_DOUBLE(MakeDouble(5201988407066741,  -824)); // digits  2, bits 63
-    CHECK_DOUBLE(MakeDouble(6406892948269899,  +237)); // digits  3, bits 62
-    CHECK_DOUBLE(MakeDouble(8431154198732492,   +72)); // digits  4, bits 61
-    CHECK_DOUBLE(MakeDouble(6475049196144587,   +99)); // digits  5, bits 64
+    CHECK_DOUBLE(MakeDouble(6406892948269899,  +237)); // digits  3, bits 62 (D3. [Calculate q'.] One correction step)
+    CHECK_DOUBLE(MakeDouble(8431154198732492,   +72)); // digits  4, bits 61 (D3. [Calculate q'.] One correction step)
+    CHECK_DOUBLE(MakeDouble(6475049196144587,   +99)); // digits  5, bits 64 (D3. [Calculate q'.] One correction step)
     CHECK_DOUBLE(MakeDouble(8274307542972842,  +726)); // digits  6, bits 64
     CHECK_DOUBLE(MakeDouble(5381065484265332,  -456)); // digits  7, bits 64
     CHECK_DOUBLE(MakeDouble(6761728585499734, -1057)); // digits  8, bits 64
-    CHECK_DOUBLE(MakeDouble(7976538478610756,  +376)); // digits  9, bits 67
+    CHECK_DOUBLE(MakeDouble(7976538478610756,  +376)); // digits  9, bits 67 (D6. [Add back.])
     CHECK_DOUBLE(MakeDouble(5982403858958067,  +377)); // digits 10, bits 63
     CHECK_DOUBLE(MakeDouble(5536995190630837,   +93)); // digits 11, bits 63
-    CHECK_DOUBLE(MakeDouble(7225450889282194,  +710)); // digits 12, bits 66
+    CHECK_DOUBLE(MakeDouble(7225450889282194,  +710)); // digits 12, bits 66 (D6. [Add back.])
     CHECK_DOUBLE(MakeDouble(7225450889282194,  +709)); // digits 13, bits 64
     CHECK_DOUBLE(MakeDouble(8703372741147379,  +117)); // digits 14, bits 66
     CHECK_DOUBLE(MakeDouble(8944262675275217, -1001)); // digits 15, bits 63
@@ -545,6 +550,13 @@ TEST_CASE("Dtoa - double 1")
     CHECK_DOUBLE(MakeDouble(8797576579012143, +588)); // digits 20, bits 62
     CHECK_DOUBLE(MakeDouble(7363326733505337, +272)); // digits 21, bits 61
     CHECK_DOUBLE(MakeDouble(8549497411294502, -448)); // digits 22, bits 66
+}
+
+TEST_CASE("Regression")
+{
+    CHECK_DOUBLE(1.5745340942675811e+257);
+    CHECK_DOUBLE(1.6521200219181297e-180);
+    CHECK_DOUBLE(4.6663180925160944e-302);
 }
 
 TEST_CASE("Dtoa format special")
