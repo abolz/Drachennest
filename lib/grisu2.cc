@@ -1,6 +1,4 @@
 #include "grisu2.h"
-
-#define GRISU_UNNAMED_NAMESPACE 1
 #include "../src/grisu2.h"
 
 char* grisu2_Dtoa(char* next, char* last, double value, bool force_trailing_dot_zero)
