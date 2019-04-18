@@ -26,17 +26,10 @@
 #define GRISU_ASSERT(X) assert(X)
 #endif
 
-#ifndef GRISU_UNNAMED_NAMESPACE
-#define GRISU_UNNAMED_NAMESPACE 0
-#endif
-
 #ifndef GRISU_ROUND
 #define GRISU_ROUND 1
 #endif
 
-#if GRISU_UNNAMED_NAMESPACE
-namespace {
-#endif
 namespace grisu2 {
 
 //==================================================================================================
@@ -1422,9 +1415,6 @@ inline char* Dtoa(
 }
 
 } // namespace grisu2
-#if GRISU_UNNAMED_NAMESPACE
-} // namespace
-#endif
 
 //char* Dtoa(char* next, char* last, double value)
 //{
