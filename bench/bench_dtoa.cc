@@ -87,10 +87,10 @@ static inline char* Dtoa(char* buffer, int buffer_length, double value)
 static inline char* Ftoa(char* buffer, int buffer_length, float value)
 {
     //return grisu2_Ftoa(buffer, buffer + buffer_length, value);
-    return grisu3_Ftoa(buffer, buffer + buffer_length, value);
+    //return grisu3_Ftoa(buffer, buffer + buffer_length, value);
     //return fmt_Ftoa(buffer, buffer + buffer_length, value);
     //return std::to_chars(buffer, buffer + buffer_length, value, std::chars_format::general).ptr;
-    //return buffer;
+    return buffer;
 }
 
 static inline char* Float32ToChars(char* buf, int buflen, float f)
@@ -254,7 +254,7 @@ BENCHMARK_CAPTURE(BM_Ints, _15, 15);
 //--------------------------------------------------------------------------------------------------
 //
 //--------------------------------------------------------------------------------------------------
-#if 0
+#if 1
 
 static void BM_Uniform(benchmark::State& state, double lower, double upper) {
     constexpr int const NumFloats = 1 << 12;
