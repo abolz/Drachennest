@@ -6,6 +6,7 @@
 #include "catch.hpp"
 
 #include <cassert>
+#include <cstring>
 #include <iostream>
 #include <limits>
 #include <string>

@@ -18,7 +18,7 @@
 #include "grisu3.h"
 #include "ryu.h"
 
-#if defined(_MSC_VER)
+#if _MSC_VER >= 1920
 #define HAS_CHARCONV 1
 #endif
 

@@ -1,6 +1,6 @@
 #include "charconv.h"
 
-#if defined(_MSC_VER)
+#if _MSC_VER >= 1920
 #include <charconv>
 
 char* charconv_Dtoa(char* buf, int buflen, double value)
