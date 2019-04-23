@@ -2174,7 +2174,7 @@ RYU_INLINE void CopyBackward(char* dst, const char* src, intptr_t length) {
 // and stores the integral value of x in result.
 RYU_INLINE uint64_t F64ToSmallInt(double x, bool& is_small_int)
 {
-#if 0
+#if 1
     if (1.0 <= x && x <= 9007199254740992.0) // 1 <= x <= 2^53
     {
         const int64_t i = static_cast<int64_t>(x);
@@ -2222,7 +2222,7 @@ RYU_INLINE uint64_t FloatingPointToSmallInt(double x, bool& is_small_int)
 // and stores the integral value of x in result.
 RYU_INLINE uint32_t F32ToSmallInt(float x, bool& is_small_int)
 {
-#if 0
+#if 1
     if (1.0f <= x && x <= 16777216.0f) // 1 <= x <= 2^24
     {
         const int32_t i = static_cast<int32_t>(x);
