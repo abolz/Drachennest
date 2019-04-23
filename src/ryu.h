@@ -1514,7 +1514,7 @@ RYU_INLINE F64ToDecimalResult FloatingPointToDecimal(double value)
 
 namespace impl {
 
-inline uint64_t ComputePow5ForNegativeExponentF32(int i)
+RYU_INLINE uint64_t ComputePow5ForNegativeExponentF32(int i)
 {
     // Stores 5^-i in the form:
     //   k = ceil(log_2 5^i) - 1 + 64
@@ -1558,7 +1558,7 @@ inline uint64_t ComputePow5ForNegativeExponentF32(int i)
     return kPow5Inv[i];
 }
 
-inline uint64_t ComputePow5ForPositiveExponentF32(int i)
+RYU_INLINE uint64_t ComputePow5ForPositiveExponentF32(int i)
 {
     // Stores 5^i in the form:
     //   k = floor(log_2 5^i) + 1 - 64
@@ -1619,20 +1619,34 @@ inline uint64_t ComputePow5ForPositiveExponentF32(int i)
     return kPow5[i];
 }
 
-inline uint32_t MulShift(uint32_t m, uint64_t mul, int j)
+RYU_INLINE uint32_t MulShift(uint32_t m, uint64_t mul, int j)
 {
-    RYU_ASSERT(j > 32);
+    RYU_ASSERT(j >= 59);
+    RYU_ASSERT(j <= 63);
 
     const uint64_t bits0 = uint64_t{m} * Lo32(mul);
     const uint64_t bits1 = uint64_t{m} * Hi32(mul);
 
+#if RYU_32_BIT_PLATFORM
+    // On 32-bit platforms we can avoid a 64-bit shift-right since we only
+    // need the upper 32 bits of the result and the shift value is > 32.
+    const uint32_t bits0Hi = Hi32(bits0);
+    uint32_t bits1Lo = Lo32(bits1);
+    uint32_t bits1Hi = Hi32(bits1);
+    bits1Lo += bits0Hi;
+    bits1Hi += bits1Lo < bits0Hi;
+    const int lshift = -j & 31; // == (32 - (j - 32)) % 32
+    const int rshift =  j & 31; // == (     (j - 32)) % 32
+    return (bits1Hi << lshift) | (bits1Lo >> rshift);
+#else
     const uint64_t sum = bits1 + Hi32(bits0);
     const uint64_t shiftedSum = sum >> (j - 32);
     RYU_ASSERT(shiftedSum <= UINT32_MAX);
     return static_cast<uint32_t>(shiftedSum);
+#endif
 }
 
-inline int Pow5Factor(uint32_t value)
+RYU_INLINE int Pow5Factor(uint32_t value)
 {
     int factor = 0;
     for (;;) {
@@ -1647,12 +1661,12 @@ inline int Pow5Factor(uint32_t value)
     }
 }
 
-inline bool MultipleOfPow5(uint32_t value, int p)
+RYU_INLINE bool MultipleOfPow5(uint32_t value, int p)
 {
     return Pow5Factor(value) >= p;
 }
 
-inline bool MultipleOfPow2(uint32_t value, int p)
+RYU_INLINE bool MultipleOfPow2(uint32_t value, int p)
 {
     RYU_ASSERT(p >= 0);
     RYU_ASSERT(p <= 31);
@@ -1668,7 +1682,7 @@ struct F32ToDecimalResult {
     int exponent;
 };
 
-inline F32ToDecimalResult F32ToDecimal(float value)
+RYU_INLINE F32ToDecimalResult F32ToDecimal(float value)
 {
     using namespace ryu::impl;
 
@@ -1735,7 +1749,6 @@ inline F32ToDecimalResult F32ToDecimal(float value)
         RYU_ASSERT(q >= 0);
         const int k = CeilLog2Pow5(q) - 1 + 64;
         const int j = -e2 + q + k; // shift
-        RYU_ASSERT(j >= 55);
 
         e10 = q;
 
@@ -1754,7 +1767,6 @@ inline F32ToDecimalResult F32ToDecimal(float value)
             RYU_ASSERT(q1 >= 0);
             const int k1 = CeilLog2Pow5(q1) - 1 + 64;
             const int j1 = -e2 + q1 + k1; // shift
-            RYU_ASSERT(j1 >= 54);
 
             const uint64_t mul1 = ComputePow5ForNegativeExponentF32(q1);
             lastRemovedDigit = MulShift(mv, mul1, j1) % 10;
@@ -1793,7 +1805,6 @@ inline F32ToDecimalResult F32ToDecimal(float value)
         RYU_ASSERT(i >= 0);
         const int k = FloorLog2Pow5(i) + 1 - 64;
         const int j = q - k; // shift
-        RYU_ASSERT(j >= 57);
 
         e10 = q + e2;
 
@@ -1814,7 +1825,6 @@ inline F32ToDecimalResult F32ToDecimal(float value)
             RYU_ASSERT(i1 >= 0);
             const int k1 = FloorLog2Pow5(i1) + 1 - 64;
             const int j1 = q1 - k1; // shift
-            RYU_ASSERT(j1 >= 56);
 
             const uint64_t mul1 = ComputePow5ForPositiveExponentF32(i1);
             lastRemovedDigit = MulShift(mv, mul1, j1) % 10;
@@ -2120,7 +2130,7 @@ RYU_INLINE int PrintDecimalDigits(char* buf, uint32_t output)
 
 } // namespace impl
 
-inline char* DoubleToDigits(char* buffer, int& num_digits, int& exponent, double value)
+RYU_INLINE char* DoubleToDigits(char* buffer, int& num_digits, int& exponent, double value)
 {
     const auto res = ryu::F64ToDecimal(value);
 
@@ -2130,7 +2140,7 @@ inline char* DoubleToDigits(char* buffer, int& num_digits, int& exponent, double
     return buffer + num_digits;
 }
 
-inline char* DoubleToDigits(char* buffer, int& num_digits, int& exponent, float value)
+RYU_INLINE char* DoubleToDigits(char* buffer, int& num_digits, int& exponent, float value)
 {
     const auto res = ryu::F32ToDecimal(value);
 
