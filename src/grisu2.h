@@ -26,6 +26,10 @@
 #define GRISU_ASSERT(X) assert(X)
 #endif
 
+#ifndef GRISU_INLINE
+#define GRISU_INLINE inline
+#endif
+
 #ifndef GRISU_ROUND
 #define GRISU_ROUND 1
 #endif
@@ -49,7 +53,7 @@ namespace grisu2 {
 namespace impl {
 
 template <typename Dest, typename Source>
-inline Dest ReinterpretBits(Source source)
+GRISU_INLINE Dest ReinterpretBits(Source source)
 {
     static_assert(sizeof(Dest) == sizeof(Source), "size mismatch");
 
@@ -91,7 +95,7 @@ struct DiyFp // f * 2^e
 
 // Returns x - y.
 // PRE: x.e == y.e and x.f >= y.f
-inline DiyFp Subtract(DiyFp x, DiyFp y)
+GRISU_INLINE DiyFp Subtract(DiyFp x, DiyFp y)
 {
     GRISU_ASSERT(x.e == y.e);
     GRISU_ASSERT(x.f >= y.f);
@@ -101,7 +105,7 @@ inline DiyFp Subtract(DiyFp x, DiyFp y)
 
 // Returns x * y.
 // The result is rounded (ties up). (Only the upper q bits are returned.)
-inline DiyFp Multiply(DiyFp x, DiyFp y)
+GRISU_INLINE DiyFp Multiply(DiyFp x, DiyFp y)
 {
     static_assert(DiyFp::SignificandSize == 64, "internal error");
 
@@ -156,7 +160,7 @@ inline DiyFp Multiply(DiyFp x, DiyFp y)
 
 // Returns the number of leading 0-bits in x, starting at the most significant bit position.
 // If x is 0, the result is undefined.
-inline int CountLeadingZeros64(uint64_t x)
+GRISU_INLINE int CountLeadingZeros64(uint64_t x)
 {
     GRISU_ASSERT(x != 0);
 
@@ -184,17 +188,19 @@ inline int CountLeadingZeros64(uint64_t x)
 
 // Normalize x such that the significand is >= 2^(q-1).
 // PRE: x.f != 0
-inline DiyFp Normalize(DiyFp x)
+GRISU_INLINE DiyFp Normalize(DiyFp x)
 {
     static_assert(DiyFp::SignificandSize == 64, "internal error");
 
+    // For double: lz >= 64-53 = 11
+    // For single: lz >= 64-24 = 40
     const int lz = CountLeadingZeros64(x.f);
     return DiyFp(x.f << lz, x.e - lz);
 }
 
 // Normalize x such that the result has the exponent E.
 // PRE: e >= x.e and the upper e - x.e bits of x.f must be zero.
-inline DiyFp NormalizeTo(DiyFp x, int e)
+GRISU_INLINE DiyFp NormalizeTo(DiyFp x, int e)
 {
     const int delta = x.e - e;
 
@@ -278,7 +284,7 @@ struct IEEE
 // The result is not normalized.
 // PRE: `value` must be finite and non-negative, i.e. >= +0.0.
 template <typename Float>
-inline DiyFp DiyFpFromFloat(Float value)
+GRISU_INLINE DiyFp DiyFpFromFloat(Float value)
 {
     using Fp = IEEE<Float>;
 
@@ -332,7 +338,7 @@ struct Boundaries {
 // boundaries.
 // PRE: 'value' must be finite and positive
 template <typename Float>
-inline Boundaries ComputeBoundaries(Float value)
+GRISU_INLINE Boundaries ComputeBoundaries(Float value)
 {
     using Fp = IEEE<Float>;
 
@@ -476,17 +482,20 @@ constexpr int kGamma = -32;
 //
 // (A smaller distance gamma-alpha would require a larger table.)
 
-// Technically, right-shift of negative integers is implementation defined...
-// Portable SAR.
-// Should easily be optimized into SAR (or equivalent) instruction.
-inline int SAR(int x, int n)
+// Returns: floor(x / 2^n)
+GRISU_INLINE int SAR(int x, int n)
 {
-//  return x >> n;
+    // Technically, right-shift of negative integers is implementation defined...
+    // Should easily get optimized into SAR (or equivalent) instruction.
+#if 1
     return x < 0 ? ~(~x >> n) : (x >> n);
+#else
+    return x >> n;
+#endif
 }
 
 // Returns: floor(log_2(10^e))
-inline int FloorLog2Pow10(int e)
+GRISU_INLINE int FloorLog2Pow10(int e)
 {
     GRISU_ASSERT(e >= -1233);
     GRISU_ASSERT(e <=  1232);
@@ -494,7 +503,7 @@ inline int FloorLog2Pow10(int e)
 }
 
 // Returns: ceil(log_10(2^e))
-inline int CeilLog10Pow2(int e)
+GRISU_INLINE int CeilLog10Pow2(int e)
 {
     GRISU_ASSERT(e >= -2620);
     GRISU_ASSERT(e <=  2620);
@@ -513,7 +522,7 @@ constexpr int kCachedPowersMaxDecExp    =  324;
 constexpr int kCachedPowersDecExpStep   =    8;
 
 // Returns (an approximation) 10^(MinDecExp + index * DecExpStep) in the form f * 2^e.
-inline CachedPower GetCachedPower(int index)
+GRISU_INLINE CachedPower GetCachedPower(int index)
 {
     // Let e = floor(log_2 10^k) + 1 - 64.
     // Negative powers of 10 are stored as: f = round_up(2^-e / 10^-k).
@@ -615,7 +624,7 @@ inline CachedPower GetCachedPower(int index)
 //
 //      alpha <= e_c + e + q <= gamma.
 //
-inline CachedPower GetCachedPowerForBinaryExponent(int e)
+GRISU_INLINE CachedPower GetCachedPowerForBinaryExponent(int e)
 {
     // For double: -1137 <= e <= 960 ==> -307 <= k <= 324 ==>  0 <= index <= 78
     // For single:  -180 <= e <=  96 ==>  -47 <= k <= 36  ==> 32 <= index <= 42
@@ -692,12 +701,6 @@ L_2_digits:
         return buf;
     }
 
-#if 1
-    if (n >=  100000) { if (n >= 1000000) goto L_7_digits; else goto L_6_digits; }
-    if (n >=    1000) { if (n >=   10000) goto L_5_digits; else goto L_4_digits; }
-    if (n >=      10) { if (n >=     100) goto L_3_digits; else goto L_2_digits; }
-    goto L_1_digit;
-#else
     if (n >= 1000000) goto L_7_digits;
     if (n >=  100000) goto L_6_digits;
     if (n >=   10000) goto L_5_digits;
@@ -705,7 +708,6 @@ L_2_digits:
     if (n >=     100) goto L_3_digits;
     if (n >=      10) goto L_2_digits;
     goto L_1_digit;
-#endif
 }
 
 #if GRISU_ROUND
@@ -717,7 +719,7 @@ L_2_digits:
 //  * delta       = (H - L) * unit
 //  * rest        = (H - digits * 10^kappa) * unit
 //  * ten_kappa   = 10^kappa * unit
-inline void Grisu2Round(char* digits, int num_digits, uint64_t distance, uint64_t delta, uint64_t rest, uint64_t ten_kappa)
+GRISU_INLINE void Grisu2Round(char* digits, int num_digits, uint64_t distance, uint64_t delta, uint64_t rest, uint64_t ten_kappa)
 {
     GRISU_ASSERT(num_digits >= 1);
     GRISU_ASSERT(distance <= delta);
@@ -774,9 +776,9 @@ inline void Grisu2Round(char* digits, int num_digits, uint64_t distance, uint64_
 // Generates V = digits * 10^exponent, such that L <= V <= H.
 // L and H must be normalized and share the same exponent -60 <= e <= -32.
 #if GRISU_ROUND
-inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L, DiyFp w, DiyFp H)
+GRISU_INLINE void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L, DiyFp w, DiyFp H)
 #else
-inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L, DiyFp H)
+GRISU_INLINE void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L, DiyFp H)
 #endif
 {
     static_assert(DiyFp::SignificandSize == 64, "internal error");
@@ -904,8 +906,8 @@ inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L
             //
             GRISU_ASSERT(p2 <= 0xFFFFFFFFFFFFFFFFull / 10);
             p2 *= 10;
-            const uint64_t d = p2 >> -one.e;     // d = (10 * p2) div 2^-e
-            const uint64_t r = p2 & (one.f - 1); // r = (10 * p2) mod 2^-e
+            const uint32_t d = static_cast<uint32_t>(p2 >> -one.e); // d = (10 * p2) div 2^-e
+            const uint64_t r = p2 & (one.f - 1);                    // r = (10 * p2) mod 2^-e
             GRISU_ASSERT(d <= 9);
             //
             //      H = digits * 10^-m + 10^-m * (1/10 * (d * 2^-e + r) * 2^e
@@ -1019,15 +1021,16 @@ inline void Grisu2DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L
 // length is the length of the buffer (number of decimal digits)
 // The buffer must be large enough, i.e. >= max_digits10.
 #if GRISU_ROUND
-inline void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, DiyFp v, DiyFp m_plus)
+GRISU_INLINE void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, DiyFp v, DiyFp m_plus)
 #else
-inline void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, DiyFp m_plus)
+GRISU_INLINE void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, DiyFp m_plus)
 #endif
 {
     GRISU_ASSERT(m_plus.e == m_minus.e);
 #if GRISU_ROUND
     GRISU_ASSERT(m_plus.e == v.e);
 #endif
+    //GRISU_ASSERT(m_plus.f - m_minus.f >= 1536); // delta >= 2^(q-p-1) + 2^(q-p-2) = 1024 + 512
 
     //  --------+-----------------------+-----------------------+--------    (A)
     //          m-                      v                       m+
@@ -1057,6 +1060,8 @@ inline void Grisu2(char* digits, int& num_digits, int& exponent, DiyFp m_minus, 
     // The result of Multiply() is **NOT** neccessarily normalized.
     // But since m+ and c are normalized, w_plus.f >= 2^(q - 2).
     GRISU_ASSERT(w_plus.f >= (uint64_t{1} << (64 - 2)));
+
+    //GRISU_ASSERT(w_plus.f - w_minus.f >= 768); // delta >= 2^(q-p-2) + 2^(q-p-3) = 512 + 256
 
     //  ----(---+---)---------------(---+---)---------------(---+---)----
     //          w-                      w                       w+
@@ -1106,7 +1111,7 @@ constexpr int kDoubleToDigitsMaxLength = 17;
 // PRE: The buffer must be large enough, i.e. >= max_digits10.
 // PRE: value must be finite and strictly positive.
 template <typename Float>
-inline char* DoubleToDigits(char* next, char* last, int& num_digits, int& exponent, Float value)
+GRISU_INLINE char* DoubleToDigits(char* next, char* last, int& num_digits, int& exponent, Float value)
 {
     static_assert(grisu2::impl::DiyFp::SignificandSize >= std::numeric_limits<Float>::digits + 3,
         "Grisu2 requires at least three extra bits of precision");
@@ -1128,11 +1133,8 @@ inline char* DoubleToDigits(char* next, char* last, int& num_digits, int& expone
     // The resulting 'double' when cast to 'float' is off by 1 ulp, i.e. for f = 7.0385307e-26f,
     //      f != (float)strtod(ftoa(f))
     // For all other single-precision numbers, equality holds.
-#if 0
-    const auto boundaries = grisu2::impl::ComputeBoundaries(static_cast<double>(value));
-#else
+
     const auto boundaries = grisu2::impl::ComputeBoundaries(value);
-#endif
 
 #if GRISU_ROUND
     grisu2::impl::Grisu2(next, num_digits, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
@@ -1156,7 +1158,7 @@ namespace impl {
 // Returns a pointer to the element following the digits.
 //
 // PRE: -1000 < value < 1000
-inline char* ExponentToString(char* buffer, int value)
+GRISU_INLINE char* ExponentToString(char* buffer, int value)
 {
     GRISU_ASSERT(value > -1000);
     GRISU_ASSERT(value <  1000);
@@ -1195,7 +1197,7 @@ inline char* ExponentToString(char* buffer, int value)
     return buffer + n;
 }
 
-inline char* FormatFixed(char* buffer, intptr_t num_digits, intptr_t decimal_point, bool force_trailing_dot_zero)
+GRISU_INLINE char* FormatFixed(char* buffer, intptr_t num_digits, intptr_t decimal_point, bool force_trailing_dot_zero)
 {
     GRISU_ASSERT(buffer != nullptr);
     GRISU_ASSERT(num_digits >= 1);
@@ -1236,7 +1238,7 @@ inline char* FormatFixed(char* buffer, intptr_t num_digits, intptr_t decimal_poi
     }
 }
 
-inline char* FormatScientific(char* buffer, intptr_t num_digits, int exponent, bool /*force_trailing_dot_zero*/)
+GRISU_INLINE char* FormatScientific(char* buffer, intptr_t num_digits, int exponent, bool force_trailing_dot_zero)
 {
     GRISU_ASSERT(buffer != nullptr);
     GRISU_ASSERT(num_digits >= 1);
@@ -1247,13 +1249,11 @@ inline char* FormatScientific(char* buffer, intptr_t num_digits, int exponent, b
         // GRISU_ASSERT(buffer_capacity >= num_digits + 5);
 
         buffer += 1;
-#if 0
         if (force_trailing_dot_zero)
         {
             *buffer++ = '.';
             *buffer++ = '0';
         }
-#endif
     }
     else
     {
@@ -1284,7 +1284,7 @@ constexpr int kPositiveDtoaMaxLength = 24;
 //
 // Note: The result is _not_ null-terminated
 template <typename Float>
-inline char* PositiveDtoa(char* next, char* last, Float value, bool force_trailing_dot_zero = false)
+GRISU_INLINE char* PositiveDtoa(char* next, char* last, Float value, bool force_trailing_dot_zero = false)
 {
     GRISU_ASSERT(last - next >= kPositiveDtoaMaxLength);
     GRISU_ASSERT(grisu2::impl::IEEE<Float>(value).IsFinite());
@@ -1340,7 +1340,7 @@ inline char* PositiveDtoa(char* next, char* last, Float value, bool force_traili
 
 namespace impl {
 
-inline char* StrCopy(char* next, char* last, const char* source)
+GRISU_INLINE char* StrCopy(char* next, char* last, const char* source)
 {
     static_cast<void>(last); // Fix warning
 
@@ -1369,7 +1369,7 @@ constexpr int kDtoaMaxLength = 1/* minus-sign */ + kPositiveDtoaMaxLength;
 //
 // Note: The result is _not_ null-terminated.
 template <typename Float>
-inline char* Dtoa(
+GRISU_INLINE char* Dtoa(
     char*       next,
     char*       last,
     Float       value,
