@@ -18,6 +18,7 @@
 
 struct DoubleConversionConverter
 {
+    static const bool optimal = true;
     static const char* Name() { return "double-conversion"; }
     char* operator()(char* buf, int buflen, float f) { return double_conversion_Ftoa(buf, buflen, f); }
     char* operator()(char* buf, int buflen, double f) { return double_conversion_Dtoa(buf, buflen, f); }
@@ -25,6 +26,7 @@ struct DoubleConversionConverter
 
 struct Grisu2Converter
 {
+    static const bool optimal = false;
     static const char* Name() { return "grisu2"; }
     char* operator()(char* buf, int buflen, float f) { return grisu2_Ftoa(buf, buflen, f); }
     char* operator()(char* buf, int buflen, double f) { return grisu2_Dtoa(buf, buflen, f); }
@@ -32,6 +34,7 @@ struct Grisu2Converter
 
 struct Grisu3Converter
 {
+    static const bool optimal = true;
     static const char* Name() { return "grisu3-dragon4"; }
     char* operator()(char* buf, int buflen, float f) { return grisu3_Ftoa(buf, buflen, f); }
     char* operator()(char* buf, int buflen, double f) { return grisu3_Dtoa(buf, buflen, f); }
@@ -39,6 +42,7 @@ struct Grisu3Converter
 
 struct RyuConverter
 {
+    static const bool optimal = true;
     static const char* Name() { return "ryu"; }
     char* operator()(char* buf, int buflen, float f) { return ryu_Ftoa(buf, buflen, f); }
     char* operator()(char* buf, int buflen, double f) { return ryu_Dtoa(buf, buflen, f); }
@@ -178,21 +182,28 @@ static void CheckSingle(Converter d2s, float f0)
     CAPTURE(bits1);
     CHECK(bits0 == bits1);
 
-#if TEST_OPTIMAL
     char buf1[32];
     char* end1 = double_conversion_Ftoa(buf1, 32, f0);
 
     const std::string s0(buf0, end0);
     const std::string s1(buf1, end1);
-    if (s0.size() != s1.size())
+    if (Converter::optimal)
     {
-        printf("%s: not short [0x%08X]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, s0.c_str(), s1.c_str());
+        CHECK(s0 == s1);
     }
-    else if (s0 != s1)
+    else
     {
-        printf("%s: not optimal [0x%08X]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, s0.c_str(), s1.c_str());
-    }
+#if TEST_OPTIMAL
+        if (s0.size() != s1.size())
+        {
+            printf("%s: not short [0x%08X]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, s0.c_str(), s1.c_str());
+        }
+        else if (s0 != s1)
+        {
+            printf("%s: not optimal [0x%08X]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, s0.c_str(), s1.c_str());
+        }
 #endif
+    }
 }
 
 static void CheckSingle(float f)
@@ -225,21 +236,28 @@ static void CheckDouble(Converter d2s, double f0)
     CAPTURE(bits1);
     CHECK(bits0 == bits1);
 
-#if TEST_OPTIMAL
     char buf1[32];
     char* end1 = double_conversion_Dtoa(buf1, 32, f0);
 
     const std::string s0(buf0, end0);
     const std::string s1(buf1, end1);
-    if (s0.size() != s1.size())
+    if (Converter::optimal)
     {
-        printf("%s: not short [0x%016llX]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, s0.c_str(), s1.c_str());
+        CHECK(s0 == s1);
     }
-    else if (s0 != s1)
+    else
     {
-        printf("%s: not optimal [0x%016llX]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, s0.c_str(), s1.c_str());
-    }
+#if TEST_OPTIMAL
+        if (s0.size() != s1.size())
+        {
+            printf("%s: not short [0x%016llX]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, s0.c_str(), s1.c_str());
+        }
+        else if (s0 != s1)
+        {
+            printf("%s: not optimal [0x%016llX]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, s0.c_str(), s1.c_str());
+        }
 #endif
+    }
 }
 
 static void CheckDouble(double f)
