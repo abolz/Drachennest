@@ -62,7 +62,7 @@ namespace impl {
 //==================================================================================================
 
 template <typename T, size_t N>
-RYU_INLINE size_t ArraySize(T const (&)[N]) { return N; }
+RYU_INLINE size_t ArraySize(const T (&)[N]) { return N; }
 
 template <typename Dest, typename Source>
 RYU_INLINE Dest ReinterpretBits(Source source)
@@ -1554,7 +1554,7 @@ RYU_INLINE uint64_t ComputePow5ForNegativeExponentF32(int i)
     };
 
     RYU_ASSERT(i >= 0);
-    RYU_ASSERT(i < ArraySize(kPow5Inv));
+    RYU_ASSERT(static_cast<size_t>(i) < ArraySize(kPow5Inv));
     return kPow5Inv[i];
 }
 
@@ -1615,7 +1615,7 @@ RYU_INLINE uint64_t ComputePow5ForPositiveExponentF32(int i)
     };
 
     RYU_ASSERT(i >= 0);
-    RYU_ASSERT(i < ArraySize(kPow5));
+    RYU_ASSERT(static_cast<size_t>(i) < ArraySize(kPow5));
     return kPow5[i];
 }
 
@@ -1996,7 +1996,7 @@ RYU_INLINE CharT* Utoa_8Digits(CharT* buf, uint32_t digits)
 RYU_INLINE int DecimalLength(uint64_t v)
 {
     RYU_ASSERT(v >= 1);
-    RYU_ASSERT(v < 100000000000000000); // 10^17 = 0x0163'4578'5D8A'0000
+    RYU_ASSERT(v < 100000000000000000ull); // 10^17 = 0x0163'4578'5D8A'0000
 
     if (v >= 10000000000000000ull) { return 17; }
     if (v >= 1000000000000000ull) { return 16; }
@@ -2005,15 +2005,15 @@ RYU_INLINE int DecimalLength(uint64_t v)
     if (v >= 1000000000000ull) { return 13; }
     if (v >= 100000000000ull) { return 12; }
     if (v >= 10000000000ull) { return 11; }
-    if (v >= 1000000000) { return 10; }
-    if (v >= 100000000) { return 9; }
-    if (v >= 10000000) { return 8; }
-    if (v >= 1000000) { return 7; }
-    if (v >= 100000) { return 6; }
-    if (v >= 10000) { return 5; }
-    if (v >= 1000) { return 4; }
-    if (v >= 100) { return 3; }
-    if (v >= 10) { return 2; }
+    if (v >= 1000000000ull) { return 10; }
+    if (v >= 100000000ull) { return 9; }
+    if (v >= 10000000ull) { return 8; }
+    if (v >= 1000000ull) { return 7; }
+    if (v >= 100000ull) { return 6; }
+    if (v >= 10000ull) { return 5; }
+    if (v >= 1000ull) { return 4; }
+    if (v >= 100ull) { return 3; }
+    if (v >= 10ull) { return 2; }
     return 1;
 }
 
@@ -2042,8 +2042,8 @@ RYU_INLINE int PrintDecimalDigits(char* buf, uint64_t output)
     while (output2 >= 10000)
     {
         RYU_ASSERT(i > 4);
-        uint32_t const q = output2 / 10000;
-        uint32_t const r = output2 % 10000;
+        const uint32_t q = output2 / 10000;
+        const uint32_t r = output2 % 10000;
         output2 = q;
         i -= 4;
         Utoa_4Digits(buf + i, r);
@@ -2052,8 +2052,8 @@ RYU_INLINE int PrintDecimalDigits(char* buf, uint64_t output)
     if (output2 >= 100)
     {
         RYU_ASSERT(i > 2);
-        uint32_t const q = output2 / 100;
-        uint32_t const r = output2 % 100;
+        const uint32_t q = output2 / 100;
+        const uint32_t r = output2 % 100;
         output2 = q;
         i -= 2;
         Utoa_2Digits(buf + i, r);
@@ -2097,8 +2097,8 @@ RYU_INLINE int PrintDecimalDigits(char* buf, uint32_t output)
     while (output >= 10000)
     {
         RYU_ASSERT(i > 4);
-        uint32_t const q = output / 10000;
-        uint32_t const r = output % 10000;
+        const uint32_t q = output / 10000;
+        const uint32_t r = output % 10000;
         output = q;
         i -= 4;
         Utoa_4Digits(buf + i, r);
@@ -2107,8 +2107,8 @@ RYU_INLINE int PrintDecimalDigits(char* buf, uint32_t output)
     if (output >= 100)
     {
         RYU_ASSERT(i > 2);
-        uint32_t const q = output / 100;
-        uint32_t const r = output % 100;
+        const uint32_t q = output / 100;
+        const uint32_t r = output % 100;
         output = q;
         i -= 2;
         Utoa_2Digits(buf + i, r);
