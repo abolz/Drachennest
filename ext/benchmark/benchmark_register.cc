@@ -237,9 +237,9 @@ Benchmark::Benchmark(const char* name)
       use_manual_time_(false),
       complexity_(oNone),
       complexity_lambda_(nullptr) {
-  ComputeStatistics("mean", StatisticsMean);
-  ComputeStatistics("median", StatisticsMedian);
-  ComputeStatistics("stddev", StatisticsStdDev);
+  // ComputeStatistics("mean", StatisticsMean);
+  // ComputeStatistics("median", StatisticsMedian);
+  // ComputeStatistics("stddev", StatisticsStdDev);
 }
 
 Benchmark::~Benchmark() {}
