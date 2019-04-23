@@ -1,0 +1,47 @@
+Run on (4 X 1992 MHz CPU s)
+CPU Caches:
+  L1 Data 32K (x2)
+  L1 Instruction 32K (x2)
+  L2 Unified 262K (x2)
+  L3 Unified 3145K (x1)
+-------------------------------------------------------------------------------------
+Benchmark                                              Time           CPU Iterations
+-------------------------------------------------------------------------------------
+double - Random-bits   /repeats:3_min                311 ns        306 ns    2090667
+double - Uniform 0/1   /repeats:3_min                250 ns        246 ns    2800000
+double - Uniform 0/1e+308   /repeats:3_min           327 ns        322 ns    2133333
+double - Uniform 1e+10/1e+11   /repeats:3_min        288 ns        289 ns    2488889
+double - Uniform 1e+11/1e+12   /repeats:3_min        287 ns        285 ns    2357895
+double - Uniform 1e+12/1e+13   /repeats:3_min        261 ns        261 ns    2635294
+double - Uniform 1e+13/1e+14   /repeats:3_min        304 ns        300 ns    2240000
+double - Uniform 1e+14/1e+15   /repeats:3_min        666 ns        656 ns    1000000
+double - Uniform 1e+15/1e+16   /repeats:3_min        375 ns        353 ns    1947826
+double - Uniform 1e+16/1e+17   /repeats:3_min        902 ns        900 ns     746667
+double - Uniform 1e+17/1e+18   /repeats:3_min        374 ns        377 ns    1866667
+double - Uniform 1e+18/1e+19   /repeats:3_min        294 ns        292 ns    2357895
+double - Uniform 1e+19/1e+20   /repeats:3_min        296 ns        298 ns    2357895
+double - 1.0-digits   /repeats:3_min                 154 ns        153 ns    4480000
+double - 1.1-digits   /repeats:3_min                 182 ns        180 ns    3733333
+double - 1.2-digits   /repeats:3_min                 194 ns        190 ns    3446154
+double - 1.3-digits   /repeats:3_min                 208 ns        204 ns    3446154
+double - 1.4-digits   /repeats:3_min                 223 ns        220 ns    2986667
+double - 1.5-digits   /repeats:3_min                 217 ns        210 ns    3200000
+double - 1.6-digits   /repeats:3_min                 219 ns        215 ns    3200000
+double - 1.7-digits   /repeats:3_min                 223 ns        220 ns    3200000
+double - 1.8-digits   /repeats:3_min                 224 ns        225 ns    3200000
+double - 1.9-digits   /repeats:3_min                 229 ns        225 ns    2986667
+double - 1.10-digits   /repeats:3_min                231 ns        230 ns    2986667
+double - 1.11-digits   /repeats:3_min                236 ns        230 ns    2986667
+double - 1.12-digits   /repeats:3_min                240 ns        230 ns    2986667
+double - 1.13-digits   /repeats:3_min                245 ns        241 ns    2986667
+double - 1.14-digits   /repeats:3_min                251 ns        251 ns    2800000
+single - Random-bits   /repeats:3_min                269 ns        270 ns    2488889
+single - Uniform 0/1   /repeats:3_min                212 ns        210 ns    3200000
+single - Uniform 0/1e+38   /repeats:3_min            217 ns        210 ns    3200000
+single - 1.0-digits   /repeats:3_min                 159 ns        157 ns    4480000
+single - 1.1-digits   /repeats:3_min                 186 ns        184 ns    3733333
+single - 1.2-digits   /repeats:3_min                 200 ns        201 ns    3733333
+single - 1.3-digits   /repeats:3_min                 213 ns        213 ns    3446154
+single - 1.4-digits   /repeats:3_min                 226 ns        220 ns    3200000
+single - 1.5-digits   /repeats:3_min                 218 ns        215 ns    3200000
+single - 1.6-digits   /repeats:3_min                 220 ns        215 ns    3200000
