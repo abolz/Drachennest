@@ -33,10 +33,6 @@
 #define RYU_SMALL_INT_OPTIMIZATION 1
 #endif
 
-#ifndef RYU_XXX_USE_CLZ_DECIMAL_LENGTH
-#define RYU_XXX_USE_CLZ_DECIMAL_LENGTH 0
-#endif
-
 #if defined(_M_IX86) || defined(_M_ARM) || defined(__i386__) || defined(__arm__)
 #define RYU_32_BIT_PLATFORM 1
 #endif
@@ -1987,72 +1983,11 @@ RYU_INLINE CharT* Utoa_8Digits(CharT* buf, uint32_t digits)
     return buf + 8;
 }
 
-#if RYU_XXX_USE_CLZ_DECIMAL_LENGTH
-
-// Returns the number of leading 0-bits in x, starting at the most significant bit position.
-// If x is 0, the result is undefined.
-RYU_INLINE int CountLeadingZeros64(uint64_t x)
-{
-    RYU_ASSERT(x != 0);
-
-#if defined(__GNUC__)
-    return __builtin_clzll(x);
-#elif defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64))
-    return static_cast<int>(_CountLeadingZeros64(x));
-#elif defined(_MSC_VER) && defined(_M_X64)
-    return static_cast<int>(__lzcnt64(x));
-#elif defined(_MSC_VER) && defined(_M_IX86)
-    int lz = static_cast<int>( __lzcnt(static_cast<uint32_t>(x >> 32)) );
-    if (lz == 32) {
-        lz += static_cast<int>( __lzcnt(static_cast<uint32_t>(x)) );
-    }
-    return lz;
-#else
-    int lz = 0;
-    while ((x >> 63) == 0) {
-        x <<= 1;
-        ++lz;
-    }
-    return lz;
-#endif
-}
-
-RYU_INLINE int DecimalLength(uint64_t v)
-{
-    static constexpr uint64_t Table[] = {
-        0,                 // 10^0  - 1
-        9,                 // 10^1  - 1
-        99,                // 10^2  - 1
-        999,               // 10^3  - 1
-        9999,              // 10^4  - 1
-        99999,             // 10^5  - 1
-        999999,            // 10^6  - 1
-        9999999,           // 10^7  - 1
-        99999999,          // 10^8  - 1
-        999999999,         // 10^9  - 1
-        9999999999,        // 10^10 - 1
-        99999999999,       // 10^11 - 1
-        999999999999,      // 10^12 - 1
-        9999999999999,     // 10^13 - 1
-        99999999999999,    // 10^14 - 1
-        999999999999999,   // 10^15 - 1
-        9999999999999999,  // 10^16 - 1
-        99999999999999999, // 10^17 - 1
-    };
-
-    constexpr int Bits = 64;
-    const int y = ((19 * (Bits - 1) + (1 << 6)) - 19 * CountLeadingZeros64(v)) >> 6;
-    return y + (Table[y] < v);
-}
-
-#else
-
 RYU_INLINE int DecimalLength(uint64_t v)
 {
     RYU_ASSERT(v >= 1);
     RYU_ASSERT(v < 100000000000000000); // 10^17 = 0x0163'4578'5D8A'0000
 
-#if 1
     if (v >= 10000000000000000ull) { return 17; }
     if (v >= 1000000000000000ull) { return 16; }
     if (v >= 100000000000000ull) { return 15; }
@@ -2070,36 +2005,7 @@ RYU_INLINE int DecimalLength(uint64_t v)
     if (v >= 100) { return 3; }
     if (v >= 10) { return 2; }
     return 1;
-#else
-    if (static_cast<uint32_t>(v >> 32) != 0) // if (v > UINT32_MAX)
-    {
-        if (v >= 10000000000000000ull) { return 17; }
-        if (v >= 1000000000000000ull) { return 16; }
-        if (v >= 100000000000000ull) { return 15; }
-        if (v >= 10000000000000ull) { return 14; }
-        if (v >= 1000000000000ull) { return 13; }
-        if (v >= 100000000000ull) { return 12; }
-        if (v >= 10000000000) { return 11; }
-        return 10;
-    }
-    if (v >= 1000000000) { return 10; }
-
-    // Any integer with at most 9 digits fits into an uint32_t.
-    const uint32_t u = static_cast<uint32_t>(v);
-
-    if (u >= 100000000) { return 9; }
-    if (u >= 10000000) { return 8; }
-    if (u >= 1000000) { return 7; }
-    if (u >= 100000) { return 6; }
-    if (u >= 10000) { return 5; }
-    if (u >= 1000) { return 4; }
-    if (u >= 100) { return 3; }
-    if (u >= 10) { return 2; }
-    return 1;
-#endif
 }
-
-#endif
 
 RYU_INLINE int PrintDecimalDigits(char* buf, uint64_t output)
 {
@@ -2121,65 +2027,6 @@ RYU_INLINE int PrintDecimalDigits(char* buf, uint64_t output)
     }
 
     RYU_ASSERT(output <= UINT32_MAX);
-
-#if RYU_XXX_USE_CLZ_DECIMAL_LENGTH
-    uint32_t n = static_cast<uint32_t>(output);
-    uint32_t q;
-    switch (i)
-    {
-    case 9:
-        q = n / 10000000;
-        n = n % 10000000;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 7:
-        q = n / 100000;
-        n = n % 100000;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 5:
-        q = n / 1000;
-        n = n % 1000;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 3:
-        q = n / 10;
-        n = n % 10;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 1:
-        buf[0] = static_cast<char>('0' + n);
-        buf++;
-        break;
-
-    case 10:
-        q = n / 100000000;
-        n = n % 100000000;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 8:
-        q = n / 1000000;
-        n = n % 1000000;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 6:
-        q = n / 10000;
-        n = n % 10000;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 4:
-        q = n / 100;
-        n = n % 100;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 2:
-        buf = Utoa_2Digits(buf, n);
-        break;
-
-    default:
-        RYU_ASSERT(false && "unreachable");
-    }
-#else
     uint32_t output2 = static_cast<uint32_t>(output);
 
     while (output2 >= 10000)
@@ -2212,56 +2059,9 @@ RYU_INLINE int PrintDecimalDigits(char* buf, uint64_t output)
         RYU_ASSERT(i == 1);
         buf[0] = static_cast<char>('0' + output2);
     }
-#endif
 
     return output_length;
 }
-
-#if RYU_XXX_USE_CLZ_DECIMAL_LENGTH
-
-// Returns the number of leading 0-bits in x, starting at the most significant bit position.
-// If x is 0, the result is undefined.
-RYU_INLINE int CountLeadingZeros32(uint32_t x)
-{
-    RYU_ASSERT(x != 0);
-
-#if defined(__GNUC__)
-    return __builtin_clz(x);
-#elif defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64))
-    return static_cast<int>(_CountLeadingZeros(x));
-#elif defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
-    return static_cast<int>(__lzcnt(x));
-#else
-    int lz = 0;
-    while ((x >> 31) == 0) {
-        x <<= 1;
-        ++lz;
-    }
-    return lz;
-#endif
-}
-
-RYU_INLINE int DecimalLength(uint32_t v)
-{
-    static constexpr uint32_t Table[] = {
-        0,         // 10^0 - 1
-        9,         // 10^1 - 1
-        99,        // 10^2 - 1
-        999,       // 10^3 - 1
-        9999,      // 10^4 - 1
-        99999,     // 10^5 - 1
-        999999,    // 10^6 - 1
-        9999999,   // 10^7 - 1
-        99999999,  // 10^8 - 1
-        999999999, // 10^9 - 1
-    };
-
-    constexpr int Bits = 32;
-    const int y = ((19 * (Bits - 1) + (1 << 6)) - 19 * CountLeadingZeros32(v)) >> 6;
-    return y + (Table[y] < v);
-}
-
-#else
 
 RYU_INLINE int DecimalLength(uint32_t v)
 {
@@ -2279,62 +2079,9 @@ RYU_INLINE int DecimalLength(uint32_t v)
     return 1;
 }
 
-#endif
-
 RYU_INLINE int PrintDecimalDigits(char* buf, uint32_t output)
 {
     const int output_length = DecimalLength(output);
-
-#if RYU_XXX_USE_CLZ_DECIMAL_LENGTH
-    uint32_t n = output;
-    uint32_t q;
-    switch (output_length)
-    {
-    case 9:
-        q = n / 10000000;
-        n = n % 10000000;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 7:
-        q = n / 100000;
-        n = n % 100000;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 5:
-        q = n / 1000;
-        n = n % 1000;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 3:
-        q = n / 10;
-        n = n % 10;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 1:
-        buf[0] = static_cast<char>('0' + n);
-        buf++;
-        break;
-
-    case 8:
-        q = n / 1000000;
-        n = n % 1000000;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 6:
-        q = n / 10000;
-        n = n % 10000;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 4:
-        q = n / 100;
-        n = n % 100;
-        buf = Utoa_2Digits(buf, q);
-        // fall through
-    case 2:
-        buf = Utoa_2Digits(buf, n);
-        break;
-    }
-#else
     int i = output_length;
 
     while (output >= 10000)
@@ -2367,7 +2114,6 @@ RYU_INLINE int PrintDecimalDigits(char* buf, uint32_t output)
         RYU_ASSERT(i == 1);
         buf[0] = static_cast<char>('0' + output);
     }
-#endif
 
     return output_length;
 }
