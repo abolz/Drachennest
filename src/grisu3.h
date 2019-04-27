@@ -1706,7 +1706,7 @@ GRISU_INLINE int CompareAdd(DiyInt const& a, DiyInt const& b, DiyInt const& c)
     // Perform a (partial) left-to-right subtraction, propagating a borrow digit
     // (base B = 2^32) along to the right, stopping as soon as s > c or s < c.
 
-    uint64_t borrow = 0;
+    uint32_t borrow = 0;
     for (int i = nc - 1; i >= 0; --i)
     {
         // Invariant:
@@ -1714,10 +1714,10 @@ GRISU_INLINE int CompareAdd(DiyInt const& a, DiyInt const& b, DiyInt const& c)
         // c[i+1],c[i+2],... (after possibly subtracting a borrow) are equal.
 
         GRISU_ASSERT(borrow == 0 || borrow == 1);
-        const uint64_t ci = borrow << 32 | c.bigits[i];
+        const uint64_t ci = uint64_t{borrow} << 32 | c.bigits[i];
         const uint32_t ai = i < na ? a.bigits[i] : 0;
         const uint32_t bi = i < nb ? b.bigits[i] : 0;
-        const uint64_t si = static_cast<uint64_t>(ai) + bi;
+        const uint64_t si = uint64_t{ai} + bi;
         const uint64_t di = ci - si;
 //      if (ci < si)
         if (di > ci)
@@ -1740,7 +1740,7 @@ GRISU_INLINE int CompareAdd(DiyInt const& a, DiyInt const& b, DiyInt const& c)
         //  s:      1   1  12   3       1   1  12   3
         //              ^                   ^
         //              i                   i
-        borrow = di;
+        borrow = static_cast<uint32_t>(di);
     }
 
 //  return borrow == 0 ? 0 : -1;
