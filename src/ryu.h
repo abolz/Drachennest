@@ -29,10 +29,6 @@
 #define RYU_INLINE inline
 #endif
 
-#ifndef RYU_SMALL_INT_OPTIMIZATION
-#define RYU_SMALL_INT_OPTIMIZATION 1
-#endif
-
 #if defined(_M_IX86) || defined(_M_ARM) || defined(__i386__) || defined(__arm__)
 #define RYU_32_BIT_PLATFORM 1
 #endif
@@ -2154,238 +2150,144 @@ RYU_INLINE char* DoubleToDigits(char* buffer, int& num_digits, int& exponent, fl
 // Dtoa
 //==================================================================================================
 
-namespace impl {
+namespace impl { 
 
-RYU_INLINE void Fill(char* dst, char val, intptr_t count) {
-    std::memset(dst, static_cast<unsigned char>(val), static_cast<size_t>(count));
-}
-
-RYU_INLINE void Copy(char* dst, const char* src, intptr_t length) {
-    std::memcpy(dst, src, static_cast<size_t>(length));
-}
-
-RYU_INLINE void CopyBackward(char* dst, const char* src, intptr_t length) {
-    std::memmove(dst, src, static_cast<size_t>(length));
-}
-
-#if RYU_SMALL_INT_OPTIMIZATION
-
-// Returns whether x is an integer and in the range [1, 2^53]
-// and stores the integral value of x in result.
-RYU_INLINE uint64_t F64ToSmallInt(double x, bool& is_small_int)
+// Appends a decimal representation of 'value' to buffer.
+// Returns a pointer to the element following the digits.
+//
+// PRE: -1000 < value < 1000
+RYU_INLINE char* ExponentToString(char* buffer, int value)
 {
-#if 1
-    if (1.0 <= x && x <= 9007199254740992.0) // 1 <= x <= 2^53
+    RYU_ASSERT(value > -1000);
+    RYU_ASSERT(value <  1000);
+
+    int n = 0;
+
+    if (value < 0)
     {
-        const int64_t i = static_cast<int64_t>(x);
-        is_small_int = (x == static_cast<double>(i));
-        return static_cast<uint64_t>(i);
-    }
-
-    is_small_int = false;
-    return 0;
-#else
-    const Double d(x);
-
-    if (0x3FF0000000000000ull <= d.bits && d.bits < 0x4340000000000000ull) // 1 <= x < 2^53
-    {
-        // x = f * 2^e is a normalized floating-point number.
-        const auto f = d.NormalizedSignificand();
-        const auto e = d.NormalizedExponent();
-        RYU_ASSERT(-e >= 0);
-        RYU_ASSERT(-e < Double::SignificandSize);
-
-        // Test whether the lower -exponent bits are 0, i.e.
-        // whether the fractional part of x is 0.
-        const uint64_t mask = (uint64_t{1} << -e) - 1;
-        const uint64_t fraction = f & mask;
-
-        is_small_int = (fraction == 0);
-        return f >> -e;
+        buffer[n++] = '-';
+        value = -value;
     }
     else
     {
-        // Test whether x == 2^53.
-        // TODO: Merge with the branch above? (significand*2, exponent-1)?
-        is_small_int = (d.bits == 0x4340000000000000ull);
-        return uint64_t{1} << Double::SignificandSize;
-    }
-#endif
-}
-
-RYU_INLINE uint64_t FloatingPointToSmallInt(double x, bool& is_small_int)
-{
-    return F64ToSmallInt(x, is_small_int);
-}
-
-// Returns whether x is an integer and in the range [1, 2^24]
-// and stores the integral value of x in result.
-RYU_INLINE uint32_t F32ToSmallInt(float x, bool& is_small_int)
-{
-#if 1
-    if (1.0f <= x && x <= 16777216.0f) // 1 <= x <= 2^24
-    {
-        const int32_t i = static_cast<int32_t>(x);
-        is_small_int = (x == static_cast<float>(i));
-        return static_cast<uint32_t>(i);
+        buffer[n++] = '+';
     }
 
-    is_small_int = false;
-    return 0;
-#else
-    const Single d(x);
-
-    if (0x3F800000u <= d.bits && d.bits < 0x4B800000u) // 1 <= x <= 2^24
-    {
-        // x = f * 2^e is a normalized floating-point number.
-        const auto f = d.NormalizedSignificand();
-        const auto e = d.NormalizedExponent();
-        RYU_ASSERT(-e >= 0);
-        RYU_ASSERT(-e < Single::SignificandSize);
-
-        // Test whether the lower -exponent bits are 0, i.e.
-        // whether the fractional part of x is 0.
-        const uint32_t mask = (uint32_t{1} << -e) - 1;
-        const uint32_t fraction = f & mask;
-
-        is_small_int = (fraction == 0);
-        return f >> -e;
-    }
-    else
-    {
-        is_small_int = (d.bits == 0x4B800000u);
-        return uint32_t{1} << Single::SignificandSize;
-    }
-#endif
-}
-
-RYU_INLINE uint32_t FloatingPointToSmallInt(float x, bool& is_small_int)
-{
-    return F32ToSmallInt(x, is_small_int);
-}
-
-#endif
-
-RYU_INLINE char* PrintExponent(char* buffer, int exponent)
-{
-    RYU_ASSERT(exponent > -1000);
-    RYU_ASSERT(exponent <  1000);
-
-    if (exponent < 0) {
-        exponent = -exponent;
-        buffer[0] = '-';
-    } else {
-        buffer[0] = '+';
-    }
-    buffer++;
-
-    const uint32_t k = static_cast<uint32_t>(exponent);
+    const uint32_t k = static_cast<uint32_t>(value);
     if (k < 10)
     {
-        buffer[0] = static_cast<char>('0' + k);
-        buffer++;
+        buffer[n++] = static_cast<char>('0' + k);
     }
     else if (k < 100)
     {
-        buffer = Utoa_2Digits(buffer, k);
+        Utoa_2Digits(buffer + n, k);
+        n += 2;
     }
     else
     {
-        const uint32_t q = k / 100;
-        const uint32_t r = k % 100;
-        buffer[0] = static_cast<char>('0' + q);
-        buffer = Utoa_2Digits(buffer + 1, r);
+        const uint32_t r = k % 10;
+        const uint32_t q = k / 10;
+        Utoa_2Digits(buffer + n, q);
+        n += 2;
+        buffer[n++] = static_cast<char>('0' + r);
     }
+
+    return buffer + n;
+}
+
+RYU_INLINE char* FormatFixed(char* buffer, intptr_t num_digits, intptr_t decimal_point, bool force_trailing_dot_zero)
+{
+    RYU_ASSERT(buffer != nullptr);
+    RYU_ASSERT(num_digits >= 1);
+
+    if (num_digits <= decimal_point)
+    {
+        // digits[000]
+        // GRISU_ASSERT(buffer_capacity >= decimal_point + (force_trailing_dot_zero ? 2 : 0));
+
+        std::memset(buffer + num_digits, '0', static_cast<size_t>(decimal_point - num_digits));
+        buffer += decimal_point;
+        if (force_trailing_dot_zero)
+        {
+            *buffer++ = '.';
+            *buffer++ = '0';
+        }
+        return buffer;
+    }
+    else if (0 < decimal_point)
+    {
+        // dig.its
+        // GRISU_ASSERT(buffer_capacity >= length + 1);
+
+        std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, static_cast<size_t>(num_digits - decimal_point));
+        buffer[decimal_point] = '.';
+        return buffer + (num_digits + 1);
+    }
+    else // decimal_point <= 0
+    {
+        // 0.[000]digits
+        // GRISU_ASSERT(buffer_capacity >= 2 + (-decimal_point) + length);
+
+        std::memmove(buffer + (2 + -decimal_point), buffer, static_cast<size_t>(num_digits));
+        buffer[0] = '0';
+        buffer[1] = '.';
+        std::memset(buffer + 2, '0', static_cast<size_t>(-decimal_point));
+        return buffer + (2 + (-decimal_point) + num_digits);
+    }
+}
+
+RYU_INLINE char* FormatScientific(char* buffer, intptr_t num_digits, int exponent, bool force_trailing_dot_zero)
+{
+    RYU_ASSERT(buffer != nullptr);
+    RYU_ASSERT(num_digits >= 1);
+
+    if (num_digits == 1)
+    {
+        // dE+123
+        // GRISU_ASSERT(buffer_capacity >= num_digits + 5);
+
+        buffer += 1;
+        if (force_trailing_dot_zero)
+        {
+            *buffer++ = '.';
+            *buffer++ = '0';
+        }
+    }
+    else
+    {
+        // d.igitsE+123
+        // GRISU_ASSERT(buffer_capacity >= num_digits + 1 + 5);
+
+        std::memmove(buffer + 2, buffer + 1, static_cast<size_t>(num_digits - 1));
+        buffer[1] = '.';
+        buffer += 1 + num_digits;
+    }
+
+    buffer[0] = 'e';
+    buffer = ExponentToString(buffer + 1, exponent);
 
     return buffer;
 }
 
-RYU_INLINE char* Format(char* buffer, intptr_t num_digits, intptr_t decimal_exponent, bool force_trailing_dot_zero = false)
+template <typename UnsignedInteger>
+RYU_INLINE char* FormatDigits(char* buffer, UnsignedInteger digits, int exponent, bool force_trailing_dot_zero)
 {
-    const intptr_t decimal_point = num_digits + decimal_exponent;
+    const int num_digits = PrintDecimalDigits(buffer, digits);
+    const int decimal_point = num_digits + exponent;
 
     // Format the digits similar to printf's %g style.
     //
     // NB:
     // These are the values used by JavaScript's ToString applied to Number
     // type. Printf uses the values -4 and max_digits10 resp. (sort of).
-#if 1
     constexpr int kMinExp = -6;
     constexpr int kMaxExp = 21;
-#else
-    constexpr int kMinExp = -4;
-    constexpr int kMaxExp =  6;
-#endif
 
-    if (kMinExp < decimal_point && decimal_point <= kMaxExp)
-    {
-        if (num_digits <= decimal_point)
-        {
-            // digits[000]
-            // RYU_ASSERT(buffer_capacity >= decimal_point + 2);
+    const bool use_fixed = kMinExp < decimal_point && decimal_point <= kMaxExp;
 
-            Fill(buffer + num_digits, '0', decimal_point - num_digits);
-            buffer += decimal_point;
-            if (force_trailing_dot_zero)
-            {
-                buffer[0] = '.';
-                buffer[1] = '0';
-                buffer += 2;
-            }
-        }
-        else if (0 < decimal_point)
-        {
-            // dig.its
-            // RYU_ASSERT(buffer_capacity >= length + 1);
-
-            CopyBackward(buffer + (decimal_point + 1), buffer + decimal_point, num_digits - decimal_point);
-            buffer[decimal_point] = '.';
-            buffer += num_digits + 1;
-        }
-        else // decimal_point <= 0
-        {
-            // 0.[000]digits
-            // RYU_ASSERT(buffer_capacity >= 2 + (-decimal_point) + length);
-
-            CopyBackward(buffer + (2 + (-decimal_point)), buffer, num_digits);
-            Fill(buffer, '0', 2 + (-decimal_point));
-            buffer[1] = '.';
-            buffer += 2 + (-decimal_point) + num_digits;
-        }
-    }
-    else
-    {
-        if (num_digits == 1)
-        {
-            // dE+123
-            // RYU_ASSERT(buffer_capacity >= num_digits + 2 + 5);
-
-            buffer += 1;
-#if 1
-            if (force_trailing_dot_zero)
-            {
-                buffer[0] = '.';
-                buffer[1] = '0';
-                buffer += 2;
-            }
-#endif
-        }
-        else
-        {
-            // d.igitsE+123
-            // RYU_ASSERT(buffer_capacity >= num_digits + 1 + 5);
-
-            CopyBackward(buffer + 2, buffer + 1, num_digits - 1);
-            buffer[1] = '.';
-            buffer += 1 + num_digits;
-        }
-
-        const int exponent = static_cast<int>(decimal_point - 1);
-        buffer[0] = 'e';
-        buffer = PrintExponent(buffer + 1, exponent);
-    }
-
-    return buffer;
+    return use_fixed
+        ? FormatFixed(buffer, num_digits, decimal_point, force_trailing_dot_zero)
+        : FormatScientific(buffer, num_digits, decimal_point - 1, force_trailing_dot_zero);
 }
 
 } // namespace impl
@@ -2434,56 +2336,10 @@ RYU_INLINE char* Dtoa(char* next, char* last, Float value, bool force_trailing_d
         return next;
     }
 
-#if RYU_SMALL_INT_OPTIMIZATION
-    bool is_small_int;
-    auto digits = ryu::impl::FloatingPointToSmallInt(value, is_small_int);
-
-    int decimal_exponent = 0;
-    if (is_small_int)
-    {
-        // value is an integer in the range [1, 2^53].
-        // Just print the decimal digits (below).
-    }
-    else
-    {
-        // value is not an integer in the range [1, 2^53].
-        // Use Ryu to convert value to decimal.
-        const auto res = ryu::FloatingPointToDecimal(value);
-
-        digits = res.digits;
-        decimal_exponent = res.exponent;
-    }
-
-    // Convert the decimal representation to ASCII digits.
-    const int num_digits = ryu::impl::PrintDecimalDigits(next, digits);
-
-    if (is_small_int)
-    {
-        // Done.
-        next += num_digits;
-        if (force_trailing_dot_zero)
-        {
-            *next++ = '.';
-            *next++ = '0';
-        }
-        return next;
-    }
-    else
-    {
-        return ryu::impl::Format(next, num_digits, decimal_exponent, force_trailing_dot_zero);
-    }
-#else
     // Use Ryu to convert value to decimal.
     const auto res = ryu::FloatingPointToDecimal(value);
-    const auto digits = res.digits;
-    const auto decimal_exponent = res.exponent;
 
-    // Convert the decimal representation to ASCII digits.
-    const int num_digits = ryu::impl::PrintDecimalDigits(next, digits);
-
-    // Format the digits similar to printf's %g style.
-    return ryu::impl::Format(next, num_digits, decimal_exponent, force_trailing_dot_zero);
-#endif
+    return ryu::impl::FormatDigits(next, res.digits, res.exponent, force_trailing_dot_zero);
 }
 
 } // namespace ryu
