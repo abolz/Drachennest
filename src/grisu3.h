@@ -1140,37 +1140,17 @@ struct DiyInt
     DiyInt& operator=(DiyInt const&) = delete;  // (not needed here)
 };
 
-GRISU_INLINE bool IsZero(DiyInt const& x)
-{
-    return x.size == 0;
-}
-
-GRISU_INLINE void AssignZero(DiyInt& x)
-{
-    x.size = 0;
-}
-
 GRISU_INLINE void AssignU32(DiyInt& x, uint32_t value)
 {
-    AssignZero(x);
-
-    if (value == 0)
-        return;
-
     x.bigits[0] = value;
-    x.size = 1;
+    x.size = (value != 0) ? 1 : 0;
 }
 
 GRISU_INLINE void AssignU64(DiyInt& x, uint64_t value)
 {
-    AssignZero(x);
-
-    if (value == 0)
-        return;
-
     x.bigits[0] = static_cast<uint32_t>(value);
     x.bigits[1] = static_cast<uint32_t>(value >> 32);
-    x.size = (x.bigits[1] == 0) ? 1 : 2;
+    x.size = (x.bigits[1] != 0) ? 2 : ((x.bigits[0] != 0) ? 1 : 0);
 }
 
 // x := A * x + B
@@ -1280,11 +1260,6 @@ GRISU_INLINE void MulPow5(DiyInt& x, int e5)
 
 GRISU_INLINE void Mul2(DiyInt& x)
 {
-#if 0
-    MulAddU32(x, 2, 0);
-#elif 0
-    MulPow2(x, 1);
-#else
     uint32_t carry = 0;
     for (int i = 0; i < x.size; ++i)
     {
@@ -1297,7 +1272,6 @@ GRISU_INLINE void Mul2(DiyInt& x)
         GRISU_ASSERT(x.size < DiyInt::Capacity);
         x.bigits[x.size++] = carry;
     }
-#endif
 }
 
 GRISU_INLINE void Mul10(DiyInt& x)
@@ -1400,13 +1374,6 @@ GRISU_INLINE void AssignU64MulPow2(DiyInt& x, uint64_t value, int e2)
     }
 }
 
-// x := value * 5^e5
-GRISU_INLINE void AssignU64MulPow5(DiyInt& x, uint64_t value, int e5)
-{
-    AssignU64(x, value);
-    MulPow5(x, e5);
-}
-
 // x := value * 10^e10
 GRISU_INLINE void AssignU64MulPow10(DiyInt& x, uint64_t value, int e10)
 {
@@ -1422,16 +1389,6 @@ GRISU_INLINE void AssignPow2MulPow5(DiyInt& x, int e2, int e5)
 
     //AssignPow5(x, e5);
     //MulPow2(x, e2);
-}
-
-// x := 2^e2 * 10^e10
-GRISU_INLINE void AssignPow2MulPow10(DiyInt& x, int e2, int e10)
-{
-    AssignPow2(x, e2 + e10);
-    MulPow5(x, e10);
-
-    //AssignPow5(x, e10);
-    //MulPow2(x, e2 + e10);
 }
 
 // Returns the number of leading 0-bits in x, starting at the most significant bit position.
