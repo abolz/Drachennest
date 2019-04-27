@@ -1126,6 +1126,18 @@ namespace impl {
 GRISU_INLINE int Min(int x, int y) { return y < x ? y : x; }
 GRISU_INLINE int Max(int x, int y) { return y < x ? x : y; }
 
+GRISU_INLINE void Zeroize(uint32_t* dst, int n)
+{
+    GRISU_ASSERT(n >= 0);
+    std::memset(dst, 0, static_cast<unsigned>(n) * sizeof(uint32_t));
+}
+
+GRISU_INLINE void Memmove(uint32_t* dst, const uint32_t* src, int n)
+{
+    GRISU_ASSERT(n >= 0);
+    std::memmove(dst, src, static_cast<unsigned>(n) * sizeof(uint32_t));
+}
+
 //template <int MaxBits>
 struct DiyInt
 {
@@ -1217,8 +1229,8 @@ GRISU_INLINE void MulPow2(DiyInt& x, int e2) // aka left-shift
         GRISU_ASSERT(bigit_shift <= DiyInt::Capacity);
         GRISU_ASSERT(x.size <= DiyInt::Capacity - bigit_shift);
 
-        std::memmove(x.bigits + bigit_shift, x.bigits, sizeof(uint32_t) * static_cast<uint32_t>(x.size));
-        std::memset(x.bigits, 0, sizeof(uint32_t) * static_cast<uint32_t>(bigit_shift));
+        Memmove(x.bigits + bigit_shift, x.bigits, x.size);
+        Zeroize(x.bigits, bigit_shift);
         x.size += bigit_shift;
     }
 }
@@ -1307,11 +1319,10 @@ GRISU_INLINE void AssignPow2(DiyInt& x, int e2)
         return;
     }
 
-    const int bigit_shift = static_cast<int>(static_cast<uint32_t>(e2)) / 32;
-    const int bit_shift   = static_cast<int>(static_cast<uint32_t>(e2)) % 32;
+    const int bigit_shift = static_cast<int>(static_cast<unsigned>(e2)) / 32;
+    const int bit_shift   = static_cast<int>(static_cast<unsigned>(e2)) % 32;
 
-    std::memset(x.bigits, 0, sizeof(uint32_t) * static_cast<uint32_t>(bigit_shift));
-
+    Zeroize(x.bigits, bigit_shift);
     x.bigits[bigit_shift] = 1u << bit_shift;
     x.size = bigit_shift + 1;
 }
@@ -1347,10 +1358,10 @@ GRISU_INLINE void AssignU64MulPow2(DiyInt& x, uint64_t value, int e2)
         return;
     }
 
-    const int bigit_shift = static_cast<int>(static_cast<uint32_t>(e2)) / 32;
-    const int bit_shift   = static_cast<int>(static_cast<uint32_t>(e2)) % 32;
+    const int bigit_shift = static_cast<int>(static_cast<unsigned>(e2)) / 32;
+    const int bit_shift   = static_cast<int>(static_cast<unsigned>(e2)) % 32;
 
-    std::memset(x.bigits, 0, sizeof(uint32_t) * static_cast<uint32_t>(bigit_shift));
+    Zeroize(x.bigits, bigit_shift);
 
     const uint32_t lo = static_cast<uint32_t>(value);
     const uint32_t hi = static_cast<uint32_t>(value >> 32);
