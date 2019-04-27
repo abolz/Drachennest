@@ -652,7 +652,7 @@ GRISU_INLINE CachedPower GetCachedPowerForBinaryExponent(int e)
     return cached;
 }
 
-inline char* GenerateIntegralDigits(char* buf, uint32_t n)
+GRISU_INLINE char* GenerateIntegralDigits(char* buf, uint32_t n)
 {
 //  GRISU_ASSERT(n <= 798336123);
     GRISU_ASSERT(n <= 999999999);
@@ -701,6 +701,12 @@ L_2_digits:
         return buf;
     }
 
+#if 1
+    if (n >= 100000) { if (n >= 1000000) goto L_7_digits; else goto L_6_digits; }
+    if (n >=   1000) { if (n >=   10000) goto L_5_digits; else goto L_4_digits; }
+    if (n >=     10) { if (n >=     100) goto L_3_digits; else goto L_2_digits; }
+    goto L_1_digit;
+#else
     if (n >= 1000000) goto L_7_digits;
     if (n >=  100000) goto L_6_digits;
     if (n >=   10000) goto L_5_digits;
@@ -708,6 +714,7 @@ L_2_digits:
     if (n >=     100) goto L_3_digits;
     if (n >=      10) goto L_2_digits;
     goto L_1_digit;
+#endif
 }
 
 #if GRISU_ROUND

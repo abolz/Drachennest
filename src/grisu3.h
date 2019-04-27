@@ -464,13 +464,16 @@ constexpr int kGamma = -32;
 //
 // (A smaller distance gamma-alpha would require a larger table.)
 
-// Technically, right-shift of negative integers is implementation defined...
-// Portable SAR.
-// Should easily be optimized into SAR (or equivalent) instruction.
+// Returns: floor(x / 2^n)
 GRISU_INLINE int SAR(int x, int n)
 {
-//  return x >> n;
+    // Technically, right-shift of negative integers is implementation defined...
+    // Should easily get optimized into SAR (or equivalent) instruction.
+#if 1
     return x < 0 ? ~(~x >> n) : (x >> n);
+#else
+    return x >> n;
+#endif
 }
 
 // Returns: floor(log_2(10^e))
@@ -680,6 +683,12 @@ L_2_digits:
         return buf;
     }
 
+#if 1
+    if (n >= 100000) { if (n >= 1000000) goto L_7_digits; else goto L_6_digits; }
+    if (n >=   1000) { if (n >=   10000) goto L_5_digits; else goto L_4_digits; }
+    if (n >=     10) { if (n >=     100) goto L_3_digits; else goto L_2_digits; }
+    goto L_1_digit;
+#else
     if (n >= 1000000) goto L_7_digits;
     if (n >=  100000) goto L_6_digits;
     if (n >=   10000) goto L_5_digits;
@@ -687,6 +696,7 @@ L_2_digits:
     if (n >=     100) goto L_3_digits;
     if (n >=      10) goto L_2_digits;
     goto L_1_digit;
+#endif
 }
 
 // Modifies the generated digits in the buffer to approach (round towards) w.
@@ -1424,7 +1434,7 @@ GRISU_INLINE void AssignPow2MulPow10(DiyInt& x, int e2, int e10)
 
 // Returns the number of leading 0-bits in x, starting at the most significant bit position.
 // If x is 0, the result is undefined.
-inline int CountLeadingZeros32(uint32_t x)
+GRISU_INLINE int CountLeadingZeros32(uint32_t x)
 {
     GRISU_ASSERT(x != 0);
 
@@ -2079,7 +2089,7 @@ GRISU_INLINE char* FormatFixed(char* buffer, intptr_t num_digits, intptr_t decim
     }
 }
 
-GRISU_INLINE char* FormatScientific(char* buffer, intptr_t num_digits, int exponent, bool /*force_trailing_dot_zero*/)
+GRISU_INLINE char* FormatScientific(char* buffer, intptr_t num_digits, int exponent, bool force_trailing_dot_zero)
 {
     GRISU_ASSERT(buffer != nullptr);
     GRISU_ASSERT(num_digits >= 1);
@@ -2090,13 +2100,11 @@ GRISU_INLINE char* FormatScientific(char* buffer, intptr_t num_digits, int expon
         // GRISU_ASSERT(buffer_capacity >= num_digits + 5);
 
         buffer += 1;
-#if 0
         if (force_trailing_dot_zero)
         {
             *buffer++ = '.';
             *buffer++ = '0';
         }
-#endif
     }
     else
     {
