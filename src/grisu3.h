@@ -1246,10 +1246,12 @@ GRISU_INLINE void MulPow5(DiyInt& x, int e5)
         1220703125, // 5^13
     };
 
+    GRISU_ASSERT(x.size >= 0);
+    GRISU_ASSERT(e5 >= 0);
+
     if (x.size <= 0)
         return;
 
-    GRISU_ASSERT(e5 >= 0);
     while (e5 > 0)
     {
         const int n = Min(e5, 13);
@@ -1297,6 +1299,8 @@ GRISU_INLINE void Mul10(DiyInt& x)
 // x := 2^e2
 GRISU_INLINE void AssignPow2(DiyInt& x, int e2)
 {
+    GRISU_ASSERT(e2 >= 0);
+
     if (e2 == 0)
     {
         AssignU32(x, 1);
