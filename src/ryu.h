@@ -149,7 +149,7 @@ using Double = IEEE<double>;
 using Single = IEEE<float>;
 
 //==================================================================================================
-// FloatingPointToDecimal
+// ToDecimal
 //
 // Double-precision implementation
 //==================================================================================================
@@ -1201,7 +1201,7 @@ struct F64ToDecimalResult {
     int exponent;
 };
 
-RYU_INLINE F64ToDecimalResult F64ToDecimal(double value)
+RYU_INLINE F64ToDecimalResult ToDecimal(double value)
 {
     using namespace ryu::impl;
 
@@ -1480,13 +1480,8 @@ RYU_INLINE F64ToDecimalResult F64ToDecimal(double value)
     return {output, e10};
 }
 
-RYU_INLINE F64ToDecimalResult FloatingPointToDecimal(double value)
-{
-    return ryu::F64ToDecimal(value);
-}
-
 //==================================================================================================
-// FloatingPointToDecimal
+// ToDecimal
 //
 // Single-precision implementation
 //==================================================================================================
@@ -1659,7 +1654,7 @@ struct F32ToDecimalResult {
     int exponent;
 };
 
-RYU_INLINE F32ToDecimalResult F32ToDecimal(float value)
+RYU_INLINE F32ToDecimalResult ToDecimal(float value)
 {
     using namespace ryu::impl;
 
@@ -1921,13 +1916,8 @@ RYU_INLINE F32ToDecimalResult F32ToDecimal(float value)
     return {output, e10};
 }
 
-RYU_INLINE F32ToDecimalResult FloatingPointToDecimal(float value)
-{
-    return ryu::F32ToDecimal(value);
-}
-
 //==================================================================================================
-// FloatingPointToDigits
+// ToDigits
 //==================================================================================================
 // Constant data: 200 bytes
 
@@ -2110,31 +2100,20 @@ RYU_INLINE int PrintDecimalDigits(char* buf, uint32_t output)
 
 } // namespace impl
 
-RYU_INLINE char* DoubleToDigits(char* buffer, int& num_digits, int& exponent, double value)
+template <typename Float>
+RYU_INLINE void ToDigits(char* buffer, int& num_digits, int& exponent, Float value)
 {
-    const auto res = ryu::F64ToDecimal(value);
+    const auto dec = ryu::ToDecimal(value);
 
-    num_digits = ryu::impl::PrintDecimalDigits(buffer, res.digits);
-    exponent = res.exponent;
-
-    return buffer + num_digits;
-}
-
-RYU_INLINE char* DoubleToDigits(char* buffer, int& num_digits, int& exponent, float value)
-{
-    const auto res = ryu::F32ToDecimal(value);
-
-    num_digits = ryu::impl::PrintDecimalDigits(buffer, res.digits);
-    exponent = res.exponent;
-
-    return buffer + num_digits;
+    num_digits = ryu::impl::PrintDecimalDigits(buffer, dec.digits);
+    exponent = dec.exponent;
 }
 
 //==================================================================================================
-// Dtoa
+// ToChars
 //==================================================================================================
 
-namespace impl { 
+namespace impl {
 
 // Appends a decimal representation of 'value' to buffer.
 // Returns a pointer to the element following the digits.
@@ -2253,14 +2232,13 @@ RYU_INLINE char* FormatScientific(char* buffer, intptr_t num_digits, int exponen
     return buffer;
 }
 
+// Format the digits similar to printf's %g style.
 template <typename UnsignedInteger>
 RYU_INLINE char* FormatDigits(char* buffer, UnsignedInteger digits, int exponent, bool force_trailing_dot_zero)
 {
     const int num_digits = PrintDecimalDigits(buffer, digits);
     const int decimal_point = num_digits + exponent;
 
-    // Format the digits similar to printf's %g style.
-    //
     // NB:
     // These are the values used by JavaScript's ToString applied to Number
     // type. Printf uses the values -4 and max_digits10 resp. (sort of).
@@ -2276,64 +2254,62 @@ RYU_INLINE char* FormatDigits(char* buffer, UnsignedInteger digits, int exponent
 
 } // namespace impl
 
-// Convert the double-precision number `value` to a decimal floating-point
-// number.
-// The buffer must be large enough! (size >= 32 is sufficient.)
+// Generates a decimal representation of the floating-point number `value` in 'buffer'.
+// Note: The result is _not_ null-terminated.
+//
+// PRE: The buffer must be large enough (32 bytes is sufficient).
 template <typename Float>
-RYU_INLINE char* Dtoa(char* next, char* last, Float value, bool force_trailing_dot_zero = false)
+RYU_INLINE char* ToChars(char* buffer, Float value, bool force_trailing_dot_zero = false)
 {
     using Fp = ryu::impl::IEEE<Float>;
-
-    RYU_ASSERT(last - next >= 32);
-    static_cast<void>(last);
-
     const Fp v(value);
+
     const bool is_neg = v.SignBit();
 
     if (!v.IsFinite())
     {
-        if (v.IsNaN()) {
-            std::memcpy(next, "NaN", 3);
-            return next + 3;
+        if (v.IsNaN())
+        {
+            std::memcpy(buffer, "NaN", 3);
+            return buffer + 3;
         }
-
         if (is_neg)
-            *next++ = '-';
-        std::memcpy(next, "Infinity", 8);
-        return next + 8;
+        {
+            *buffer++ = '-';
+        }
+        std::memcpy(buffer, "Infinity", 8);
+        return buffer + 8;
     }
 
     if (v.SignBit())
     {
         value = v.AbsValue();
-        *next++ = '-';
+        *buffer++ = '-';
     }
 
     if (v.IsZero())
     {
-        *next++ = '0';
+        *buffer++ = '0';
         if (force_trailing_dot_zero)
         {
-            *next++ = '.';
-            *next++ = '0';
+            *buffer++ = '.';
+            *buffer++ = '0';
         }
-        return next;
+        return buffer;
     }
 
-    // Use Ryu to convert value to decimal.
-    const auto res = ryu::FloatingPointToDecimal(value);
-
-    return ryu::impl::FormatDigits(next, res.digits, res.exponent, force_trailing_dot_zero);
+    const auto dec = ryu::ToDecimal(value);
+    return ryu::impl::FormatDigits(buffer, dec.digits, dec.exponent, force_trailing_dot_zero);
 }
 
 } // namespace ryu
 
-//char* Dtoa(char* next, char* last, double value)
+//char* Dtoa(char* buffer, double value)
 //{
-//    return ryu::Dtoa(next, last, value);
+//    return ryu::ToChars(buffer, value);
 //}
 
-//char* Ftoa(char* next, char* last, float value)
+//char* Ftoa(char* buffer, float value)
 //{
-//    return ryu::Dtoa(next, last, value);
+//    return ryu::ToChars(buffer, value);
 //}

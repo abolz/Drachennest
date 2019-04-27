@@ -167,18 +167,18 @@ GRISU_INLINE int CountLeadingZeros64(uint64_t x)
 #elif defined(_MSC_VER) && defined(_M_X64)
     return static_cast<int>(__lzcnt64(x));
 #elif defined(_MSC_VER) && defined(_M_IX86)
-    int z = static_cast<int>( __lzcnt(static_cast<uint32_t>(x >> 32)) );
-    if (z == 32) {
-        z += static_cast<int>( __lzcnt(static_cast<uint32_t>(x)) );
+    int lz = static_cast<int>( __lzcnt(static_cast<uint32_t>(x >> 32)) );
+    if (lz == 32) {
+        lz += static_cast<int>( __lzcnt(static_cast<uint32_t>(x)) );
     }
-    return z;
+    return lz;
 #else
-    int z = 0;
+    int lz = 0;
     while ((x >> 63) == 0) {
         x <<= 1;
-        ++z;
+        ++lz;
     }
-    return z;
+    return lz;
 #endif
 }
 
@@ -188,6 +188,8 @@ GRISU_INLINE DiyFp Normalize(DiyFp x)
 {
     static_assert(DiyFp::SignificandSize == 64, "internal error");
 
+    // For double: lz >= 64-53 = 11
+    // For single: lz >= 64-24 = 40
     const int lz = CountLeadingZeros64(x.f);
     return DiyFp(x.f << lz, x.e - lz);
 }
@@ -1933,29 +1935,23 @@ GRISU_INLINE char* Dragon4(char* digits, int& num_digits, int& exponent, uint64_
 } // namespace impl
 
 //==================================================================================================
-// DoubleToDigits
+// ToDigits
 //==================================================================================================
-
-// Maximum number of digits which will be written by DoubleToDigits.
-// == numeric_limits<double>::max_digits10
-constexpr int kDoubleToDigitsMaxLength = 17;
 
 // v = digits * 10^exponent
 // num_digits is the length of the buffer (number of decimal digits)
 // PRE: The buffer must be large enough, i.e. >= max_digits10.
 // PRE: value must be finite and strictly positive.
 template <typename Float>
-GRISU_INLINE void DoubleToDigits(char* next, char* last, int& num_digits, int& exponent, Float value)
+GRISU_INLINE void ToDigits(char* buffer, int& num_digits, int& exponent, Float value)
 {
     using Fp = grisu3::impl::IEEE<Float>;
 
     static_assert(grisu3::impl::DiyFp::SignificandSize >= std::numeric_limits<Float>::digits + 3,
         "Grisu3 requires at least three extra bits of precision");
 
-    GRISU_ASSERT(last - next >= kDoubleToDigitsMaxLength);
     GRISU_ASSERT(grisu3::impl::IEEE<Float>(value).IsFinite());
     GRISU_ASSERT(value > 0);
-    static_cast<void>(last); // Fix warning
 
     // Compute the boundaries of 'value'.
     // These boundaries obviously depend on the type 'Float'.
@@ -1969,13 +1965,10 @@ GRISU_INLINE void DoubleToDigits(char* next, char* last, int& num_digits, int& e
     // The resulting 'double' when cast to 'float' is off by 1 ulp, i.e. for f = 7.0385307e-26f,
     //      f != (float)strtod(ftoa(f))
     // For all other single-precision numbers, equality holds.
-#if 0
-    const auto boundaries = grisu3::impl::ComputeBoundaries(static_cast<double>(value));
-#else
-    const auto boundaries = grisu3::impl::ComputeBoundaries(value);
-#endif
 
-    const bool ok = grisu3::impl::Grisu3(next, num_digits, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
+    const auto boundaries = grisu3::impl::ComputeBoundaries(value);
+
+    const bool ok = grisu3::impl::Grisu3(buffer, num_digits, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
     if (!ok)
     {
         const auto v = grisu3::impl::DiyFpFromFloat(value);
@@ -1984,15 +1977,15 @@ GRISU_INLINE void DoubleToDigits(char* next, char* last, int& num_digits, int& e
         const bool acceptBounds = isEven;
         const bool lowerBoundaryIsCloser = (v.f == Fp::HiddenBit && v.e > Fp::MinExponent);
 
-        grisu3::impl::Dragon4(next, num_digits, exponent, v.f, v.e, acceptBounds, lowerBoundaryIsCloser);
+        grisu3::impl::Dragon4(buffer, num_digits, exponent, v.f, v.e, acceptBounds, lowerBoundaryIsCloser);
     }
 
     GRISU_ASSERT(num_digits > 0);
-    GRISU_ASSERT(num_digits <= kDoubleToDigitsMaxLength);
+    GRISU_ASSERT(num_digits <= std::numeric_limits<Float>::max_digits10);
 }
 
 //==================================================================================================
-// PositiveDtoa
+// ToChars
 //==================================================================================================
 
 namespace impl {
@@ -2114,45 +2107,11 @@ GRISU_INLINE char* FormatScientific(char* buffer, intptr_t num_digits, int expon
     return buffer;
 }
 
-} // namespace impl
-
-// Maximum number of chars which will be written by PositiveDtoa.
-constexpr int kPositiveDtoaMaxLength = 24;
-
-// Generates a decimal representation of the floating-point number `value` in
-// the buffer `[next, last)`.
-//
-// PRE: The input `value` must be strictly positive
-// PRE: The buffer must be large enough (>= kPositiveDtoaMaxLength)
-//
-// Note: The result is _not_ null-terminated
-template <typename Float>
-GRISU_INLINE char* PositiveDtoa(char* next, char* last, Float value, bool force_trailing_dot_zero = false)
+// Format the digits similar to printf's %g style.
+GRISU_INLINE char* Format(char* buffer, int num_digits, int exponent, bool force_trailing_dot_zero)
 {
-    GRISU_ASSERT(last - next >= kPositiveDtoaMaxLength);
-    GRISU_ASSERT(grisu3::impl::IEEE<Float>(value).IsFinite());
-    GRISU_ASSERT(value > 0);
-
-    // Compute v = buffer * 10^exponent.
-    // The decimal digits are stored in the buffer, which needs to be
-    // interpreted as an unsigned decimal integer.
-    // num_digits is the length of the buffer, i.e. the number of decimal digits.
-    int num_digits = 0;
-    int exponent = 0;
-    grisu3::DoubleToDigits(next, last, num_digits, exponent, value);
-
-    // Grisu3 generates at most max_digits10 decimal digits.
-    GRISU_ASSERT(num_digits <= std::numeric_limits<Float>::max_digits10);
-
-    // The position of the decimal point relative to the start of the buffer.
     const int decimal_point = num_digits + exponent;
 
-    // Just appending the exponent would yield a correct decimal representation
-    // for the input value.
-
-#if 1
-    // Format the digits similar to printf's %g style.
-    //
     // NB:
     // These are the values used by JavaScript's ToString applied to Number
     // type. Printf uses the values -4 and max_digits10 resp. (sort of).
@@ -2160,111 +2119,71 @@ GRISU_INLINE char* PositiveDtoa(char* next, char* last, Float value, bool force_
     constexpr int kMaxExp = 21;
 
     const bool use_fixed = kMinExp < decimal_point && decimal_point <= kMaxExp;
-#else
-    // NB:
-    // Integers <= 2^p = kMaxVal are exactly representable as Float's.
-    constexpr auto kMinExp = -6;
-    constexpr auto kMaxVal = static_cast<Float>(uint64_t{1} << std::numeric_limits<Float>::digits); // <= 16 digits
 
-    const bool use_fixed = kMinExp < decimal_point && value <= kMaxVal;
-#endif
-
-    char* const end = use_fixed
-        ? grisu3::impl::FormatFixed(next, num_digits, decimal_point, force_trailing_dot_zero)
-        : grisu3::impl::FormatScientific(next, num_digits, decimal_point - 1, force_trailing_dot_zero);
-
-    GRISU_ASSERT(end - next <= kPositiveDtoaMaxLength);
-    return end;
-}
-
-//==================================================================================================
-// Dtoa
-//==================================================================================================
-
-namespace impl {
-
-GRISU_INLINE char* StrCopy(char* next, char* last, const char* source)
-{
-    static_cast<void>(last); // Fix warning
-
-    GRISU_ASSERT(source != nullptr);
-
-    const auto len = std::strlen(source);
-    GRISU_ASSERT(next <= last);
-    GRISU_ASSERT(static_cast<size_t>(last - next) >= len);
-
-    std::memcpy(next, source, len * sizeof(char));
-    return next + len;
+    return use_fixed
+        ? grisu3::impl::FormatFixed(buffer, num_digits, decimal_point, force_trailing_dot_zero)
+        : grisu3::impl::FormatScientific(buffer, num_digits, decimal_point - 1, force_trailing_dot_zero);
 }
 
 } // namespace impl
 
-// Maximum number of chars which will be written by Dtoa.
-constexpr int kDtoaMaxLength = 1/* minus-sign */ + kPositiveDtoaMaxLength;
-
-// Generates a decimal representation of the floating-point number `value` in
-// the buffer `[next, last)`.
-//
-// PRE: The buffer must be large enough.
-// Note:
-//   Max(kDtoaMaxLength, strlen(nan_string), 1 + strlen(inf_string))
-// is sufficient.
-//
+// Generates a decimal representation of the floating-point number `value` in 'buffer'.
 // Note: The result is _not_ null-terminated.
+//
+// PRE: The buffer must be large enough (32 bytes is sufficient).
 template <typename Float>
-GRISU_INLINE char* Dtoa(
-    char*       next,
-    char*       last,
-    Float       value,
-    bool        force_trailing_dot_zero = false,
-    const char* nan_string = "NaN",
-    const char* inf_string = "Infinity")
+GRISU_INLINE char* ToChars(char* buffer, Float value, bool force_trailing_dot_zero = false)
 {
     using Fp = grisu3::impl::IEEE<Float>;
-
-    GRISU_ASSERT(last - next >= kDtoaMaxLength);
-    GRISU_ASSERT(nan_string != nullptr);
-    GRISU_ASSERT(inf_string != nullptr);
-
     const Fp v(value);
 
     if (!v.IsFinite())
     {
         if (v.IsNaN())
-            return grisu3::impl::StrCopy(next, last, nan_string);
+        {
+            std::memcpy(buffer, "NaN", 3);
+            return buffer + 3;
+        }
         if (v.SignBit())
-            *next++ = '-';
-        return grisu3::impl::StrCopy(next, last, inf_string);
+        {
+            *buffer++ = '-';
+        }
+        std::memcpy(buffer, "Infinity", 8);
+        return buffer + 8;
     }
 
     if (v.SignBit())
     {
         value = v.AbsValue();
-        *next++ = '-';
+        *buffer++ = '-';
     }
 
     if (v.IsZero())
     {
-        *next++ = '0';
+        *buffer++ = '0';
         if (force_trailing_dot_zero)
         {
-            *next++ = '.';
-            *next++ = '0';
+            *buffer++ = '.';
+            *buffer++ = '0';
         }
-        return next;
+        return buffer;
     }
 
-    return grisu3::PositiveDtoa(next, last, value, force_trailing_dot_zero);
+    int num_digits = 0;
+    int exponent = 0;
+    grisu3::ToDigits(buffer, num_digits, exponent, value);
+
+    return grisu3::impl::Format(buffer, num_digits, exponent, force_trailing_dot_zero);
 }
 
 } // namespace grisu3
 
-//char* Dtoa(char* next, char* last, double value)
+//char* Dtoa(char* buffer, double value)
 //{
-//    return grisu3::Dtoa(next, last, value);
+//    return grisu3::ToChars(buffer, value);
 //}
 
-//char* Ftoa(char* next, char* last, float value)
+//char* Ftoa(char* buffer, float value)
 //{
-//    return grisu3::Dtoa(next, last, value);
+//    return grisu3::ToChars(buffer, value);
 //}
