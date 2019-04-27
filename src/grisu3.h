@@ -1849,24 +1849,8 @@ GRISU_INLINE int ComputeInitialValuesAndEstimate(DiyInt& r, DiyInt& s, DiyInt& d
     return k;
 }
 
-template <typename Float>
-GRISU_INLINE char* Dragon4(char* digits, int& num_digits, int& exponent, Float value)
+GRISU_INLINE char* Dragon4(char* digits, int& num_digits, int& exponent, uint64_t f, int e, bool acceptBounds, bool lowerBoundaryIsCloser)
 {
-    using Fp = grisu3::impl::IEEE<Float>;
-
-    const auto v = DiyFpFromFloat(value);
-    const auto f = v.f;
-    const auto e = v.e;
-
-    GRISU_ASSERT(f > 0);
-    GRISU_ASSERT(f < (1ull << Fp::SignificandSize));
-    GRISU_ASSERT(e >= -1074); // for double...
-    GRISU_ASSERT(e <= 971); // for double...
-
-    const bool isEven = (f % 2 == 0);
-    const bool acceptBounds = isEven;
-    const bool lowerBoundaryIsCloser = (f == Fp::HiddenBit && e != Fp::MinExponent);
-
     DiyInt r;
     DiyInt s;
     DiyInt delta;
@@ -1963,6 +1947,8 @@ constexpr int kDoubleToDigitsMaxLength = 17;
 template <typename Float>
 GRISU_INLINE void DoubleToDigits(char* next, char* last, int& num_digits, int& exponent, Float value)
 {
+    using Fp = grisu3::impl::IEEE<Float>;
+
     static_assert(grisu3::impl::DiyFp::SignificandSize >= std::numeric_limits<Float>::digits + 3,
         "Grisu3 requires at least three extra bits of precision");
 
@@ -1992,7 +1978,13 @@ GRISU_INLINE void DoubleToDigits(char* next, char* last, int& num_digits, int& e
     const bool ok = grisu3::impl::Grisu3(next, num_digits, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
     if (!ok)
     {
-        grisu3::impl::Dragon4(next, num_digits, exponent, value);
+        const auto v = grisu3::impl::DiyFpFromFloat(value);
+
+        const bool isEven = (v.f % 2 == 0);
+        const bool acceptBounds = isEven;
+        const bool lowerBoundaryIsCloser = (v.f == Fp::HiddenBit && v.e > Fp::MinExponent);
+
+        grisu3::impl::Dragon4(next, num_digits, exponent, v.f, v.e, acceptBounds, lowerBoundaryIsCloser);
     }
 
     GRISU_ASSERT(num_digits > 0);
