@@ -3,6 +3,7 @@
 #include <cfloat>
 #include <climits>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 
 #include <algorithm>
@@ -21,6 +22,14 @@
 #if _MSC_VER >= 1920
 #define HAS_CHARCONV 1
 #endif
+
+//#define BENCH_GRISU2 1
+//#define BENCH_GRISU3 1
+//#define BENCH_RYU 1
+#define BENCH_RYU_TO_DECIMAL 1
+//#define BENCH_CHARCONV 1
+//#define BENCH_DOUBLE_CONVERSION 1
+//#define BENCH_SPRINTF 1
 
 #define BENCH_SINGLE 1
 #define BENCH_DOUBLE 1
@@ -87,21 +96,21 @@ static JenkinsRandom random;
 //
 //==================================================================================================
 
-struct Grisu2
+struct D2S_Grisu2
 {
     static char const* Name() { return "grisu2"; }
     char* operator()(char* buf, int buflen, float f) const { return grisu2_Ftoa(buf, buflen, f); }
     char* operator()(char* buf, int buflen, double f) const { return grisu2_Dtoa(buf, buflen, f); }
 };
 
-struct Grisu3
+struct D2S_Grisu3
 {
     static char const* Name() { return "grisu3"; }
     char* operator()(char* buf, int buflen, float f) const { return grisu3_Ftoa(buf, buflen, f); }
     char* operator()(char* buf, int buflen, double f) const { return grisu3_Dtoa(buf, buflen, f); }
 };
 
-struct Ryu
+struct D2S_Ryu
 {
     static char const* Name() { return "ryu"; }
     char* operator()(char* buf, int buflen, float f) const { return ryu_Ftoa(buf, buflen, f); }
@@ -109,7 +118,7 @@ struct Ryu
 };
 
 #if HAS_CHARCONV
-struct Charconv
+struct D2S_Charconv
 {
     static char const* Name() { return "charconv"; }
     char* operator()(char* buf, int buflen, float f) const { return charconv_Ftoa(buf, buflen, f); }
@@ -117,11 +126,18 @@ struct Charconv
 };
 #endif
 
-struct DoubleConversion
+struct D2S_DoubleConversion
 {
     static char const* Name() { return "double-conversion"; }
     char* operator()(char* buf, int buflen, float f) const { return double_conversion_Ftoa(buf, buflen, f); }
     char* operator()(char* buf, int buflen, double f) const { return double_conversion_Dtoa(buf, buflen, f); }
+};
+
+struct D2S_SPrintf
+{
+    static char const* Name() { return "sprintf"; }
+    char* operator()(char* buf, int buflen, float f) const { return buf + std::snprintf(buf, static_cast<size_t>(buflen), "%.9g", f); }
+    char* operator()(char* buf, int buflen, double f) const { return buf + std::snprintf(buf, static_cast<size_t>(buflen), "%.17g", f); }
 };
 
 //==================================================================================================
@@ -131,7 +147,7 @@ struct DoubleConversion
 static constexpr int NumFloats = 1 << 12;
 
 template <typename ...Args>
-static inline char const* SPrintf(char const* format, Args&&... args)
+static inline char const* StrPrintf(char const* format, Args&&... args)
 {
     char buf[1024];
     snprintf(buf, 1024, format, std::forward<Args>(args)...);
@@ -142,6 +158,27 @@ static inline char const* SPrintf(char const* format, Args&&... args)
 #endif
 }
 
+#if BENCH_RYU_TO_DECIMAL
+inline uint32_t ToDecimal(int& exponent, float  value) { return ryu_Ftoa(exponent, value); }
+inline uint64_t ToDecimal(int& exponent, double value) { return ryu_Dtoa(exponent, value); }
+
+template <typename, typename Float>
+static inline void BenchIt(benchmark::State& state, std::vector<Float> const& numbers)
+{
+    int index = 0;
+
+    uint64_t sum = 0;
+    for (auto _ : state)
+    {
+        int exponent;
+        sum += ToDecimal(exponent, numbers[index]) & 0xFF;
+        index = (index + 1) & (NumFloats - 1);
+    }
+
+    if (sum == UINT64_MAX)
+        abort();
+}
+#else
 template <typename D2S, typename Float>
 static inline void BenchIt(benchmark::State& state, std::vector<Float> const& numbers)
 {
@@ -149,29 +186,47 @@ static inline void BenchIt(benchmark::State& state, std::vector<Float> const& nu
 
     int index = 0;
 
+    uint64_t sum = 0;
     for (auto _ : state)
     {
-        char buffer[32];
-        benchmark::DoNotOptimize(d2s(buffer, 32, numbers[index]));
+        char buffer[64];
+        d2s(buffer, 64, numbers[index]);
+        sum += static_cast<unsigned char>(buffer[0]);
         index = (index + 1) & (NumFloats - 1);
     }
+
+    if (sum == UINT64_MAX)
+        abort();
 }
+#endif
 
 template <typename Float>
 static inline void RegisterBenchmarks(char const* name, std::vector<Float> const& numbers)
 {
-    using D2S = Grisu2;
-    //using D2S = Grisu3;
-    //using D2S = Ryu;
-    //using D2S = Charconv;
-    //using D2S = DoubleConversion;
+#if BENCH_GRISU2
+    using D2S = D2S_Grisu2;
+#endif
+#if BENCH_GRISU3
+    using D2S = D2S_Grisu3;
+#endif
+#if BENCH_RYU
+    using D2S = D2S_Ryu;
+#endif
+#if BENCH_RYU_TO_DECIMAL
+    using D2S = void;
+#endif
+#if BENCH_CHARCONV
+    using D2S = D2S_Charconv;
+#endif
+#if BENCH_DOUBLE_CONVERSION
+    using D2S = D2S_DoubleConversion;
+#endif
+#if BENCH_SPRINTF
+    using D2S = D2S_SPrintf;
+#endif
 
-    //const char* float_name = sizeof(Float) == 4 ? "F32" : "F64";
     const char* float_name = sizeof(Float) == 4 ? "single" : "double";
-    //const char* float_name = SPrintf("p=%d", std::numeric_limits<Float>::digits);
-
-//  auto* bench = benchmark::RegisterBenchmark(SPrintf("%s - %s (%s)   ", float_name, name, D2S::Name()), BenchIt<D2S, Float>, numbers);
-    auto* bench = benchmark::RegisterBenchmark(SPrintf("%s - %s   ", float_name, name), BenchIt<D2S, Float>, numbers);
+    auto* bench = benchmark::RegisterBenchmark(StrPrintf("%s - %s   ", float_name, name), BenchIt<D2S, Float>, numbers);
 
     bench->ComputeStatistics("min", [](const std::vector<double>& v) -> double {
         return *(std::min_element(std::begin(v), std::end(v)));
@@ -214,7 +269,7 @@ static inline void Register_Uniform(Float low, Float high)
     std::uniform_real_distribution<Float> gen(low, high);
     std::generate(numbers.begin(), numbers.end(), [&] { return gen(random); });
 
-    RegisterBenchmarks(SPrintf("Uniform %.1g/%.1g", low, high), numbers);
+    RegisterBenchmarks(StrPrintf("Uniform %.1g/%.1g", low, high), numbers);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -251,7 +306,7 @@ static inline void Register_Digits_double(int digits)
         return static_cast<double>(gen(random) | 1) / scale;
     });
 
-    RegisterBenchmarks(SPrintf("1.%d-digits", digits - 1), numbers);
+    RegisterBenchmarks(StrPrintf("1.%d-digits", digits - 1), numbers);
 }
 
 static inline void Register_Digits_single(int digits)
@@ -279,7 +334,7 @@ static inline void Register_Digits_single(int digits)
         return static_cast<float>(gen(random) | 1) / scale;
     });
 
-    RegisterBenchmarks(SPrintf("1.%d-digits", digits - 1), numbers);
+    RegisterBenchmarks(StrPrintf("1.%d-digits", digits - 1), numbers);
 }
 
 //--------------------------------------------------------------------------------------------------

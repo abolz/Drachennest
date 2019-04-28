@@ -17,7 +17,7 @@
 //
 //==================================================================================================
 
-struct DoubleConversionConverter
+struct D2S_DoubleConversion
 {
     static const bool optimal = true;
     static const char* Name() { return "double-conversion"; }
@@ -25,7 +25,7 @@ struct DoubleConversionConverter
     char* operator()(char* buf, int buflen, double f) { return double_conversion_Dtoa(buf, buflen, f); }
 };
 
-struct Grisu2Converter
+struct D2S_Grisu2
 {
     static const bool optimal = false;
     static const char* Name() { return "grisu2"; }
@@ -33,7 +33,7 @@ struct Grisu2Converter
     char* operator()(char* buf, int buflen, double f) { return grisu2_Dtoa(buf, buflen, f); }
 };
 
-struct Grisu3Converter
+struct D2S_Grisu3
 {
     static const bool optimal = true;
     static const char* Name() { return "grisu3-dragon4"; }
@@ -41,7 +41,7 @@ struct Grisu3Converter
     char* operator()(char* buf, int buflen, double f) { return grisu3_Dtoa(buf, buflen, f); }
 };
 
-struct RyuConverter
+struct D2S_Ryu
 {
     static const bool optimal = true;
     static const char* Name() { return "ryu"; }
@@ -211,10 +211,10 @@ static void CheckSingle(Converter d2s, float f0)
 
 static void CheckSingle(float f)
 {
-    //CheckSingle(DoubleConversionConverter{}, f);
-    CheckSingle(Grisu2Converter{}, f);
-    CheckSingle(Grisu3Converter{}, f);
-    CheckSingle(RyuConverter{}, f);
+    //CheckSingle(D2S_DoubleConversion{}, f);
+    CheckSingle(D2S_Grisu2{}, f);
+    CheckSingle(D2S_Grisu3{}, f);
+    CheckSingle(D2S_Ryu{}, f);
 }
 
 template <typename Converter>
@@ -267,10 +267,10 @@ static void CheckDouble(Converter d2s, double f0)
 
 static void CheckDouble(double f)
 {
-    //CheckDouble(DoubleConversionConverter{}, f);
-    CheckDouble(Grisu2Converter{}, f);
-    CheckDouble(Grisu3Converter{}, f);
-    CheckDouble(RyuConverter{}, f);
+    //CheckDouble(D2S_DoubleConversion{}, f);
+    CheckDouble(D2S_Grisu2{}, f);
+    CheckDouble(D2S_Grisu3{}, f);
+    CheckDouble(D2S_Ryu{}, f);
 }
 
 template <typename Converter>
@@ -291,9 +291,9 @@ static void CheckDoubleString(Converter d2s, double value, const std::string& ex
 
 static void CheckDoubleString(double value, const std::string& expected)
 {
-    CheckDoubleString(DoubleConversionConverter{}, value, expected);
-    CheckDoubleString(Grisu3Converter{}, value, expected);
-    CheckDoubleString(RyuConverter{}, value, expected);
+    CheckDoubleString(D2S_DoubleConversion{}, value, expected);
+    CheckDoubleString(D2S_Grisu3{}, value, expected);
+    CheckDoubleString(D2S_Ryu{}, value, expected);
 }
 
 //==================================================================================================
