@@ -1428,6 +1428,22 @@ GRISU_INLINE int CountLeadingZeros32(uint32_t x)
 #endif
 }
 
+GRISU_INLINE uint32_t DivModShort(DiyInt& u, uint32_t v)
+{
+    const int m = u.size;
+
+    uint32_t q = 0;
+    uint32_t r = 0;
+    for (int i = m - 1; i >= 0; --i)
+    {
+        const uint64_t t = (uint64_t{r} << 32) | u.bigits[i];
+        q = static_cast<uint32_t>(t / v);
+        r = static_cast<uint32_t>(t % v);
+    }
+    AssignU32(u, r);
+    return q;
+}
+
 // q, r = divmod(u, v)
 // u := r
 // return q
@@ -1458,18 +1474,7 @@ GRISU_INLINE uint32_t DivMod(DiyInt& u, DiyInt const& v)
     // denominator.
     if (n == 1)
     {
-        const uint32_t den = v.bigits[0];
-
-        uint32_t q = 0;
-        uint32_t r = 0;
-        for (int i = m - 1; i >= 0; --i)
-        {
-            const uint64_t t = (uint64_t{r} << 32) | u.bigits[i];
-            q = static_cast<uint32_t>(t / den);
-            r = static_cast<uint32_t>(t % den);
-        }
-        AssignU32(u, r);
-        return q;
+        return DivModShort(u, v.bigits[0]);
     }
 
     GRISU_ASSERT(n >= 2);
@@ -1825,7 +1830,7 @@ GRISU_INLINE int ComputeInitialValuesAndEstimate(DiyInt& r, DiyInt& s, DiyInt& d
     return k;
 }
 
-GRISU_INLINE char* Dragon4(char* digits, int& num_digits, int& exponent, uint64_t f, int e, bool acceptBounds, bool lowerBoundaryIsCloser)
+GRISU_INLINE void Dragon4(char* digits, int& num_digits, int& exponent, uint64_t f, int e, bool acceptBounds, bool lowerBoundaryIsCloser)
 {
     DiyInt r;
     DiyInt s;
@@ -1902,8 +1907,6 @@ GRISU_INLINE char* Dragon4(char* digits, int& num_digits, int& exponent, uint64_
 
     num_digits = length;
     exponent = k;
-
-    return digits + length;
 }
 
 } // namespace impl
