@@ -126,29 +126,29 @@ GRISU_INLINE DiyFp Multiply(DiyFp x, DiyFp y)
 
     return DiyFp(h, x.e + y.e + 64);
 #else
-    const uint32_t xLo = static_cast<uint32_t>(x.f);
-    const uint32_t xHi = static_cast<uint32_t>(x.f >> 32);
-    const uint32_t yLo = static_cast<uint32_t>(y.f);
-    const uint32_t yHi = static_cast<uint32_t>(y.f >> 32);
+    const uint32_t x_lo = static_cast<uint32_t>(x.f);
+    const uint32_t x_hi = static_cast<uint32_t>(x.f >> 32);
+    const uint32_t y_lo = static_cast<uint32_t>(y.f);
+    const uint32_t y_hi = static_cast<uint32_t>(y.f >> 32);
 
-    const uint64_t b00 = uint64_t{xLo} * yLo;
-    const uint64_t b01 = uint64_t{xLo} * yHi;
-    const uint64_t b10 = uint64_t{xHi} * yLo;
-    const uint64_t b11 = uint64_t{xHi} * yHi;
+    const uint64_t b00 = uint64_t{x_lo} * y_lo;
+    const uint64_t b01 = uint64_t{x_lo} * y_hi;
+    const uint64_t b10 = uint64_t{x_hi} * y_lo;
+    const uint64_t b11 = uint64_t{x_hi} * y_hi;
 
-    const uint32_t b00Hi = static_cast<uint32_t>(b00 >> 32);
+    const uint32_t b00_hi = static_cast<uint32_t>(b00 >> 32);
 
-    const uint64_t mid1 = b10 + b00Hi;
-    const uint32_t mid1Lo = static_cast<uint32_t>(mid1);
-    const uint32_t mid1Hi = static_cast<uint32_t>(mid1 >> 32);
+    const uint64_t mid1 = b10 + b00_hi;
+    const uint32_t mid1_lo = static_cast<uint32_t>(mid1);
+    const uint32_t mid1_hi = static_cast<uint32_t>(mid1 >> 32);
 
-    const uint64_t mid2 = b01 + mid1Lo;
-    const uint32_t mid2Lo = static_cast<uint32_t>(mid2);
-    const uint32_t mid2Hi = static_cast<uint32_t>(mid2 >> 32);
+    const uint64_t mid2 = b01 + mid1_lo;
+    const uint32_t mid2_lo = static_cast<uint32_t>(mid2);
+    const uint32_t mid2_hi = static_cast<uint32_t>(mid2 >> 32);
 
-    // NB: mid2Lo has the upper 32 bits of the low part of the product.
-    const uint32_t r = mid2Lo >> 31;
-    const uint64_t h = b11 + mid1Hi + mid2Hi + r;
+    // NB: mid2_lo has the upper 32 bits of the low part of the product.
+    const uint32_t r = mid2_lo >> 31;
+    const uint64_t h = b11 + mid1_hi + mid2_hi + r;
 
     return DiyFp(h, x.e + y.e + 64);
 #endif
@@ -1148,8 +1148,8 @@ struct DiyInt
     int      size = 0;
 
     DiyInt() = default;
-    DiyInt(DiyInt const&) = delete;             // (not needed here)
-    DiyInt& operator=(DiyInt const&) = delete;  // (not needed here)
+    DiyInt(const DiyInt&) = delete;             // (not needed here)
+    DiyInt& operator=(const DiyInt&) = delete;  // (not needed here)
 };
 
 GRISU_INLINE void AssignU32(DiyInt& x, uint32_t value)
@@ -1448,7 +1448,7 @@ GRISU_INLINE uint32_t DivModShort(DiyInt& u, uint32_t v)
 // u := r
 // return q
 // PRE: 0 <= q <= 9
-GRISU_INLINE uint32_t DivMod(DiyInt& u, DiyInt const& v)
+GRISU_INLINE uint32_t DivMod(DiyInt& u, const DiyInt& v)
 {
     GRISU_ASSERT(u.size > 0);
     GRISU_ASSERT(v.size > 0);
@@ -1688,7 +1688,7 @@ GRISU_INLINE uint32_t DivMod(DiyInt& u, DiyInt const& v)
     return qp;
 }
 
-GRISU_INLINE int Compare(DiyInt const& lhs, DiyInt const& rhs)
+GRISU_INLINE int Compare(const DiyInt& lhs, const DiyInt& rhs)
 {
     const int n1 = lhs.size;
     const int n2 = rhs.size;
@@ -1709,7 +1709,7 @@ GRISU_INLINE int Compare(DiyInt const& lhs, DiyInt const& rhs)
 }
 
 // Returns Compare(a + b, c)
-GRISU_INLINE int CompareAdd(DiyInt const& a, DiyInt const& b, DiyInt const& c)
+GRISU_INLINE int CompareAdd(const DiyInt& a, const DiyInt& b, const DiyInt& c)
 {
     // NB:
     // This function is only ever called with a >= c, which implies a.size >= c.size.
@@ -1775,15 +1775,15 @@ GRISU_INLINE int EffectivePrecision(uint64_t f)
     return 64 - CountLeadingZeros64(f);
 }
 
-GRISU_INLINE int ComputeInitialValuesAndEstimate(DiyInt& r, DiyInt& s, DiyInt& delta, uint64_t f, int e, bool lowerBoundaryIsCloser)
+GRISU_INLINE int ComputeInitialValuesAndEstimate(DiyInt& r, DiyInt& s, DiyInt& delta, uint64_t f, int e, bool lower_boundary_is_closer)
 {
-    const int boundaryShift = lowerBoundaryIsCloser ? 2 : 1;
+    const int boundary_shift = lower_boundary_is_closer ? 2 : 1;
     const int p = EffectivePrecision(f);
     GRISU_ASSERT(p >= 1);
     GRISU_ASSERT(p <= 53);
     const int k = CeilLog10Pow2(e + (p - 1));
 
-//  const int cmpf = CompareEstimate((f << boundaryShift) + 1, boundaryShift - e, k);
+//  const int cmpf = CompareEstimate((f << boundary_shift) + 1, boundary_shift - e, k);
     if (e >= 0)
     {
         GRISU_ASSERT(e >= 0);
@@ -1791,10 +1791,10 @@ GRISU_INLINE int ComputeInitialValuesAndEstimate(DiyInt& r, DiyInt& s, DiyInt& d
         GRISU_ASSERT(k >= 0);
         GRISU_ASSERT(k <= 308);
 
-        // r = f * 2^(boundaryShift + e)
-        AssignU64MulPow2(r, f << boundaryShift, e);
-        // s = 2^boundaryShift * 10^k
-        AssignPow2MulPow5(s, boundaryShift + k, k);
+        // r = f * 2^(boundary_shift + e)
+        AssignU64MulPow2(r, f << boundary_shift, e);
+        // s = 2^boundary_shift * 10^k
+        AssignPow2MulPow5(s, boundary_shift + k, k);
         // delta = 2^e
         AssignPow2(delta, e);
     }
@@ -1805,10 +1805,10 @@ GRISU_INLINE int ComputeInitialValuesAndEstimate(DiyInt& r, DiyInt& s, DiyInt& d
         GRISU_ASSERT(k >= -323);
         GRISU_ASSERT(k <= -1);
 
-        // r = f * 2^boundaryShift * 10^(-k)
-        AssignU64MulPow10(r, f << boundaryShift, -k);
-        // s = 2^(boundaryShift - e)
-        AssignPow2(s, boundaryShift - e);
+        // r = f * 2^boundary_shift * 10^(-k)
+        AssignU64MulPow10(r, f << boundary_shift, -k);
+        // s = 2^(boundary_shift - e)
+        AssignPow2(s, boundary_shift - e);
         // delta = 10^(-k)
         AssignPow10(delta, -k);
     }
@@ -1819,10 +1819,10 @@ GRISU_INLINE int ComputeInitialValuesAndEstimate(DiyInt& r, DiyInt& s, DiyInt& d
         GRISU_ASSERT(k >= 0);
         GRISU_ASSERT(k <= 16);
 
-        // r = f * 2^boundaryShift
-        AssignU64(r, f << boundaryShift);
-        // s = 2^(boundaryShift - e) * 10^k
-        AssignPow2MulPow5(s, boundaryShift - e + k, k);
+        // r = f * 2^boundary_shift
+        AssignU64(r, f << boundary_shift);
+        // s = 2^(boundary_shift - e) * 10^k
+        AssignPow2MulPow5(s, boundary_shift - e + k, k);
         // delta = 1
         AssignU32(delta, 1);
     }
@@ -1830,7 +1830,7 @@ GRISU_INLINE int ComputeInitialValuesAndEstimate(DiyInt& r, DiyInt& s, DiyInt& d
     return k;
 }
 
-GRISU_INLINE void Dragon4(char* digits, int& num_digits, int& exponent, uint64_t f, int e, bool acceptBounds, bool lowerBoundaryIsCloser)
+GRISU_INLINE void Dragon4(char* digits, int& num_digits, int& exponent, uint64_t f, int e, bool accept_bounds, bool lower_boundary_is_closer)
 {
     DiyInt r;
     DiyInt s;
@@ -1840,13 +1840,13 @@ GRISU_INLINE void Dragon4(char* digits, int& num_digits, int& exponent, uint64_t
     // Compute initial values.
     // Estimate k.
     //
-    int k = ComputeInitialValuesAndEstimate(r, s, delta, f, e, lowerBoundaryIsCloser);
+    int k = ComputeInitialValuesAndEstimate(r, s, delta, f, e, lower_boundary_is_closer);
 
     //
     // Fixup, in case k is too low.
     //
     const int cmpf = CompareAdd(r, delta, s);
-    if (acceptBounds ? (cmpf >= 0) : (cmpf > 0))
+    if (accept_bounds ? (cmpf >= 0) : (cmpf > 0))
     {
         Mul10(s);
         k++;
@@ -1870,14 +1870,14 @@ GRISU_INLINE void Dragon4(char* digits, int& num_digits, int& exponent, uint64_t
         GRISU_ASSERT(q <= 9);
 
         const int cmp1 = Compare(r, delta);
-        if (lowerBoundaryIsCloser)
+        if (lower_boundary_is_closer)
         {
             Mul2(delta);
         }
         const int cmp2 = CompareAdd(r, delta, s);
 
-        const bool tc1 = acceptBounds ? (cmp1 <= 0) : (cmp1 < 0);
-        const bool tc2 = acceptBounds ? (cmp2 >= 0) : (cmp2 > 0);
+        const bool tc1 = accept_bounds ? (cmp1 <= 0) : (cmp1 < 0);
+        const bool tc2 = accept_bounds ? (cmp2 >= 0) : (cmp2 > 0);
         if (tc1 && tc2)
         {
             // Return the number closer to v.
@@ -1902,7 +1902,7 @@ GRISU_INLINE void Dragon4(char* digits, int& num_digits, int& exponent, uint64_t
             break;
 
         Mul10(r);
-        MulAddU32(delta, lowerBoundaryIsCloser ? 5 : 10);
+        MulAddU32(delta, lower_boundary_is_closer ? 5 : 10);
     }
 
     num_digits = length;
@@ -1950,11 +1950,11 @@ GRISU_INLINE void ToDigits(char* buffer, int& num_digits, int& exponent, Float v
     {
         const auto v = grisu3::impl::DiyFpFromFloat(value);
 
-        const bool isEven = (v.f % 2 == 0);
-        const bool acceptBounds = isEven;
-        const bool lowerBoundaryIsCloser = (v.f == Fp::HiddenBit && v.e > Fp::MinExponent);
+        const bool is_even = (v.f % 2 == 0);
+        const bool accept_bounds = is_even;
+        const bool lower_boundary_is_closer = (v.f == Fp::HiddenBit && v.e > Fp::MinExponent);
 
-        grisu3::impl::Dragon4(buffer, num_digits, exponent, v.f, v.e, acceptBounds, lowerBoundaryIsCloser);
+        grisu3::impl::Dragon4(buffer, num_digits, exponent, v.f, v.e, accept_bounds, lower_boundary_is_closer);
     }
 
     GRISU_ASSERT(num_digits > 0);

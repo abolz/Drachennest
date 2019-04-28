@@ -955,7 +955,7 @@ RYU_INLINE void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, const Uint64x
 
     // m = 2*m2
     const uint64_t m = mv >> 1;
-    const uint32_t mmShift = static_cast<uint32_t>(mv - 1 - mm);
+    const uint32_t mm_shift = static_cast<uint32_t>(mv - 1 - mm);
 
     const Uint64x2 b0 = Mul128(m, mul->lo);
     const Uint64x2 b2 = Mul128(m, mul->hi);
@@ -982,7 +982,7 @@ RYU_INLINE void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, const Uint64x
     uint64_t vm0;
     uint64_t vm1;
     uint64_t vm2;
-    if (mmShift == 0)
+    if (mm_shift == 0)
     {
         // vr = 2 * vr
         c = Addc64(0, vr0, vr0, &vr0);
@@ -992,7 +992,7 @@ RYU_INLINE void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, const Uint64x
     c = Subb64(0, vr0, mul->lo, &vm0);
     c = Subb64(c, vr1, mul->hi, &vm1);
     c = Subb64(c, vr2, 0,       &vm2);
-    vm = ShiftRight128(vm1, vm2, (j - 64 - 1) + (mmShift == 0));
+    vm = ShiftRight128(vm1, vm2, (j - 64 - 1) + (mm_shift == 0));
 }
 
 #else
@@ -1014,21 +1014,21 @@ RYU_INLINE uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
     const int shift = j & 63;
     return static_cast<uint64_t>((b2 + (b0 >> 64)) >> shift);
 #elif RYU_HAS_X64_INTRINSICS
-    uint64_t b0Hi;
-    uint64_t b0Lo = _umul128(m, mul->lo, &b0Hi);
-    uint64_t b2Hi;
-    uint64_t b2Lo = _umul128(m, mul->hi, &b2Hi);
-    static_cast<void>(b0Lo);
+    uint64_t b0_hi;
+    uint64_t b0_lo = _umul128(m, mul->lo, &b0_hi);
+    uint64_t b2_hi;
+    uint64_t b2_lo = _umul128(m, mul->hi, &b2_hi);
+    static_cast<void>(b0_lo);
 
     // b2 + (b0 >> 64)
-    // b2Lo += b0Hi;
-    // b2Hi += b2Lo < b0Hi;
-    _addcarry_u64(_addcarry_u64(0, b2Lo, b0Hi, &b2Lo), b2Hi, 0, &b2Hi);
+    // b2_lo += b0_hi;
+    // b2_hi += b2_lo < b0_hi;
+    _addcarry_u64(_addcarry_u64(0, b2_lo, b0_hi, &b2_lo), b2_hi, 0, &b2_hi);
 
     // We need shift = j - 64 here.
     // For the __shiftright128 intrinsic, the shift value is always modulo 64.
     // Since (j - 64) % 64 = j, we can simply use j here.
-    return __shiftright128(b2Lo, b2Hi, static_cast<unsigned char>(j));
+    return __shiftright128(b2_lo, b2_hi, static_cast<unsigned char>(j));
 #else
     auto b0 = Mul128(m, mul->lo);
     auto b2 = Mul128(m, mul->hi);
@@ -1213,24 +1213,24 @@ RYU_INLINE F64ToDecimalResult ToDecimal(double value)
     // Decode the floating point number, and unify normalized and subnormal cases.
     //
 
-    const Double ieeeValue(value);
+    const Double ieee_value(value);
 
     // Decode bits into mantissa, and exponent.
-    const uint64_t ieeeMantissa = ieeeValue.PhysicalSignificand();
-    const uint64_t ieeeExponent = ieeeValue.PhysicalExponent();
+    const uint64_t ieee_mantissa = ieee_value.PhysicalSignificand();
+    const uint64_t ieee_exponent = ieee_value.PhysicalExponent();
 
     uint64_t m2;
     int e2;
-    if (ieeeExponent == 0) {
-        m2 = ieeeMantissa;
+    if (ieee_exponent == 0) {
+        m2 = ieee_mantissa;
         e2 = 1;
     } else {
-        m2 = Double::HiddenBit | ieeeMantissa;
-        e2 = static_cast<int>(ieeeExponent);
+        m2 = Double::HiddenBit | ieee_mantissa;
+        e2 = static_cast<int>(ieee_exponent);
     }
 
-    const bool even = (m2 & 1) == 0;
-    const bool acceptBounds = even;
+    const bool is_even = (m2 & 1) == 0;
+    const bool accept_bounds = is_even;
 
     //
     // Step 2:
@@ -1242,8 +1242,8 @@ RYU_INLINE F64ToDecimalResult ToDecimal(double value)
 
     const uint64_t mv = 4 * m2;
     const uint64_t mp = mv + 2;
-    const uint32_t mmShift = (ieeeMantissa != 0 || ieeeExponent <= 1) ? 1 : 0;
-    const uint64_t mm = mv - 1 - mmShift;
+    const uint32_t mm_shift = (ieee_mantissa != 0 || ieee_exponent <= 1) ? 1 : 0;
+    const uint64_t mm = mv - 1 - mm_shift;
 
     //
     // Step 3:
@@ -1256,9 +1256,9 @@ RYU_INLINE F64ToDecimalResult ToDecimal(double value)
     uint64_t vr;
     uint64_t vp;
 
-    bool vmIsTrailingZeros = false;
-    bool vrIsTrailingZeros = false;
-//  bool vpIsTrailingZeros = false;
+    bool vm_is_trailing_zeros = false;
+    bool vr_is_trailing_zeros = false;
+//  bool vp_is_trailing_zeros = false;
 
     if (e2 >= 0)
     {
@@ -1288,19 +1288,19 @@ RYU_INLINE F64ToDecimalResult ToDecimal(double value)
             // Only one of mp, mv, and mm can be a multiple of 5, if any.
             if (Mod5(mv, Div5(mv)) == 0)
             {
-                vrIsTrailingZeros = MultipleOfPow5(mv, q);
+                vr_is_trailing_zeros = MultipleOfPow5(mv, q);
             }
-            else if (acceptBounds)
+            else if (accept_bounds)
             {
                 // Same as min(e2 + (~mm & 1), Pow5Factor(mm)) >= q
                 // <=> e2 + (~mm & 1) >= q && Pow5Factor(mm) >= q
                 // <=> true && Pow5Factor(mm) >= q, since e2 >= q.
-                vmIsTrailingZeros = MultipleOfPow5(mm, q);
+                vm_is_trailing_zeros = MultipleOfPow5(mm, q);
             }
             else
             {
                 // Same as min(e2 + 1, Pow5Factor(mp)) >= q.
-//              vpIsTrailingZeros = MultipleOfPow5(mp, q);
+//              vp_is_trailing_zeros = MultipleOfPow5(mp, q);
                 vp -= MultipleOfPow5(mp, q);
             }
         }
@@ -1329,17 +1329,17 @@ RYU_INLINE F64ToDecimalResult ToDecimal(double value)
         {
             // {vr,vp,vm} is trailing zeros if {mv,mp,mm} has at least q trailing 0 bits.
             // mv = 4 * m2, so it always has at least two trailing 0 bits.
-            vrIsTrailingZeros = true;
+            vr_is_trailing_zeros = true;
 
-            if (acceptBounds)
+            if (accept_bounds)
             {
-                // mm = mv - 1 - mmShift, so it has 1 trailing 0 bit iff mmShift == 1.
-                vmIsTrailingZeros = (mmShift == 1);
+                // mm = mv - 1 - mm_shift, so it has 1 trailing 0 bit iff mm_shift == 1.
+                vm_is_trailing_zeros = (mm_shift == 1);
             }
             else
             {
                 // mp = mv + 2, so it always has at least one trailing 0 bit.
-//              vpIsTrailingZeros = true;
+//              vp_is_trailing_zeros = true;
                 --vp;
             }
         }
@@ -1352,7 +1352,7 @@ RYU_INLINE F64ToDecimalResult ToDecimal(double value)
             // <=> ntz(mv) >= q-1
             // <=> mv & ((1 << (q-1)) - 1) == 0
             // We also need to make sure that the left shift does not overflow.
-            vrIsTrailingZeros = MultipleOfPow2(mv, q - 1);
+            vr_is_trailing_zeros = MultipleOfPow2(mv, q - 1);
         }
     }
 
@@ -1361,70 +1361,70 @@ RYU_INLINE F64ToDecimalResult ToDecimal(double value)
     // Find the shortest decimal representation in the interval of legal representations.
     //
 
-//  vp -= vpIsTrailingZeros;
+//  vp -= vp_is_trailing_zeros;
 
     uint64_t output;
-    if (vmIsTrailingZeros || vrIsTrailingZeros)
+    if (vm_is_trailing_zeros || vr_is_trailing_zeros)
     {
         // General case, which happens rarely (<1%).
 
-        uint32_t lastRemovedDigit = 0;
+        uint32_t last_removed_digit = 0;
 
-        bool vrPrevIsTrailingZeros = vrIsTrailingZeros;
+        bool vr_prev_is_trailing_zeros = vr_is_trailing_zeros;
 
         for (;;)
         {
-            const uint64_t vmDiv10 = Div10(vm);
-            const uint64_t vpDiv10 = Div10(vp);
-            if (vmDiv10 >= vpDiv10)
+            const uint64_t vm_div10 = Div10(vm);
+            const uint64_t vp_div10 = Div10(vp);
+            if (vm_div10 >= vp_div10)
                 break;
 
-            const uint32_t vmMod10 = Mod10(vm, vmDiv10);
-            vmIsTrailingZeros &= (vmMod10 == 0);
-            vrPrevIsTrailingZeros &= (lastRemovedDigit == 0);
+            const uint32_t vm_mod10 = Mod10(vm, vm_div10);
+            vm_is_trailing_zeros &= (vm_mod10 == 0);
+            vr_prev_is_trailing_zeros &= (last_removed_digit == 0);
 
-            const uint64_t vrDiv10 = Div10(vr);
-            const uint32_t vrMod10 = Mod10(vr, vrDiv10);
-            lastRemovedDigit = vrMod10;
+            const uint64_t vr_div10 = Div10(vr);
+            const uint32_t vr_mod10 = Mod10(vr, vr_div10);
+            last_removed_digit = vr_mod10;
 
-            vm = vmDiv10;
-            vr = vrDiv10;
-            vp = vpDiv10;
+            vm = vm_div10;
+            vr = vr_div10;
+            vp = vp_div10;
             ++e10;
         }
 
-        if (vmIsTrailingZeros)
+        if (vm_is_trailing_zeros)
         {
             for (;;)
             {
-                const uint64_t vmDiv10 = Div10(vm);
-                const uint32_t vmMod10 = Mod10(vm, vmDiv10);
-                if (vmMod10 != 0)
+                const uint64_t vm_div10 = Div10(vm);
+                const uint32_t vm_mod10 = Mod10(vm, vm_div10);
+                if (vm_mod10 != 0)
                     break;
 
-                vrPrevIsTrailingZeros &= (lastRemovedDigit == 0);
+                vr_prev_is_trailing_zeros &= (last_removed_digit == 0);
 
-                const uint64_t vrDiv10 = Div10(vr);
-                const uint32_t vrMod10 = Mod10(vr, vrDiv10);
-                lastRemovedDigit = vrMod10;
+                const uint64_t vr_div10 = Div10(vr);
+                const uint32_t vr_mod10 = Mod10(vr, vr_div10);
+                last_removed_digit = vr_mod10;
 
-                vm = vmDiv10;
-                vr = vrDiv10;
+                vm = vm_div10;
+                vr = vr_div10;
                 //vp = Div10(vp);
                 ++e10;
             }
         }
 
-        bool roundUp = (lastRemovedDigit >= 5);
-        if (lastRemovedDigit == 5 && vrPrevIsTrailingZeros)
+        bool round_up = (last_removed_digit >= 5);
+        if (last_removed_digit == 5 && vr_prev_is_trailing_zeros)
         {
             // Halfway case: The number ends in ...500...00.
-            roundUp = (static_cast<uint32_t>(vr) % 2 != 0);
+            round_up = (static_cast<uint32_t>(vr) % 2 != 0);
         }
 
         // We need to take vr+1 if vr is outside bounds...
         // or we need to round up.
-        const bool inc = (vr == vm && !(acceptBounds && vmIsTrailingZeros)) || roundUp;
+        const bool inc = (vr == vm && !(accept_bounds && vm_is_trailing_zeros)) || round_up;
 
         output = vr + (inc ? 1 : 0);
     }
@@ -1432,47 +1432,47 @@ RYU_INLINE F64ToDecimalResult ToDecimal(double value)
     {
         // Specialized for the common case (>99%).
 
-        bool roundUp = false;
+        bool round_up = false;
 
         // Remove 4 digits in each iteration.
         // This loop runs at most 20/4 = 5 times.
         for (;;)
         {
-            const uint64_t vmDiv1e4 = Div1e4(vm);
-            const uint64_t vpDiv1e4 = Div1e4(vp);
-            if (vmDiv1e4 >= vpDiv1e4)
+            const uint64_t vm_div1e4 = Div1e4(vm);
+            const uint64_t vp_div1e4 = Div1e4(vp);
+            if (vm_div1e4 >= vp_div1e4)
                 break;
 
-            const uint64_t vrDiv1e4 = Div1e4(vr);
-            const uint32_t vrMod1e4 = Mod1e4(vr, vrDiv1e4);
-            roundUp = (vrMod1e4 >= 10000 / 2);
+            const uint64_t vr_div1e4 = Div1e4(vr);
+            const uint32_t vr_mod1e4 = Mod1e4(vr, vr_div1e4);
+            round_up = (vr_mod1e4 >= 10000 / 2);
 
-            vm = vmDiv1e4;
-            vr = vrDiv1e4;
-            vp = vpDiv1e4;
+            vm = vm_div1e4;
+            vr = vr_div1e4;
+            vp = vp_div1e4;
             e10 += 4;
         }
 
         for (;;)
         {
-            const uint64_t vmDiv10 = Div10(vm);
-            const uint64_t vpDiv10 = Div10(vp);
-            if (vmDiv10 >= vpDiv10)
+            const uint64_t vm_div10 = Div10(vm);
+            const uint64_t vp_div10 = Div10(vp);
+            if (vm_div10 >= vp_div10)
                 break;
 
-            const uint64_t vrDiv10 = Div10(vr);
-            const uint32_t vrMod10 = Mod10(vr, vrDiv10);
-            roundUp = (vrMod10 >= 10 / 2);
+            const uint64_t vr_div10 = Div10(vr);
+            const uint32_t vr_mod10 = Mod10(vr, vr_div10);
+            round_up = (vr_mod10 >= 10 / 2);
 
-            vm = vmDiv10;
-            vr = vrDiv10;
-            vp = vpDiv10;
+            vm = vm_div10;
+            vr = vr_div10;
+            vp = vp_div10;
             ++e10;
         }
 
         // We need to take vr+1 if vr is outside bounds...
         // or we need to round up.
-        const bool inc = vr == vm || roundUp;
+        const bool inc = vr == vm || round_up;
 
         output = vr + (inc ? 1 : 0);
     }
@@ -1602,19 +1602,19 @@ RYU_INLINE uint32_t MulShift(uint32_t m, uint64_t mul, int j)
 #if RYU_32_BIT_PLATFORM
     // On 32-bit platforms we can avoid a 64-bit shift-right since we only
     // need the upper 32 bits of the result and the shift value is > 32.
-    const uint32_t bits0Hi = Hi32(bits0);
-    uint32_t bits1Lo = Lo32(bits1);
-    uint32_t bits1Hi = Hi32(bits1);
-    bits1Lo += bits0Hi;
-    bits1Hi += bits1Lo < bits0Hi;
+    const uint32_t bits0_hi = Hi32(bits0);
+    uint32_t bits1_lo = Lo32(bits1);
+    uint32_t bits1_hi = Hi32(bits1);
+    bits1_lo += bits0_hi;
+    bits1_hi += bits1_lo < bits0_hi;
     const int lshift = -j & 31; // == (32 - (j - 32)) % 32
     const int rshift =  j & 31; // == (     (j - 32)) % 32
-    return (bits1Hi << lshift) | (bits1Lo >> rshift);
+    return (bits1_hi << lshift) | (bits1_lo >> rshift);
 #else
     const uint64_t sum = bits1 + Hi32(bits0);
-    const uint64_t shiftedSum = sum >> (j - 32);
-    RYU_ASSERT(shiftedSum <= UINT32_MAX);
-    return static_cast<uint32_t>(shiftedSum);
+    const uint64_t shifted_sum = sum >> (j - 32);
+    RYU_ASSERT(shifted_sum <= UINT32_MAX);
+    return static_cast<uint32_t>(shifted_sum);
 #endif
 }
 
@@ -1669,21 +1669,21 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
     const Single ieee_value(value);
 
     // Decode bits into mantissa, and exponent.
-    const uint32_t ieeeMantissa = ieee_value.PhysicalSignificand();
-    const uint32_t ieeeExponent = ieee_value.PhysicalExponent();
+    const uint32_t ieee_mantissa = ieee_value.PhysicalSignificand();
+    const uint32_t ieee_exponent = ieee_value.PhysicalExponent();
 
     uint32_t m2;
     int e2;
-    if (ieeeExponent == 0) {
-        m2 = ieeeMantissa;
+    if (ieee_exponent == 0) {
+        m2 = ieee_mantissa;
         e2 = 1;
     } else {
-        m2 = Single::HiddenBit | ieeeMantissa;
-        e2 = static_cast<int>(ieeeExponent);
+        m2 = Single::HiddenBit | ieee_mantissa;
+        e2 = static_cast<int>(ieee_exponent);
     }
 
-    const bool even = (m2 & 1) == 0;
-    const bool acceptBounds = even;
+    const bool is_even = (m2 & 1) == 0;
+    const bool accept_bounds = is_even;
 
     //
     // Step 2:
@@ -1695,8 +1695,8 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
 
     const uint32_t mv = 4 * m2;
     const uint32_t mp = mv + 2;
-    const uint32_t mmShift = (ieeeMantissa != 0 || ieeeExponent <= 1) ? 1 : 0;
-    const uint32_t mm = mv - 1 - mmShift;
+    const uint32_t mm_shift = (ieee_mantissa != 0 || ieee_exponent <= 1) ? 1 : 0;
+    const uint32_t mm = mv - 1 - mm_shift;
 
     //
     // Step 3:
@@ -1709,11 +1709,11 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
     uint32_t vr;
     uint32_t vp;
 
-    bool vmIsTrailingZeros = false;
-    bool vrIsTrailingZeros = false;
-//  bool vpIsTrailingZeros = false;
+    bool vm_is_trailing_zeros = false;
+    bool vr_is_trailing_zeros = false;
+//  bool vp_is_trailing_zeros = false;
 
-    uint32_t lastRemovedDigit = 0;
+    uint32_t last_removed_digit = 0;
 
     if (e2 >= 0)
     {
@@ -1744,7 +1744,7 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
             const int j1 = -e2 + q1 - k1; // shift
 
             const uint64_t mul1 = ComputePow5Single(-q1);
-            lastRemovedDigit = MulShift(mv, mul1, j1) % 10;
+            last_removed_digit = MulShift(mv, mul1, j1) % 10;
         }
 
         // 10 = floor(log_5(2^24))
@@ -1755,19 +1755,19 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
             // Only one of mp, mv, and mm can be a multiple of 5, if any.
             if (mv % 5 == 0)
             {
-                vrIsTrailingZeros = MultipleOfPow5(mv, q);
+                vr_is_trailing_zeros = MultipleOfPow5(mv, q);
             }
-            else if (acceptBounds)
+            else if (accept_bounds)
             {
                 // Same as min(e2 + (~mm & 1), Pow5Factor(mm)) >= q
                 // <=> e2 + (~mm & 1) >= q && Pow5Factor(mm) >= q
                 // <=> true && Pow5Factor(mm) >= q, since e2 >= q.
-                vmIsTrailingZeros = MultipleOfPow5(mm, q);
+                vm_is_trailing_zeros = MultipleOfPow5(mm, q);
             }
             else
             {
                 // Same as min(e2 + 1, Pow5Factor(mp)) >= q.
-//              vpIsTrailingZeros = MultipleOfPow5(mp, q);
+//              vp_is_trailing_zeros = MultipleOfPow5(mp, q);
                 vp -= MultipleOfPow5(mp, q);
             }
         }
@@ -1805,24 +1805,24 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
             const int j1 = q1 - k1; // shift
 
             const uint64_t mul1 = ComputePow5Single(i1);
-            lastRemovedDigit = MulShift(mv, mul1, j1) % 10;
+            last_removed_digit = MulShift(mv, mul1, j1) % 10;
         }
 
         if (q <= 1)
         {
             // {vr,vp,vm} is trailing zeros if {mv,mp,mm} has at least q trailing 0 bits.
             // mv = 4 * m2, so it always has at least two trailing 0 bits.
-            vrIsTrailingZeros = true;
+            vr_is_trailing_zeros = true;
 
-            if (acceptBounds)
+            if (accept_bounds)
             {
-                // mm = mv - 1 - mmShift, so it has 1 trailing 0 bit iff mmShift == 1.
-                vmIsTrailingZeros = mmShift == 1;
+                // mm = mv - 1 - mm_shift, so it has 1 trailing 0 bit iff mm_shift == 1.
+                vm_is_trailing_zeros = mm_shift == 1;
             }
             else
             {
                 // mp = mv + 2, so it always has at least one trailing 0 bit.
-//              vpIsTrailingZeros = true;
+//              vp_is_trailing_zeros = true;
                 vp--;
             }
         }
@@ -1833,7 +1833,7 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
             // <=> ntz(mv) >= q-1
             // <=> mv & ((1 << (q-1)) - 1) == 0
             // We also need to make sure that the left shift does not overflow.
-            vrIsTrailingZeros = MultipleOfPow2(mv, q - 1);
+            vr_is_trailing_zeros = MultipleOfPow2(mv, q - 1);
         }
     }
 
@@ -1842,22 +1842,22 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
     // Find the shortest decimal representation in the interval of legal representations.
     //
 
-//  vp -= vpIsTrailingZeros;
+//  vp -= vp_is_trailing_zeros;
 
     uint32_t output;
 
-    if (vmIsTrailingZeros || vrIsTrailingZeros)
+    if (vm_is_trailing_zeros || vr_is_trailing_zeros)
     {
         // General case, which happens rarely (~4.0%).
 
-        bool vrPrevIsTrailingZeros = vrIsTrailingZeros;
+        bool vr_prev_is_trailing_zeros = vr_is_trailing_zeros;
 
         while (vm / 10 < vp / 10)
         {
-            vmIsTrailingZeros &= (vm % 10 == 0);
-            vrPrevIsTrailingZeros &= (lastRemovedDigit == 0);
+            vm_is_trailing_zeros &= (vm % 10 == 0);
+            vr_prev_is_trailing_zeros &= (last_removed_digit == 0);
 
-            lastRemovedDigit = vr % 10;
+            last_removed_digit = vr % 10;
 
             vm /= 10;
             vr /= 10;
@@ -1865,13 +1865,13 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
             ++e10;
         }
 
-        if (vmIsTrailingZeros)
+        if (vm_is_trailing_zeros)
         {
             while (vm % 10 == 0)
             {
-                vrPrevIsTrailingZeros &= (lastRemovedDigit == 0);
+                vr_prev_is_trailing_zeros &= (last_removed_digit == 0);
 
-                lastRemovedDigit = vr % 10;
+                last_removed_digit = vr % 10;
 
                 vm /= 10;
                 vr /= 10;
@@ -1880,16 +1880,16 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
             }
         }
 
-        bool roundUp = (lastRemovedDigit >= 5);
-        if (lastRemovedDigit == 5 && vrPrevIsTrailingZeros)
+        bool round_up = (last_removed_digit >= 5);
+        if (last_removed_digit == 5 && vr_prev_is_trailing_zeros)
         {
             // Halfway case: The number ends in ...500...00.
-            roundUp = vr % 2 != 0;
+            round_up = vr % 2 != 0;
         }
 
         // We need to take vr+1 if vr is outside bounds...
         // or we need to round up.
-        const bool inc = (vr == vm && !(acceptBounds && vmIsTrailingZeros)) || roundUp;
+        const bool inc = (vr == vm && !(accept_bounds && vm_is_trailing_zeros)) || round_up;
 
         output = vr + (inc ? 1 : 0);
     }
@@ -1899,7 +1899,7 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
 
         while (vm / 10 < vp / 10)
         {
-            lastRemovedDigit = vr % 10;
+            last_removed_digit = vr % 10;
             vm /= 10;
             vr /= 10;
             vp /= 10;
@@ -1908,7 +1908,7 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
 
         // We need to take vr+1 if vr is outside bounds...
         // or we need to round up.
-        const bool inc = (vr == vm || lastRemovedDigit >= 5);
+        const bool inc = (vr == vm || last_removed_digit >= 5);
 
         output = vr + (inc ? 1 : 0);
     }

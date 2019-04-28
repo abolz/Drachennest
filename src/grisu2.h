@@ -130,29 +130,29 @@ GRISU_INLINE DiyFp Multiply(DiyFp x, DiyFp y)
 
     return DiyFp(h, x.e + y.e + 64);
 #else
-    const uint32_t xLo = static_cast<uint32_t>(x.f);
-    const uint32_t xHi = static_cast<uint32_t>(x.f >> 32);
-    const uint32_t yLo = static_cast<uint32_t>(y.f);
-    const uint32_t yHi = static_cast<uint32_t>(y.f >> 32);
+    const uint32_t x_lo = static_cast<uint32_t>(x.f);
+    const uint32_t x_hi = static_cast<uint32_t>(x.f >> 32);
+    const uint32_t y_lo = static_cast<uint32_t>(y.f);
+    const uint32_t y_hi = static_cast<uint32_t>(y.f >> 32);
 
-    const uint64_t b00 = uint64_t{xLo} * yLo;
-    const uint64_t b01 = uint64_t{xLo} * yHi;
-    const uint64_t b10 = uint64_t{xHi} * yLo;
-    const uint64_t b11 = uint64_t{xHi} * yHi;
+    const uint64_t b00 = uint64_t{x_lo} * y_lo;
+    const uint64_t b01 = uint64_t{x_lo} * y_hi;
+    const uint64_t b10 = uint64_t{x_hi} * y_lo;
+    const uint64_t b11 = uint64_t{x_hi} * y_hi;
 
-    const uint32_t b00Hi = static_cast<uint32_t>(b00 >> 32);
+    const uint32_t b00_hi = static_cast<uint32_t>(b00 >> 32);
 
-    const uint64_t mid1 = b10 + b00Hi;
-    const uint32_t mid1Lo = static_cast<uint32_t>(mid1);
-    const uint32_t mid1Hi = static_cast<uint32_t>(mid1 >> 32);
+    const uint64_t mid1 = b10 + b00_hi;
+    const uint32_t mid1_lo = static_cast<uint32_t>(mid1);
+    const uint32_t mid1_hi = static_cast<uint32_t>(mid1 >> 32);
 
-    const uint64_t mid2 = b01 + mid1Lo;
-    const uint32_t mid2Lo = static_cast<uint32_t>(mid2);
-    const uint32_t mid2Hi = static_cast<uint32_t>(mid2 >> 32);
+    const uint64_t mid2 = b01 + mid1_lo;
+    const uint32_t mid2_lo = static_cast<uint32_t>(mid2);
+    const uint32_t mid2_hi = static_cast<uint32_t>(mid2 >> 32);
 
-    // NB: mid2Lo has the upper 32 bits of the low part of the product.
-    const uint32_t r = mid2Lo >> 31;
-    const uint64_t h = b11 + mid1Hi + mid2Hi + r;
+    // NB: mid2_lo has the upper 32 bits of the low part of the product.
+    const uint32_t r = mid2_lo >> 31;
+    const uint64_t h = b11 + mid1_hi + mid2_hi + r;
 
     return DiyFp(h, x.e + y.e + 64);
 #endif
