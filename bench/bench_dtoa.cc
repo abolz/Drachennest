@@ -24,6 +24,7 @@
 #endif
 
 //#define BENCH_GRISU2 1
+//#define BENCH_GRISU2_TO_DECIMAL 1
 //#define BENCH_GRISU3 1
 //#define BENCH_RYU 1
 #define BENCH_RYU_TO_DECIMAL 1
@@ -33,6 +34,8 @@
 
 #define BENCH_SINGLE 1
 #define BENCH_DOUBLE 1
+
+constexpr int BufSize = 64;
 
 //==================================================================================================
 //
@@ -158,9 +161,15 @@ static inline char const* StrPrintf(char const* format, Args&&... args)
 #endif
 }
 
+#if BENCH_RYU_TO_DECIMAL || BENCH_GRISU2_TO_DECIMAL
 #if BENCH_RYU_TO_DECIMAL
 inline uint32_t ToDecimal(int& exponent, float  value) { return ryu_Ftoa(exponent, value); }
 inline uint64_t ToDecimal(int& exponent, double value) { return ryu_Dtoa(exponent, value); }
+#endif
+#if BENCH_GRISU2_TO_DECIMAL
+inline uint32_t ToDecimal(int& exponent, float  value) { return grisu2_Ftoa(exponent, value); }
+inline uint64_t ToDecimal(int& exponent, double value) { return grisu2_Dtoa(exponent, value); }
+#endif
 
 template <typename, typename Float>
 static inline void BenchIt(benchmark::State& state, std::vector<Float> const& numbers)
@@ -189,8 +198,8 @@ static inline void BenchIt(benchmark::State& state, std::vector<Float> const& nu
     uint64_t sum = 0;
     for (auto _ : state)
     {
-        char buffer[64];
-        d2s(buffer, 64, numbers[index]);
+        char buffer[BufSize];
+        d2s(buffer, BufSize, numbers[index]);
         sum += static_cast<unsigned char>(buffer[0]);
         index = (index + 1) & (NumFloats - 1);
     }
@@ -205,6 +214,9 @@ static inline void RegisterBenchmarks(char const* name, std::vector<Float> const
 {
 #if BENCH_GRISU2
     using D2S = D2S_Grisu2;
+#endif
+#if BENCH_GRISU2_TO_DECIMAL
+    using D2S = void;
 #endif
 #if BENCH_GRISU3
     using D2S = D2S_Grisu3;
@@ -340,6 +352,69 @@ static inline void Register_Digits_single(int digits)
 //--------------------------------------------------------------------------------------------------
 //
 //--------------------------------------------------------------------------------------------------
+static inline void Register_Ints_double(int digits)
+{
+    assert(digits >= 1);
+    assert(digits <= 15);
+    static constexpr int64_t kPow10[] = {
+        1,
+        10,
+        100,
+        1000,
+        10000,
+        100000,
+        1000000,
+        10000000,
+        100000000,
+        1000000000,
+        10000000000,
+        100000000000,
+        1000000000000,
+        10000000000000,
+        100000000000000,
+        1000000000000000,
+    };
+
+    std::vector<double> numbers(NumFloats);
+
+    std::uniform_int_distribution<int64_t> gen(kPow10[digits - 1], kPow10[digits] - 1);
+    std::generate(numbers.begin(), numbers.end(), [&] {
+        return static_cast<double>(gen(random) | 1);
+    });
+
+    RegisterBenchmarks(StrPrintf("%d-digit int", digits), numbers);
+}
+
+static inline void Register_Ints_single(int digits)
+{
+    assert(digits >= 1);
+    assert(digits <= 7);
+    static constexpr int32_t kPow10[] = {
+        1,
+        10,
+        100,
+        1000,
+        10000,
+        100000,
+        1000000,
+        10000000,
+        100000000,
+        1000000000,
+    };
+
+    std::vector<float> numbers(NumFloats);
+
+    std::uniform_int_distribution<int32_t> gen(kPow10[digits - 1], kPow10[digits] - 1);
+    std::generate(numbers.begin(), numbers.end(), [&] {
+        return static_cast<float>(gen(random) | 1);
+    });
+
+    RegisterBenchmarks(StrPrintf("%d-digit int", digits), numbers);
+}
+
+//--------------------------------------------------------------------------------------------------
+//
+//--------------------------------------------------------------------------------------------------
 #if 0
 
 static void BM_RandomDigit32(benchmark::State& state, int digits, float scale)
@@ -399,6 +474,10 @@ int main(int argc, char** argv)
         Register_Uniform(std::pow(10.0, e), std::pow(10.0, e+1));
     }
 
+    //for (int d = 1; d <= 15; ++d) {
+    //    Register_Ints_double(d);
+    //}
+
     for (int d = 1; d <= 15; ++d) {
         Register_Digits_double(d);
     }
@@ -409,6 +488,10 @@ int main(int argc, char** argv)
 
     Register_Uniform(0.0f, 1.0f);
     Register_Uniform(0.0f, 1.0e+38f);
+
+    //for (int d = 1; d <= 7; ++d) {
+    //    Register_Ints_single(d);
+    //}
 
     for (int d = 1; d <= 7; ++d) {
         Register_Digits_single(d);

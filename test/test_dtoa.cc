@@ -13,6 +13,8 @@
 
 #define TEST_OPTIMAL 0
 
+constexpr int BufSize = 64;
+
 //==================================================================================================
 //
 //==================================================================================================
@@ -168,8 +170,8 @@ static void CheckSingle(Converter d2s, float f0)
     CAPTURE(f0);
 
     // Dtoa
-    char buf0[32];
-    char* end0 = d2s(buf0, 32, f0);
+    char buf0[BufSize];
+    char* end0 = d2s(buf0, BufSize, f0);
     *end0 = '\0';
     const int length0 = static_cast<int>(end0 - buf0);
 
@@ -184,8 +186,8 @@ static void CheckSingle(Converter d2s, float f0)
     CAPTURE(bits1);
     CHECK(bits0 == bits1);
 
-    char buf1[32];
-    char* end1 = double_conversion_Ftoa(buf1, 32, f0);
+    char buf1[BufSize];
+    char* end1 = double_conversion_Ftoa(buf1, BufSize, f0);
     *end1 = '\0';
 
     const std::string s0(buf0, end0);
@@ -224,8 +226,8 @@ static void CheckDouble(Converter d2s, double f0)
     CAPTURE(f0);
 
     // Dtoa
-    char buf0[32];
-    char* end0 = d2s(buf0, 32, f0);
+    char buf0[BufSize];
+    char* end0 = d2s(buf0, BufSize, f0);
     *end0 = '\0';
     const int length0 = static_cast<int>(end0 - buf0);
 
@@ -240,8 +242,8 @@ static void CheckDouble(Converter d2s, double f0)
     CAPTURE(bits1);
     CHECK(bits0 == bits1);
 
-    char buf1[32];
-    char* end1 = double_conversion_Dtoa(buf1, 32, f0);
+    char buf1[BufSize];
+    char* end1 = double_conversion_Dtoa(buf1, BufSize, f0);
     *end1 = '\0';
 
     const std::string s0(buf0, end0);

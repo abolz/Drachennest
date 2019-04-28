@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include "format_digits.h"
+
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -26,8 +28,22 @@
 #define GRISU_ASSERT(X) assert(X)
 #endif
 
+#ifndef GRISU_FORCE_INLINE_ATTR
+#if __GNUC__
+#define GRISU_FORCE_INLINE_ATTR __attribute__((always_inline)) inline
+#elif _MSC_VER
+#define GRISU_FORCE_INLINE_ATTR __forceinline
+#else
+#define GRISU_FORCE_INLINE_ATTR inline
+#endif
+#endif
+
 #ifndef GRISU_INLINE
 #define GRISU_INLINE inline
+#endif
+
+#ifndef GRISU_FORCE_INLINE
+#define GRISU_FORCE_INLINE GRISU_FORCE_INLINE_ATTR
 #endif
 
 namespace grisu3 {
@@ -46,36 +62,21 @@ namespace grisu3 {
 //==================================================================================================
 // Constant data: 632 + 200 = 832 bytes
 
+//
+// TODO:
+// Clean up comments...
+//
+
 namespace impl {
 
 template <typename Dest, typename Source>
-GRISU_INLINE Dest ReinterpretBits(Source source)
+GRISU_FORCE_INLINE Dest ReinterpretBits(Source source)
 {
     static_assert(sizeof(Dest) == sizeof(Source), "size mismatch");
 
     Dest dest;
     std::memcpy(&dest, &source, sizeof(Source));
     return dest;
-}
-
-GRISU_INLINE char* Utoa_2Digits(char* buf, uint32_t digits)
-{
-    static constexpr char kDigits100[200] = {
-        '0','0','0','1','0','2','0','3','0','4','0','5','0','6','0','7','0','8','0','9',
-        '1','0','1','1','1','2','1','3','1','4','1','5','1','6','1','7','1','8','1','9',
-        '2','0','2','1','2','2','2','3','2','4','2','5','2','6','2','7','2','8','2','9',
-        '3','0','3','1','3','2','3','3','3','4','3','5','3','6','3','7','3','8','3','9',
-        '4','0','4','1','4','2','4','3','4','4','4','5','4','6','4','7','4','8','4','9',
-        '5','0','5','1','5','2','5','3','5','4','5','5','5','6','5','7','5','8','5','9',
-        '6','0','6','1','6','2','6','3','6','4','6','5','6','6','6','7','6','8','6','9',
-        '7','0','7','1','7','2','7','3','7','4','7','5','7','6','7','7','7','8','7','9',
-        '8','0','8','1','8','2','8','3','8','4','8','5','8','6','8','7','8','8','8','9',
-        '9','0','9','1','9','2','9','3','9','4','9','5','9','6','9','7','9','8','9','9',
-    };
-
-    GRISU_ASSERT(digits < 100);
-    std::memcpy(buf, &kDigits100[2 * digits], 2 * sizeof(char));
-    return buf + 2;
 }
 
 struct DiyFp // f * 2^e
@@ -91,7 +92,7 @@ struct DiyFp // f * 2^e
 
 // Returns x - y.
 // PRE: x.e == y.e and x.f >= y.f
-GRISU_INLINE DiyFp Subtract(DiyFp x, DiyFp y)
+GRISU_FORCE_INLINE DiyFp Subtract(DiyFp x, DiyFp y)
 {
     GRISU_ASSERT(x.e == y.e);
     GRISU_ASSERT(x.f >= y.f);
@@ -101,7 +102,7 @@ GRISU_INLINE DiyFp Subtract(DiyFp x, DiyFp y)
 
 // Returns x * y.
 // The result is rounded (ties up). (Only the upper q bits are returned.)
-GRISU_INLINE DiyFp Multiply(DiyFp x, DiyFp y)
+GRISU_FORCE_INLINE DiyFp Multiply(DiyFp x, DiyFp y)
 {
     static_assert(DiyFp::SignificandSize == 64, "internal error");
 
@@ -156,7 +157,7 @@ GRISU_INLINE DiyFp Multiply(DiyFp x, DiyFp y)
 
 // Returns the number of leading 0-bits in x, starting at the most significant bit position.
 // If x is 0, the result is undefined.
-GRISU_INLINE int CountLeadingZeros64(uint64_t x)
+GRISU_FORCE_INLINE int CountLeadingZeros64(uint64_t x)
 {
     GRISU_ASSERT(x != 0);
 
@@ -184,7 +185,7 @@ GRISU_INLINE int CountLeadingZeros64(uint64_t x)
 
 // Normalize x such that the significand is >= 2^(q-1).
 // PRE: x.f != 0
-GRISU_INLINE DiyFp Normalize(DiyFp x)
+GRISU_FORCE_INLINE DiyFp Normalize(DiyFp x)
 {
     static_assert(DiyFp::SignificandSize == 64, "internal error");
 
@@ -196,7 +197,7 @@ GRISU_INLINE DiyFp Normalize(DiyFp x)
 
 // Normalize x such that the result has the exponent E.
 // PRE: e >= x.e and the upper e - x.e bits of x.f must be zero.
-GRISU_INLINE DiyFp NormalizeTo(DiyFp x, int e)
+GRISU_FORCE_INLINE DiyFp NormalizeTo(DiyFp x, int e)
 {
     const int delta = x.e - e;
 
@@ -280,7 +281,7 @@ struct IEEE
 // The result is not normalized.
 // PRE: `value` must be finite and non-negative, i.e. >= +0.0.
 template <typename Float>
-GRISU_INLINE DiyFp DiyFpFromFloat(Float value)
+GRISU_FORCE_INLINE DiyFp DiyFpFromFloat(Float value)
 {
     using Fp = IEEE<Float>;
 
@@ -332,7 +333,7 @@ struct Boundaries {
 // boundaries.
 // PRE: 'value' must be finite and positive
 template <typename Float>
-GRISU_INLINE Boundaries ComputeBoundaries(Float value)
+GRISU_FORCE_INLINE Boundaries ComputeBoundaries(Float value)
 {
     using Fp = IEEE<Float>;
 
@@ -467,7 +468,7 @@ constexpr int kGamma = -32;
 // (A smaller distance gamma-alpha would require a larger table.)
 
 // Returns: floor(x / 2^n)
-GRISU_INLINE int SAR(int x, int n)
+GRISU_FORCE_INLINE int SAR(int x, int n)
 {
     // Technically, right-shift of negative integers is implementation defined...
     // Should easily get optimized into SAR (or equivalent) instruction.
@@ -479,7 +480,7 @@ GRISU_INLINE int SAR(int x, int n)
 }
 
 // Returns: floor(log_2(10^e))
-GRISU_INLINE int FloorLog2Pow10(int e)
+GRISU_FORCE_INLINE int FloorLog2Pow10(int e)
 {
     GRISU_ASSERT(e >= -1233);
     GRISU_ASSERT(e <=  1232);
@@ -487,7 +488,7 @@ GRISU_INLINE int FloorLog2Pow10(int e)
 }
 
 // Returns: ceil(log_10(2^e))
-GRISU_INLINE int CeilLog10Pow2(int e)
+GRISU_FORCE_INLINE int CeilLog10Pow2(int e)
 {
     GRISU_ASSERT(e >= -2620);
     GRISU_ASSERT(e <=  2620);
@@ -506,7 +507,7 @@ constexpr int kCachedPowersMaxDecExp    =  324;
 constexpr int kCachedPowersDecExpStep   =    8;
 
 // Returns (an approximation) 10^(MinDecExp + index * DecExpStep) in the form f * 2^e.
-GRISU_INLINE CachedPower GetCachedPower(int index)
+GRISU_FORCE_INLINE CachedPower GetCachedPower(int index)
 {
     // Let e = floor(log_2 10^k) + 1 - 64.
     // Negative powers of 10 are stored as: f = round_up(2^-e / 10^-k).
@@ -608,7 +609,7 @@ GRISU_INLINE CachedPower GetCachedPower(int index)
 //
 //      alpha <= e_c + e + q <= gamma.
 //
-GRISU_INLINE CachedPower GetCachedPowerForBinaryExponent(int e)
+GRISU_FORCE_INLINE CachedPower GetCachedPowerForBinaryExponent(int e)
 {
     // For double: -1137 <= e <= 960 ==> -307 <= k <= 324 ==>  0 <= index <= 78
     // For single:  -180 <= e <=  96 ==>  -47 <= k <= 36  ==> 32 <= index <= 42
@@ -636,71 +637,6 @@ GRISU_INLINE CachedPower GetCachedPowerForBinaryExponent(int e)
     return cached;
 }
 
-GRISU_INLINE char* GenerateIntegralDigits(char* buf, uint32_t n)
-{
-//  GRISU_ASSERT(n <= 798336123);
-    GRISU_ASSERT(n <= 999999999);
-
-    uint32_t q;
-    if (n >= 100000000)
-    {
-//L_9_digits:
-        q = n / 10000000;
-        n = n % 10000000;
-        buf = Utoa_2Digits(buf, q);
-L_7_digits:
-        q = n / 100000;
-        n = n % 100000;
-        buf = Utoa_2Digits(buf, q);
-L_5_digits:
-        q = n / 1000;
-        n = n % 1000;
-        buf = Utoa_2Digits(buf, q);
-L_3_digits:
-        q = n / 10;
-        n = n % 10;
-        buf = Utoa_2Digits(buf, q);
-L_1_digit:
-        buf[0] = static_cast<char>('0' + n);
-        buf++;
-        return buf;
-    }
-
-    if (n >= 10000000)
-    {
-//L_8_digits:
-        q = n / 1000000;
-        n = n % 1000000;
-        buf = Utoa_2Digits(buf, q);
-L_6_digits:
-        q = n / 10000;
-        n = n % 10000;
-        buf = Utoa_2Digits(buf, q);
-L_4_digits:
-        q = n / 100;
-        n = n % 100;
-        buf = Utoa_2Digits(buf, q);
-L_2_digits:
-        buf = Utoa_2Digits(buf, n);
-        return buf;
-    }
-
-#if 1
-    if (n >= 100000) { if (n >= 1000000) goto L_7_digits; else goto L_6_digits; }
-    if (n >=   1000) { if (n >=   10000) goto L_5_digits; else goto L_4_digits; }
-    if (n >=     10) { if (n >=     100) goto L_3_digits; else goto L_2_digits; }
-    goto L_1_digit;
-#else
-    if (n >= 1000000) goto L_7_digits;
-    if (n >=  100000) goto L_6_digits;
-    if (n >=   10000) goto L_5_digits;
-    if (n >=    1000) goto L_4_digits;
-    if (n >=     100) goto L_3_digits;
-    if (n >=      10) goto L_2_digits;
-    goto L_1_digit;
-#endif
-}
-
 // Modifies the generated digits in the buffer to approach (round towards) w.
 //
 // Input:
@@ -709,9 +645,9 @@ L_2_digits:
 //  * delta       = (H - L) * unit
 //  * rest        = (H - digits * 10^kappa) * unit
 //  * ten_kappa   = 10^kappa * unit
-GRISU_INLINE bool Grisu3RoundWeed(char* digits, int num_digits, uint64_t distance, uint64_t delta, uint64_t rest, uint64_t ten_kappa, uint64_t unit)
+GRISU_FORCE_INLINE bool Grisu3RoundWeed(uint64_t& digits, uint64_t distance, uint64_t delta, uint64_t rest, uint64_t ten_kappa, uint64_t unit)
 {
-    GRISU_ASSERT(num_digits >= 1);
+    GRISU_ASSERT(digits >= 1);
     GRISU_ASSERT(distance <= delta);
     GRISU_ASSERT(rest <= delta);
     GRISU_ASSERT(ten_kappa > 0);
@@ -754,18 +690,14 @@ GRISU_INLINE bool Grisu3RoundWeed(char* digits, int num_digits, uint64_t distanc
     // The tests are written in this order to avoid overflow in unsigned
     // integer arithmetic.
 
-    int digit = digits[num_digits - 1] - '0';
-
     while (rest <= distance_plus
         && delta - rest > ten_kappa
         && (rest + ten_kappa <= distance_plus || rest + ten_kappa - distance_plus < distance_plus - rest))
     {
-        GRISU_ASSERT(digit != 0);
-        digit--;
+        GRISU_ASSERT(digits % 10 != 0);
+        digits--;
         rest += ten_kappa;
     }
-
-    digits[num_digits - 1] = static_cast<char>('0' + digit);
 
     // Now try to approach M- and check if we might generate a number B' which is closer
     // to M- as B is to M+.
@@ -799,7 +731,7 @@ GRISU_INLINE bool Grisu3RoundWeed(char* digits, int num_digits, uint64_t distanc
 
 // Generates V = digits * 10^exponent, such that L <= V <= H.
 // L and H must be normalized and share the same exponent -60 <= e <= -32.
-GRISU_INLINE bool Grisu3DigitGen(char* digits, int& num_digits, int& exponent, DiyFp L, DiyFp w, DiyFp H)
+GRISU_FORCE_INLINE bool Grisu3DigitGen(uint64_t& digits, int& exponent, DiyFp L, DiyFp w, DiyFp H)
 {
     static_assert(DiyFp::SignificandSize == 64, "internal error");
     static_assert(kAlpha >= -60, "internal error");
@@ -865,7 +797,8 @@ GRISU_INLINE bool Grisu3DigitGen(char* digits, int& num_digits, int& exponent, D
 
     // The common case is that all the digits of p1 are needed.
     // Optimize for this case and correct later if required.
-    num_digits = static_cast<int>(GenerateIntegralDigits(digits, p1) - digits);
+    uint64_t d10 = p1;
+    int e10 = 0;
 
     uint64_t unit = 1;
     if (p2 >= delta)
@@ -909,11 +842,10 @@ GRISU_INLINE bool Grisu3DigitGen(char* digits, int& num_digits, int& exponent, D
         // and stop as soon as 10^-m * r * 2^e < delta * 2^e
 
         // unit = 1
-        int m = 0;
+//      int m = 0;
         for (;;)
         {
-            // !!! GRISU_ASSERT(num_digits < max_digits10) !!!
-            GRISU_ASSERT(num_digits < 17);
+            GRISU_ASSERT(d10 <= 9999999999999999ull);
 
             //
             //      H = digits * 10^-m + 10^-m * (d[-m-1] / 10 + d[-m-2] / 10^2 + ...) * 2^e
@@ -931,12 +863,13 @@ GRISU_INLINE bool Grisu3DigitGen(char* digits, int& num_digits, int& exponent, D
             //        = digits * 10^-m + 10^-m * (1/10 * (d + r * 2^e))
             //        = (digits * 10 + d) * 10^(-m-1) + 10^(-m-1) * r * 2^e
             //
-            digits[num_digits++] = static_cast<char>('0' + d); // digits := digits * 10 + d
+            d10 = d10 * 10 + d; // digits := digits * 10 + d
             //
             //      H = digits * 10^(-m-1) + 10^(-m-1) * r * 2^e
             //
             p2 = r;
-            m++;
+//          m++;
+            e10--;
             //
             //      H = digits * 10^-m + 10^-m * p2 * 2^e
             //
@@ -954,7 +887,7 @@ GRISU_INLINE bool Grisu3DigitGen(char* digits, int& num_digits, int& exponent, D
             if (p2 < delta)
             {
                 // V = digits * 10^-m, with L <= V < H.
-                exponent = -m;
+//              e10 = -m;
 
                 rest = p2;
 
@@ -989,10 +922,6 @@ GRISU_INLINE bool Grisu3DigitGen(char* digits, int& num_digits, int& exponent, D
         //      rest * 2^e < delta * 2^e
         //
 
-        const int k = num_digits;
-        GRISU_ASSERT(k >= 0);
-        GRISU_ASSERT(k <= 9);
-
         rest = p2;
 
         // 10^n is now 1 ulp in the decimal representation V. The rounding
@@ -1002,34 +931,38 @@ GRISU_INLINE bool Grisu3DigitGen(char* digits, int& num_digits, int& exponent, D
         //
         ten_kappa = one.f; // Start with 2^-e
 
+        uint32_t d = p1; // digits = p1, fits into a 32-bit integer
         for (int n = 0; /**/; ++n)
         {
-            GRISU_ASSERT(n <= k - 1);
-            GRISU_ASSERT(rest < delta);
+            GRISU_ASSERT(rest <= delta);
 
             // rn = d[n]...d[0] * 2^-e + p2
-            const uint32_t dn = static_cast<uint32_t>(digits[k - 1 - n] - '0');
-            const uint64_t rn = dn * ten_kappa + rest;
+            const uint32_t qn = d / 10;
+            const uint64_t rn = ten_kappa * (d - 10 * qn) + rest;
 
-            if (rn >= delta)
+            if (rn > delta)
             {
-                num_digits = k - n;
-                exponent = n;
+                d10 = d;
+                e10 = n;
                 break;
             }
 
+            d = qn;
             rest = rn;
             ten_kappa *= 10;
         }
     }
 
-    return Grisu3RoundWeed(digits, num_digits, distance, delta, rest, ten_kappa, unit);
+    const bool ok = Grisu3RoundWeed(d10, distance, delta, rest, ten_kappa, unit);
+    digits = d10;
+    exponent = e10;
+    return ok;
 }
 
 // v = digits * 10^exponent
 // length is the length of the buffer (number of decimal digits)
 // The buffer must be large enough, i.e. >= max_digits10.
-GRISU_INLINE bool Grisu3(char* digits, int& num_digits, int& exponent, DiyFp m_minus, DiyFp v, DiyFp m_plus)
+GRISU_INLINE bool Grisu3(uint64_t& digits, int& exponent, DiyFp m_minus, DiyFp v, DiyFp m_plus)
 {
     // For single-precision:  99.172% optimal
     // For double-precision: ~99.45% optimal (uniformly distributed exponent/significands)
@@ -1095,7 +1028,7 @@ GRISU_INLINE bool Grisu3(char* digits, int& num_digits, int& exponent, DiyFp m_m
     const DiyFp L(w_minus.f - 1, w_minus.e);
     const DiyFp H(w_plus.f  + 1, w_plus.e );
 
-    const bool result = Grisu3DigitGen(digits, num_digits, exponent, L, w, H);
+    const bool result = Grisu3DigitGen(digits, exponent, L, w, H);
     // w = digits * 10^exponent
 
     // v = w * 10^k
@@ -1830,7 +1763,7 @@ GRISU_INLINE int ComputeInitialValuesAndEstimate(DiyInt& r, DiyInt& s, DiyInt& d
     return k;
 }
 
-GRISU_INLINE void Dragon4(char* digits, int& num_digits, int& exponent, uint64_t f, int e, bool accept_bounds, bool lower_boundary_is_closer)
+GRISU_INLINE void Dragon4(uint64_t& digits, int& exponent, uint64_t f, int e, bool accept_bounds, bool lower_boundary_is_closer)
 {
     DiyInt r;
     DiyInt s;
@@ -1858,10 +1791,10 @@ GRISU_INLINE void Dragon4(char* digits, int& num_digits, int& exponent, uint64_t
     Mul10(r);       // (Move into init step above?)
     Mul10(delta);   // (Move into init step above?)
 
-    int length = 0;
+    uint64_t d10 = 0;
     for (;;)
     {
-        GRISU_ASSERT(length < 17);
+        GRISU_ASSERT(d10 <= 9999999999999999ull);
         GRISU_ASSERT(r.size > 0);
 
         // q = r / s
@@ -1895,7 +1828,7 @@ GRISU_INLINE void Dragon4(char* digits, int& num_digits, int& exponent, uint64_t
         }
 
         GRISU_ASSERT(q <= 9);
-        digits[length++] = static_cast<char>(q + '0');
+        d10 = d10 * 10 + q;
         k--;
 
         if (tc1 || tc2)
@@ -1905,29 +1838,29 @@ GRISU_INLINE void Dragon4(char* digits, int& num_digits, int& exponent, uint64_t
         MulAddU32(delta, lower_boundary_is_closer ? 5 : 10);
     }
 
-    num_digits = length;
+    digits = d10;
     exponent = k;
 }
 
 } // namespace impl
 
 //==================================================================================================
-// ToDigits
+// ToDecimal
 //==================================================================================================
 
-// v = digits * 10^exponent
-// num_digits is the length of the buffer (number of decimal digits)
-// PRE: The buffer must be large enough, i.e. >= max_digits10.
-// PRE: value must be finite and strictly positive.
-template <typename Float>
-GRISU_INLINE void ToDigits(char* buffer, int& num_digits, int& exponent, Float value)
+struct F64ToDecimalResult {
+    uint64_t digits;
+    int exponent;
+};
+
+GRISU_INLINE F64ToDecimalResult ToDecimal(double value)
 {
-    using Fp = grisu3::impl::IEEE<Float>;
+    using Fp = grisu3::impl::IEEE<double>;
 
-    static_assert(grisu3::impl::DiyFp::SignificandSize >= std::numeric_limits<Float>::digits + 3,
-        "Grisu3 requires at least three extra bits of precision");
+    static_assert(grisu3::impl::DiyFp::SignificandSize >= std::numeric_limits<double>::digits + 3,
+        "Grisu2 requires at least three extra bits of precision");
 
-    GRISU_ASSERT(grisu3::impl::IEEE<Float>(value).IsFinite());
+    GRISU_ASSERT(grisu3::impl::IEEE<double>(value).IsFinite());
     GRISU_ASSERT(value > 0);
 
     // Compute the boundaries of 'value'.
@@ -1945,7 +1878,10 @@ GRISU_INLINE void ToDigits(char* buffer, int& num_digits, int& exponent, Float v
 
     const auto boundaries = grisu3::impl::ComputeBoundaries(value);
 
-    const bool ok = grisu3::impl::Grisu3(buffer, num_digits, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
+    uint64_t digits;
+    int exponent;
+
+    const bool ok = grisu3::impl::Grisu3(digits, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
     if (!ok)
     {
         const auto v = grisu3::impl::DiyFpFromFloat(value);
@@ -1954,155 +1890,67 @@ GRISU_INLINE void ToDigits(char* buffer, int& num_digits, int& exponent, Float v
         const bool accept_bounds = is_even;
         const bool lower_boundary_is_closer = (v.f == Fp::HiddenBit && v.e > Fp::MinExponent);
 
-        grisu3::impl::Dragon4(buffer, num_digits, exponent, v.f, v.e, accept_bounds, lower_boundary_is_closer);
+        grisu3::impl::Dragon4(digits, exponent, v.f, v.e, accept_bounds, lower_boundary_is_closer);
     }
 
-    GRISU_ASSERT(num_digits > 0);
-    GRISU_ASSERT(num_digits <= std::numeric_limits<Float>::max_digits10);
+    GRISU_ASSERT(digits >= 1);
+    GRISU_ASSERT(digits <= 99999999999999999ull);
+    return {digits, exponent};
+}
+
+struct F32ToDecimalResult {
+    uint32_t digits;
+    int exponent;
+};
+
+GRISU_INLINE F32ToDecimalResult ToDecimal(float value)
+{
+    using Fp = grisu3::impl::IEEE<float>;
+
+    static_assert(grisu3::impl::DiyFp::SignificandSize >= std::numeric_limits<float>::digits + 3,
+        "Grisu2 requires at least three extra bits of precision");
+
+    GRISU_ASSERT(grisu3::impl::IEEE<float>(value).IsFinite());
+    GRISU_ASSERT(value > 0);
+
+    // Compute the boundaries of 'value'.
+    // These boundaries obviously depend on the type 'Float'.
+    //
+    // If the boundaries of 'value' are always computed for double-precision numbers, regardless of
+    // type of 'Float', all single-precision numbers can be recovered using strtod (and strtof).
+    // However, the resulting decimal representations are not exactly "short".
+    //
+    // On the other hand, if the boundaries are computed for single-precision numbers, there is a
+    // single number (7.0385307e-26f) which can't be recovered using strtod (instead of strtof).
+    // The resulting 'double' when cast to 'float' is off by 1 ulp, i.e. for f = 7.0385307e-26f,
+    //      f != (float)strtod(ftoa(f))
+    // For all other single-precision numbers, equality holds.
+
+    const auto boundaries = grisu3::impl::ComputeBoundaries(value);
+
+    uint64_t digits;
+    int exponent;
+
+    const bool ok = grisu3::impl::Grisu3(digits, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
+    if (!ok)
+    {
+        const auto v = grisu3::impl::DiyFpFromFloat(value);
+
+        const bool is_even = (v.f % 2 == 0);
+        const bool accept_bounds = is_even;
+        const bool lower_boundary_is_closer = (v.f == Fp::HiddenBit && v.e > Fp::MinExponent);
+
+        grisu3::impl::Dragon4(digits, exponent, v.f, v.e, accept_bounds, lower_boundary_is_closer);
+    }
+
+    GRISU_ASSERT(digits >= 1);
+    GRISU_ASSERT(digits <= 999999999);
+    return {static_cast<uint32_t>(digits), exponent};
 }
 
 //==================================================================================================
 // ToChars
 //==================================================================================================
-
-namespace impl {
-
-// Appends a decimal representation of 'value' to buffer.
-// Returns a pointer to the element following the digits.
-//
-// PRE: -1000 < value < 1000
-GRISU_INLINE char* ExponentToString(char* buffer, int value)
-{
-    GRISU_ASSERT(value > -1000);
-    GRISU_ASSERT(value <  1000);
-
-    int n = 0;
-
-    if (value < 0)
-    {
-        buffer[n++] = '-';
-        value = -value;
-    }
-    else
-    {
-        buffer[n++] = '+';
-    }
-
-    const uint32_t k = static_cast<uint32_t>(value);
-    if (k < 10)
-    {
-        buffer[n++] = static_cast<char>('0' + k);
-    }
-    else if (k < 100)
-    {
-        Utoa_2Digits(buffer + n, k);
-        n += 2;
-    }
-    else
-    {
-        const uint32_t r = k % 10;
-        const uint32_t q = k / 10;
-        Utoa_2Digits(buffer + n, q);
-        n += 2;
-        buffer[n++] = static_cast<char>('0' + r);
-    }
-
-    return buffer + n;
-}
-
-GRISU_INLINE char* FormatFixed(char* buffer, intptr_t num_digits, intptr_t decimal_point, bool force_trailing_dot_zero)
-{
-    GRISU_ASSERT(buffer != nullptr);
-    GRISU_ASSERT(num_digits >= 1);
-
-    if (num_digits <= decimal_point)
-    {
-        // digits[000]
-        // GRISU_ASSERT(buffer_capacity >= decimal_point + (force_trailing_dot_zero ? 2 : 0));
-
-        std::memset(buffer + num_digits, '0', static_cast<size_t>(decimal_point - num_digits));
-        buffer += decimal_point;
-        if (force_trailing_dot_zero)
-        {
-            *buffer++ = '.';
-            *buffer++ = '0';
-        }
-        return buffer;
-    }
-    else if (0 < decimal_point)
-    {
-        // dig.its
-        // GRISU_ASSERT(buffer_capacity >= length + 1);
-
-        std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, static_cast<size_t>(num_digits - decimal_point));
-        buffer[decimal_point] = '.';
-        return buffer + (num_digits + 1);
-    }
-    else // decimal_point <= 0
-    {
-        // 0.[000]digits
-        // GRISU_ASSERT(buffer_capacity >= 2 + (-decimal_point) + length);
-
-        std::memmove(buffer + (2 + -decimal_point), buffer, static_cast<size_t>(num_digits));
-        buffer[0] = '0';
-        buffer[1] = '.';
-        std::memset(buffer + 2, '0', static_cast<size_t>(-decimal_point));
-        return buffer + (2 + (-decimal_point) + num_digits);
-    }
-}
-
-GRISU_INLINE char* FormatScientific(char* buffer, intptr_t num_digits, int exponent, bool force_trailing_dot_zero)
-{
-    GRISU_ASSERT(buffer != nullptr);
-    GRISU_ASSERT(num_digits >= 1);
-
-    if (num_digits == 1)
-    {
-        // dE+123
-        // GRISU_ASSERT(buffer_capacity >= num_digits + 5);
-
-        buffer += 1;
-        if (force_trailing_dot_zero)
-        {
-            *buffer++ = '.';
-            *buffer++ = '0';
-        }
-    }
-    else
-    {
-        // d.igitsE+123
-        // GRISU_ASSERT(buffer_capacity >= num_digits + 1 + 5);
-
-        std::memmove(buffer + 2, buffer + 1, static_cast<size_t>(num_digits - 1));
-        buffer[1] = '.';
-        buffer += 1 + num_digits;
-    }
-
-    buffer[0] = 'e';
-    buffer = ExponentToString(buffer + 1, exponent);
-
-    return buffer;
-}
-
-// Format the digits similar to printf's %g style.
-GRISU_INLINE char* Format(char* buffer, int num_digits, int exponent, bool force_trailing_dot_zero)
-{
-    const int decimal_point = num_digits + exponent;
-
-    // NB:
-    // These are the values used by JavaScript's ToString applied to Number
-    // type. Printf uses the values -4 and max_digits10 resp. (sort of).
-    constexpr int kMinExp = -6;
-    constexpr int kMaxExp = 21;
-
-    const bool use_fixed = kMinExp < decimal_point && decimal_point <= kMaxExp;
-
-    return use_fixed
-        ? grisu3::impl::FormatFixed(buffer, num_digits, decimal_point, force_trailing_dot_zero)
-        : grisu3::impl::FormatScientific(buffer, num_digits, decimal_point - 1, force_trailing_dot_zero);
-}
-
-} // namespace impl
 
 // Generates a decimal representation of the floating-point number `value` in 'buffer'.
 // Note: The result is _not_ null-terminated.
@@ -2146,11 +1994,8 @@ GRISU_INLINE char* ToChars(char* buffer, Float value, bool force_trailing_dot_ze
         return buffer;
     }
 
-    int num_digits = 0;
-    int exponent = 0;
-    grisu3::ToDigits(buffer, num_digits, exponent, value);
-
-    return grisu3::impl::Format(buffer, num_digits, exponent, force_trailing_dot_zero);
+    const auto dec = grisu3::ToDecimal(value);
+    return dtoa::FormatDigits(buffer, dec.digits, dec.exponent, force_trailing_dot_zero);
 }
 
 } // namespace grisu3

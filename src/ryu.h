@@ -15,39 +15,37 @@
 
 #pragma once
 
+#include "format_digits.h"
+
 #include <cassert>
 #include <climits>
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
 
 #ifndef RYU_ASSERT
 #define RYU_ASSERT(X) assert(X)
+#endif
+
+#ifndef RYU_FORCE_INLINE_ATTR
+#if __GNUC__
+#define RYU_FORCE_INLINE_ATTR __attribute__((always_inline)) inline
+#elif _MSC_VER
+#define RYU_FORCE_INLINE_ATTR __forceinline
+#else
+#define RYU_FORCE_INLINE_ATTR inline
+#endif
 #endif
 
 #ifndef RYU_INLINE
 #define RYU_INLINE inline
 #endif
 
-#if defined(_M_IX86) || defined(_M_ARM) || defined(__i386__) || defined(__arm__)
-#define RYU_32_BIT_PLATFORM 1
-#endif
-
-#if defined(__SIZEOF_INT128__)
-#define RYU_HAS_UINT128 1
-#elif defined(_M_X64) || defined(__x86_64__)
-#define RYU_HAS_X64_INTRINSICS 1
-#define RYU_HAS_X86_INTRINSICS 1
-#elif defined(_M_IX86) || defined(__i386__)
-#define RYU_HAS_X86_INTRINSICS 1
-#endif
-
-#if RYU_HAS_X64_INTRINSICS || RYU_HAS_X86_INTRINSICS
-#if defined(_MSC_VER)
-#include <intrin.h>
-#else
-#include <x86intrin.h>
-#endif
+#ifndef RYU_FORCE_INLINE
+#define RYU_FORCE_INLINE RYU_FORCE_INLINE_ATTR
 #endif
 
 namespace ryu {
@@ -58,7 +56,7 @@ namespace impl {
 //==================================================================================================
 
 template <typename Dest, typename Source>
-RYU_INLINE Dest ReinterpretBits(Source source)
+RYU_FORCE_INLINE Dest ReinterpretBits(Source source)
 {
     static_assert(sizeof(Dest) == sizeof(Source), "size mismatch");
 
@@ -149,6 +147,58 @@ using Double = IEEE<double>;
 using Single = IEEE<float>;
 
 //==================================================================================================
+//
+//==================================================================================================
+
+// Returns floor(x / 2^n).
+RYU_FORCE_INLINE int FloorDivPow2(int x, int n)
+{
+    // Technically, right-shift of negative integers is implementation defined...
+    // Should easily be optimized into SAR (or equivalent) instruction.
+#if 1
+    return x < 0 ? ~(~x >> n) : (x >> n);
+#else
+    return x >> n;
+#endif
+}
+
+RYU_FORCE_INLINE int FloorLog2Pow5(int e)
+{
+    RYU_ASSERT(e >= -1764);
+    RYU_ASSERT(e <=  1763);
+    return FloorDivPow2(e * 1217359, 19);
+}
+
+RYU_FORCE_INLINE int FloorLog10Pow2(int e)
+{
+    RYU_ASSERT(e >= -2620);
+    RYU_ASSERT(e <=  2620);
+    return FloorDivPow2(e * 315653, 20);
+}
+
+RYU_FORCE_INLINE int FloorLog10Pow5(int e)
+{
+    RYU_ASSERT(e >= -2620);
+    RYU_ASSERT(e <=  2620);
+    return FloorDivPow2(e * 732923, 20);
+}
+
+RYU_FORCE_INLINE uint32_t Lo32(uint64_t x)
+{
+    return static_cast<uint32_t>(x);
+}
+
+RYU_FORCE_INLINE uint32_t Hi32(uint64_t x)
+{
+    return static_cast<uint32_t>(x >> 32);
+}
+
+RYU_FORCE_INLINE uint64_t Load64(uint32_t lo, uint32_t hi)
+{
+    return lo | uint64_t{hi} << 32;
+}
+
+//==================================================================================================
 // ToDecimal
 //
 // Double-precision implementation
@@ -160,15 +210,14 @@ struct Uint64x2 {
     uint64_t lo;
 };
 
-RYU_INLINE Uint64x2 ComputePow5Double(int k)
+RYU_FORCE_INLINE Uint64x2 ComputePow5Double(int k)
 {
     // Let e = FloorLog2Pow5(k) + 1 - 128
     // For k >= 0, stores 5^k in the form: floor( 5^k / 2^e )
     // For k <= 0, stores 5^k in the form:  ceil(2^-e / 5^-k)
-    static constexpr int MinDecExp = -291;
+    static constexpr int MinDecExp = -290;
     static constexpr int MaxDecExp =  325;
     static constexpr Uint64x2 Pow5[MaxDecExp - MinDecExp + 1] = {
-        {0x9FAACF3DF73609B1, 0x77B191618C54E9AD}, // e =  -803, k = -291
         {0xC795830D75038C1D, 0xD59DF5B9EF6A2418}, // e =  -801, k = -290
         {0xF97AE3D0D2446F25, 0x4B0573286B44AD1E}, // e =  -799, k = -289
         {0x9BECCE62836AC577, 0x4EE367F9430AEC33}, // e =  -796, k = -288
@@ -789,98 +838,12 @@ RYU_INLINE Uint64x2 ComputePow5Double(int k)
 
     RYU_ASSERT(k >= MinDecExp);
     RYU_ASSERT(k <= MaxDecExp);
-    return Pow5[k - MinDecExp];
+    return Pow5[static_cast<unsigned>(k - MinDecExp)];
 }
 
-// Returns floor(x / 2^n).
-RYU_INLINE int FloorDivPow2(int x, int n)
+RYU_FORCE_INLINE Uint64x2 Mul128(uint64_t a, uint64_t b)
 {
-    // Technically, right-shift of negative integers is implementation defined...
-    // Should easily be optimized into SAR (or equivalent) instruction.
-#if 1
-    return x < 0 ? ~(~x >> n) : (x >> n);
-#else
-    return x >> n;
-#endif
-}
-
-RYU_INLINE int FloorLog2Pow5(int e)
-{
-    RYU_ASSERT(e >= -1764);
-    RYU_ASSERT(e <=  1763);
-    return FloorDivPow2(e * 1217359, 19);
-}
-
-RYU_INLINE int FloorLog10Pow2(int e)
-{
-    RYU_ASSERT(e >= -2620);
-    RYU_ASSERT(e <=  2620);
-    return FloorDivPow2(e * 315653, 20);
-}
-
-RYU_INLINE int FloorLog10Pow5(int e)
-{
-    RYU_ASSERT(e >= -2620);
-    RYU_ASSERT(e <=  2620);
-    return FloorDivPow2(e * 732923, 20);
-}
-
-RYU_INLINE uint32_t Lo32(uint64_t x) {
-    return static_cast<uint32_t>(x);
-}
-
-RYU_INLINE uint32_t Hi32(uint64_t x) {
-    return static_cast<uint32_t>(x >> 32);
-}
-
-RYU_INLINE uint64_t Load64(uint32_t lo, uint32_t hi) {
-    return lo | uint64_t{hi} << 32;
-}
-
-// Add unsigned 64-bit integers X and Y with unsigned 8-bit carry-in C, and stores the unsigned 64-bit result in OUT.
-// Returns the carry-out.
-RYU_INLINE unsigned char Addc64(unsigned char c, uint64_t x, uint64_t y, uint64_t* out)
-{
-#if RYU_HAS_X64_INTRINSICS
-    return _addcarry_u64(c, x, y, reinterpret_cast<unsigned long long*>(out));
-#elif RYU_HAS_X86_INTRINSICS
-    unsigned int lo;
-    unsigned int hi;
-    c = _addcarry_u32(c, Lo32(x), Lo32(y), &lo);
-    c = _addcarry_u32(c, Hi32(x), Hi32(y), &hi);
-    out[0] = Load64(lo, hi);
-    return c;
-#else
-    const uint64_t s = x + (y + c);
-    out[0] = s;
-    return c ? (s <= x) : (s < x);
-#endif
-}
-
-// Add unsigned 8-bit borrow C (carry flag) to unsigned 64-bit integer Y, and subtract the result from unsigned 64-bit integer X.
-// Stores the unsigned 64-bit result in OUT.
-// Returns the carry-out.
-RYU_INLINE unsigned char Subb64(unsigned char c, uint64_t x, uint64_t y, uint64_t* out)
-{
-#if RYU_HAS_X64_INTRINSICS
-    return _subborrow_u64(c, x, y, reinterpret_cast<unsigned long long*>(out));
-#elif RYU_HAS_X86_INTRINSICS
-    unsigned int lo;
-    unsigned int hi;
-    c = _subborrow_u32(c, Lo32(x), Lo32(y), &lo);
-    c = _subborrow_u32(c, Hi32(x), Hi32(y), &hi);
-    out[0] = Load64(lo, hi);
-    return c;
-#else
-    const uint64_t s = x - (y + c);
-    out[0] = s;
-    return c ? (s >= x) : (s > x);
-#endif
-}
-
-RYU_INLINE Uint64x2 Mul128(uint64_t a, uint64_t b)
-{
-#if RYU_HAS_UINT128
+#if defined(__SIZEOF_INT128__)
     __extension__ using uint128_t = unsigned __int128;
 
     const uint128_t product = uint128_t{a} * b;
@@ -888,7 +851,7 @@ RYU_INLINE Uint64x2 Mul128(uint64_t a, uint64_t b)
     const uint64_t lo = static_cast<uint64_t>(product);
     const uint64_t hi = static_cast<uint64_t>(product >> 64);
     return {hi, lo};
-#elif RYU_HAS_X64_INTRINSICS
+#elif defined(_MSC_VER) && defined(_M_X64)
     uint64_t hi;
     uint64_t lo = _umul128(a, b, &hi);
     return {hi, lo};
@@ -907,101 +870,35 @@ RYU_INLINE Uint64x2 Mul128(uint64_t a, uint64_t b)
 #endif
 }
 
-RYU_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int dist)
+RYU_FORCE_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int n)
 {
     // For the __shiftright128 intrinsic, the shift value is always modulo 64.
     // In the current implementation of the double-precision version of Ryu, the
     // shift value is always < 64.
     // Check this here in case a future change requires larger shift values. In
     // this case this function needs to be adjusted.
-    RYU_ASSERT(dist >= 56); // 56: MulShiftAll fallback, 57: otherwise.
-    RYU_ASSERT(dist <= 63);
+    RYU_ASSERT(n >= 57);
+    RYU_ASSERT(n <= 63);
 
-#if RYU_HAS_UINT128
+#if defined(__SIZEOF_INT128__)
     __extension__ using uint128_t = unsigned __int128;
 
-    return static_cast<uint64_t>(((uint128_t{hi} << 64) | lo) >> (dist & 63));
-#elif RYU_HAS_X64_INTRINSICS
-    return __shiftright128(lo, hi, dist);
+    const int shift = n & 63;
+    return static_cast<uint64_t>(((uint128_t{hi} << 64) | lo) >> shift);
+#elif defined(_MSC_VER) && defined(_M_X64)
+    return __shiftright128(lo, hi, static_cast<unsigned char>(n));
 #else
-#if RYU_32_BIT_PLATFORM
-    // Avoid a 64-bit shift by taking advantage of the range of shift values.
-    // We know that 0 < 64 - dist < 32 and 0 < dist - 32 < 32.
-    // Use (64 - dist) = (64 - dist) % 32 = -dist & 31
-    // and (dist - 32) = (dist - 32) % 32 =  dist & 31.
-#if defined(_MSC_VER) && defined(_M_IX86) && !defined(__clang__)
-    const int lshift = -dist; // % 32 is implicit in __ll_lshift
-    const int rshift =  dist & 31;
-    return __ll_lshift(hi, lshift) | (Hi32(lo) >> rshift);
-#else
-    const int lshift = -dist & 31;
-    const int rshift =  dist & 31;
-    return (hi << lshift) | (Hi32(lo) >> rshift);
-#endif
-#else
-    const int lshift = -dist & 31;
-    const int rshift =  dist & 63;
+    const int lshift = -n & 63;
+    const int rshift =  n & 63;
     return (hi << lshift) | (lo >> rshift);
 #endif
-#endif
 }
 
-#if RYU_32_BIT_PLATFORM
-
-RYU_INLINE void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, const Uint64x2* mul, int j, uint64_t& vr, uint64_t& vp, uint64_t& vm)
-{
-    // m is maximum 55 bits
-    unsigned char c;
-
-    // m = 2*m2
-    const uint64_t m = mv >> 1;
-    const uint32_t mm_shift = static_cast<uint32_t>(mv - 1 - mm);
-
-    const Uint64x2 b0 = Mul128(m, mul->lo);
-    const Uint64x2 b2 = Mul128(m, mul->hi);
-
-    // vr = 2*m2 * mul
-    uint64_t vr0 = b0.lo;
-    uint64_t vr1;
-    uint64_t vr2;
-    c = Addc64(0, b2.lo, b0.hi, &vr1);
-    c = Addc64(c, b2.hi, 0,     &vr2);
-    vr = ShiftRight128(vr1, vr2, j - 64 - 1);
-
-    // vp = 2*m2 * mul + mul
-    uint64_t vp0;
-    uint64_t vp1;
-    uint64_t vp2;
-    c = Addc64(0, vr0, mul->lo, &vp0);
-    c = Addc64(c, vr1, mul->hi, &vp1);
-    c = Addc64(c, vr2, 0,       &vp2);
-    vp = ShiftRight128(vp1, vp2, j - 64 - 1);
-
-    // vm = 2*m2 * mul - mul
-    //   or 4*m2 * mul - mul (not common)
-    uint64_t vm0;
-    uint64_t vm1;
-    uint64_t vm2;
-    if (mm_shift == 0)
-    {
-        // vr = 2 * vr
-        c = Addc64(0, vr0, vr0, &vr0);
-        c = Addc64(c, vr1, vr1, &vr1);
-        c = Addc64(c, vr2, vr2, &vr2);
-    }
-    c = Subb64(0, vr0, mul->lo, &vm0);
-    c = Subb64(c, vr1, mul->hi, &vm1);
-    c = Subb64(c, vr2, 0,       &vm2);
-    vm = ShiftRight128(vm1, vm2, (j - 64 - 1) + (mm_shift == 0));
-}
-
-#else
-
-RYU_INLINE uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
+RYU_FORCE_INLINE uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 {
     RYU_ASSERT((m >> 55) == 0); // m is maximum 55 bits
 
-#if RYU_HAS_UINT128
+#if defined(__SIZEOF_INT128__)
     __extension__ using uint128_t = unsigned __int128;
 
     const uint128_t b0 = uint128_t{m} * mul->lo;
@@ -1009,11 +906,11 @@ RYU_INLINE uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 
     // We need shift = j - 64 here.
     // Since 64 < j < 128, this is equivalent to shift = (j - 64) % 64 = j % 64.
-    // When written as shift = j & 63, clang and gcc (9+) can optimize the
-    // 128-bit shift into a simple funnel shift.
+    // When written as shift = j & 63, clang can optimize the 128-bit shift into
+    // a simple funnel shift.
     const int shift = j & 63;
     return static_cast<uint64_t>((b2 + (b0 >> 64)) >> shift);
-#elif RYU_HAS_X64_INTRINSICS
+#elif defined(_MSC_VER) && defined(_M_X64)
     uint64_t b0_hi;
     uint64_t b0_lo = _umul128(m, mul->lo, &b0_hi);
     uint64_t b2_hi;
@@ -1037,131 +934,19 @@ RYU_INLINE uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
     b2.lo += b0.hi;
     b2.hi += b2.lo < b0.hi;
 
-    return ShiftRight128(b2.lo, b2.hi, j & 63);
+    const int shift = j & 63;
+    return ShiftRight128(b2.lo, b2.hi, shift);
 #endif
 }
 
-RYU_INLINE void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, const Uint64x2* mul, int j, uint64_t& vr, uint64_t& vp, uint64_t& vm)
+RYU_FORCE_INLINE void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, const Uint64x2* mul, int j, uint64_t& vr, uint64_t& vp, uint64_t& vm)
 {
     vr = MulShift(mv, mul, j);
     vp = MulShift(mp, mul, j);
     vm = MulShift(mm, mul, j);
 }
 
-#endif
-
-#if RYU_32_BIT_PLATFORM
-
-// On x86 platforms, compilers typically generate calls to library
-// functions for 64-bit divisions, even if the divisor is a constant.
-//
-// E.g.:
-// https://bugs.llvm.org/show_bug.cgi?id=37932
-// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=17958
-// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=37443
-//
-// The functions here perform division-by-constant using multiplications
-// in the same way as 64-bit compilers would do.
-//
-// NB:
-// The multipliers and shift values are the ones generated by clang x64
-// for expressions like x/5, x/10, etc.
-
-RYU_INLINE uint64_t Div5(uint64_t x) {
-    return Mul128(x, 0xCCCCCCCCCCCCCCCDu).hi >> 2;
-}
-
-RYU_INLINE uint64_t Div10(uint64_t x) {
-    return Mul128(x, 0xCCCCCCCCCCCCCCCDu).hi >> 3;
-}
-
-RYU_INLINE uint64_t Div100(uint64_t x) {
-    return Mul128(x >> 2, 0x28F5C28F5C28F5C3u).hi >> 2;
-}
-
-RYU_INLINE uint64_t Div1e4(uint64_t x) {
-    return Mul128(x, 0x346DC5D63886594Bu).hi >> 11;
-}
-
-RYU_INLINE uint64_t Div1e8(uint64_t x) {
-    return Mul128(x, 0xABCC77118461CEFDu).hi >> 26;
-}
-
-// Avoid 64-bit math as much as possible.
-// For D <= 10^9, returning (uint32_t) (x - D * Div<D>(x)) would perform
-// 32x64-bit multiplication and 64-bit subtraction. x and D * Div<D>(x)
-// are guaranteed to differ by less than D, so their highest 32 bits
-// must be identical, so we can truncate both sides to uint32_t before
-// subtracting.
-// We can also simplify (uint32_t) (D * Div<D>(x)).
-// We can truncate before multiplying instead of after, as multiplying
-// the highest 32 bits of Div<D>(x) can't affect the lowest 32 bits.
-
-RYU_INLINE uint32_t Mod5(uint64_t x, uint64_t q) {
-    return static_cast<uint32_t>(x) - 5 * static_cast<uint32_t>(q);
-}
-
-RYU_INLINE uint32_t Mod10(uint64_t x, uint64_t q) {
-    return static_cast<uint32_t>(x) - 10 * static_cast<uint32_t>(q);
-}
-
-RYU_INLINE uint32_t Mod100(uint64_t x, uint64_t q) {
-    return static_cast<uint32_t>(x) - 100 * static_cast<uint32_t>(q);
-}
-
-RYU_INLINE uint32_t Mod1e4(uint64_t x, uint64_t q) {
-    return static_cast<uint32_t>(x) - 10000 * static_cast<uint32_t>(q);
-}
-
-RYU_INLINE uint32_t Mod1e8(uint64_t x, uint64_t q) {
-    return static_cast<uint32_t>(x) - 100000000 * static_cast<uint32_t>(q);
-}
-
-#else // RYU_32_BIT_PLATFORM
-
-RYU_INLINE uint64_t Div5(uint64_t x) {
-    return x / 5;
-}
-
-RYU_INLINE uint64_t Div10(uint64_t x) {
-    return x / 10;
-}
-
-RYU_INLINE uint64_t Div100(uint64_t x) {
-    return x / 100;
-}
-
-RYU_INLINE uint64_t Div1e4(uint64_t x) {
-    return x / 10000;
-}
-
-RYU_INLINE uint64_t Div1e8(uint64_t x) {
-    return x / 100000000;
-}
-
-RYU_INLINE uint32_t Mod5(uint64_t x, uint64_t q) {
-    return static_cast<uint32_t>(x - 5 * q);
-}
-
-RYU_INLINE uint32_t Mod10(uint64_t x, uint64_t q) {
-    return static_cast<uint32_t>(x - 10 * q);
-}
-
-RYU_INLINE uint32_t Mod100(uint64_t x, uint64_t q) {
-    return static_cast<uint32_t>(x - 100 * q);
-}
-
-RYU_INLINE uint32_t Mod1e4(uint64_t x, uint64_t q) {
-    return static_cast<uint32_t>(x - 10000 * q);
-}
-
-RYU_INLINE uint32_t Mod1e8(uint64_t x, uint64_t q) {
-    return static_cast<uint32_t>(x - 100000000 * q);
-}
-
-#endif // RYU_32_BIT_PLATFORM
-
-RYU_INLINE int Pow5Factor(uint64_t value)
+/*RYU_FORCE_INLINE*/RYU_INLINE int Pow5Factor(uint64_t value)
 {
     // For 64-bit integers: result <= 27
     // Since value here has at most 55-bits: result <= 23
@@ -1171,8 +956,8 @@ RYU_INLINE int Pow5Factor(uint64_t value)
         RYU_ASSERT(value != 0);
         RYU_ASSERT(factor <= 23);
 
-        const uint64_t q = Div5(value);
-        const uint32_t r = Mod5(value, q);
+        const uint64_t q = value / 5;
+        const uint64_t r = value % 5;
         if (r != 0)
             return factor;
         value = q;
@@ -1180,12 +965,12 @@ RYU_INLINE int Pow5Factor(uint64_t value)
     }
 }
 
-RYU_INLINE bool MultipleOfPow5(uint64_t value, int p)
+/*RYU_FORCE_INLINE*/RYU_INLINE bool MultipleOfPow5(uint64_t value, int p)
 {
     return Pow5Factor(value) >= p;
 }
 
-RYU_INLINE bool MultipleOfPow2(uint64_t value, int p)
+RYU_FORCE_INLINE bool MultipleOfPow2(uint64_t value, int p)
 {
     RYU_ASSERT(p >= 0);
     RYU_ASSERT(p <= 63);
@@ -1286,7 +1071,7 @@ RYU_INLINE F64ToDecimalResult ToDecimal(double value)
             // This should use q <= 22, but I think 21 is also safe. Smaller values
             // may still be safe, but it's more difficult to reason about them.
             // Only one of mp, mv, and mm can be a multiple of 5, if any.
-            if (Mod5(mv, Div5(mv)) == 0)
+            if (mv % 5 == 0)
             {
                 vr_is_trailing_zeros = MultipleOfPow5(mv, q);
             }
@@ -1366,51 +1151,35 @@ RYU_INLINE F64ToDecimalResult ToDecimal(double value)
     uint64_t output;
     if (vm_is_trailing_zeros || vr_is_trailing_zeros)
     {
-        // General case, which happens rarely (<1%).
-
         uint32_t last_removed_digit = 0;
 
         bool vr_prev_is_trailing_zeros = vr_is_trailing_zeros;
 
-        for (;;)
+        while (vm / 10 < vp / 10)
         {
-            const uint64_t vm_div10 = Div10(vm);
-            const uint64_t vp_div10 = Div10(vp);
-            if (vm_div10 >= vp_div10)
-                break;
 
-            const uint32_t vm_mod10 = Mod10(vm, vm_div10);
-            vm_is_trailing_zeros &= (vm_mod10 == 0);
+            vm_is_trailing_zeros &= (vm % 10 == 0);
             vr_prev_is_trailing_zeros &= (last_removed_digit == 0);
 
-            const uint64_t vr_div10 = Div10(vr);
-            const uint32_t vr_mod10 = Mod10(vr, vr_div10);
-            last_removed_digit = vr_mod10;
+            last_removed_digit = static_cast<uint32_t>(vr % 10);
 
-            vm = vm_div10;
-            vr = vr_div10;
-            vp = vp_div10;
+            vm /= 10;
+            vr /= 10;
+            vp /= 10;
             ++e10;
         }
 
         if (vm_is_trailing_zeros)
         {
-            for (;;)
+            while (vm % 10 == 0)
             {
-                const uint64_t vm_div10 = Div10(vm);
-                const uint32_t vm_mod10 = Mod10(vm, vm_div10);
-                if (vm_mod10 != 0)
-                    break;
-
                 vr_prev_is_trailing_zeros &= (last_removed_digit == 0);
 
-                const uint64_t vr_div10 = Div10(vr);
-                const uint32_t vr_mod10 = Mod10(vr, vr_div10);
-                last_removed_digit = vr_mod10;
+                last_removed_digit = static_cast<uint32_t>(vr % 10);
 
-                vm = vm_div10;
-                vr = vr_div10;
-                //vp = Div10(vp);
+                vm /= 10;
+                vr /= 10;
+                //vp /= 10;
                 ++e10;
             }
         }
@@ -1430,43 +1199,25 @@ RYU_INLINE F64ToDecimalResult ToDecimal(double value)
     }
     else
     {
-        // Specialized for the common case (>99%).
-
         bool round_up = false;
 
-        // Remove 4 digits in each iteration.
-        // This loop runs at most 20/4 = 5 times.
-        for (;;)
+#if 1
+        while (vm / 10000 < vp / 10000)
         {
-            const uint64_t vm_div1e4 = Div1e4(vm);
-            const uint64_t vp_div1e4 = Div1e4(vp);
-            if (vm_div1e4 >= vp_div1e4)
-                break;
-
-            const uint64_t vr_div1e4 = Div1e4(vr);
-            const uint32_t vr_mod1e4 = Mod1e4(vr, vr_div1e4);
-            round_up = (vr_mod1e4 >= 10000 / 2);
-
-            vm = vm_div1e4;
-            vr = vr_div1e4;
-            vp = vp_div1e4;
+            round_up = (vr % 10000 >= 10000 / 2);
+            vm /= 10000;
+            vr /= 10000;
+            vp /= 10000;
             e10 += 4;
         }
+#endif
 
-        for (;;)
+        while (vm / 10 < vp / 10)
         {
-            const uint64_t vm_div10 = Div10(vm);
-            const uint64_t vp_div10 = Div10(vp);
-            if (vm_div10 >= vp_div10)
-                break;
-
-            const uint64_t vr_div10 = Div10(vr);
-            const uint32_t vr_mod10 = Mod10(vr, vr_div10);
-            round_up = (vr_mod10 >= 10 / 2);
-
-            vm = vm_div10;
-            vr = vr_div10;
-            vp = vp_div10;
+            round_up = (vr % 10 >= 10 / 2);
+            vm /= 10;
+            vr /= 10;
+            vp /= 10;
             ++e10;
         }
 
@@ -1489,7 +1240,7 @@ RYU_INLINE F64ToDecimalResult ToDecimal(double value)
 
 namespace impl {
 
-RYU_INLINE uint64_t ComputePow5Single(int k)
+RYU_FORCE_INLINE uint64_t ComputePow5Single(int k)
 {
 #if 0
     // May use this if the double-precision table is available.
@@ -1502,10 +1253,9 @@ RYU_INLINE uint64_t ComputePow5Single(int k)
     // Let e = FloorLog2Pow5(k) + 1 - 64
     // For k >= 0, stores 5^k in the form: floor( 5^k / 2^e )
     // For k <= 0, stores 5^k in the form:  ceil(2^-e / 5^-k)
-    static constexpr int MinDecExp = -30;
+    static constexpr int MinDecExp = -29;
     static constexpr int MaxDecExp =  47;
     static constexpr uint64_t Pow5[MaxDecExp - MinDecExp + 1] = {
-        0xA2425FF75E14FC32, // e =  -133, k =  -30
         0xCAD2F7F5359A3B3F, // e =  -131, k =  -29
         0xFD87B5F28300CA0E, // e =  -129, k =  -28
         0x9E74D1B791E07E49, // e =  -126, k =  -27
@@ -1587,38 +1337,31 @@ RYU_INLINE uint64_t ComputePow5Single(int k)
 
     RYU_ASSERT(k >= MinDecExp);
     RYU_ASSERT(k <= MaxDecExp);
-    return Pow5[k - MinDecExp];
+    return Pow5[static_cast<unsigned>(k - MinDecExp)];
 #endif
 }
 
-RYU_INLINE uint32_t MulShift(uint32_t m, uint64_t mul, int j)
+RYU_FORCE_INLINE uint64_t MulShift(uint32_t m, uint64_t mul, int j)
 {
-    RYU_ASSERT(j >= 59);
+    RYU_ASSERT(j >= 57);
     RYU_ASSERT(j <= 63);
 
     const uint64_t bits0 = uint64_t{m} * Lo32(mul);
     const uint64_t bits1 = uint64_t{m} * Hi32(mul);
 
-#if RYU_32_BIT_PLATFORM
-    // On 32-bit platforms we can avoid a 64-bit shift-right since we only
-    // need the upper 32 bits of the result and the shift value is > 32.
-    const uint32_t bits0_hi = Hi32(bits0);
-    uint32_t bits1_lo = Lo32(bits1);
-    uint32_t bits1_hi = Hi32(bits1);
-    bits1_lo += bits0_hi;
-    bits1_hi += bits1_lo < bits0_hi;
-    const int lshift = -j & 31; // == (32 - (j - 32)) % 32
-    const int rshift =  j & 31; // == (     (j - 32)) % 32
-    return (bits1_hi << lshift) | (bits1_lo >> rshift);
-#else
     const uint64_t sum = bits1 + Hi32(bits0);
     const uint64_t shifted_sum = sum >> (j - 32);
-    RYU_ASSERT(shifted_sum <= UINT32_MAX);
-    return static_cast<uint32_t>(shifted_sum);
-#endif
+    return shifted_sum;
 }
 
-RYU_INLINE int Pow5Factor(uint32_t value)
+RYU_FORCE_INLINE void MulShiftAll(uint32_t mv, uint32_t mp, uint32_t mm, uint64_t mul, int j, uint64_t& vr, uint64_t& vp, uint64_t& vm)
+{
+    vr = MulShift(mv, mul, j);
+    vp = MulShift(mp, mul, j);
+    vm = MulShift(mm, mul, j);
+}
+
+/*RYU_FORCE_INLINE*/RYU_INLINE int Pow5Factor(uint32_t value)
 {
     int factor = 0;
     for (;;) {
@@ -1633,12 +1376,12 @@ RYU_INLINE int Pow5Factor(uint32_t value)
     }
 }
 
-RYU_INLINE bool MultipleOfPow5(uint32_t value, int p)
+/*RYU_FORCE_INLINE*/RYU_INLINE bool MultipleOfPow5(uint32_t value, int p)
 {
     return Pow5Factor(value) >= p;
 }
 
-RYU_INLINE bool MultipleOfPow2(uint32_t value, int p)
+RYU_FORCE_INLINE bool MultipleOfPow2(uint32_t value, int p)
 {
     RYU_ASSERT(p >= 0);
     RYU_ASSERT(p <= 31);
@@ -1705,22 +1448,20 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
 
     int e10;
 
-    uint32_t vm;
-    uint32_t vr;
-    uint32_t vp;
+    uint64_t vm;
+    uint64_t vr;
+    uint64_t vp;
 
     bool vm_is_trailing_zeros = false;
     bool vr_is_trailing_zeros = false;
 //  bool vp_is_trailing_zeros = false;
-
-    uint32_t last_removed_digit = 0;
 
     if (e2 >= 0)
     {
         // TODO:
         // Do the math and simplify!?
 
-        const int q = FloorLog10Pow2(e2);
+        const int q = FloorLog10Pow2(e2) - (e2 > 3);
         RYU_ASSERT(q >= 0);
         const int k = FloorLog2Pow5(-q) + 1 - 64;
         const int j = -e2 + q - k; // shift
@@ -1728,24 +1469,7 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
         e10 = q;
 
         const uint64_t mul = ComputePow5Single(-q);
-        vr = MulShift(mv, mul, j);
-        vp = MulShift(mp, mul, j);
-        vm = MulShift(mm, mul, j);
-
-        if (q != 0 && (vp - 1) / 10 <= vm / 10)
-        {
-            // We need to know one removed digit even if we are not going to loop below. We could use
-            // q = X - 1 above, except that would require 33 bits for the result, and we've found that
-            // 32-bit arithmetic is faster even on 64-bit machines.
-
-            const int q1 = q - 1;
-            RYU_ASSERT(q1 >= 0);
-            const int k1 = FloorLog2Pow5(-q1) + 1 - 64;
-            const int j1 = -e2 + q1 - k1; // shift
-
-            const uint64_t mul1 = ComputePow5Single(-q1);
-            last_removed_digit = MulShift(mv, mul1, j1) % 10;
-        }
+        MulShiftAll(mv, mp, mm, mul, j, vr, vp, vm);
 
         // 10 = floor(log_5(2^24))
         // 11 = floor(log_5(2^(24+2)))
@@ -1777,7 +1501,7 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
         // TODO:
         // Do the math and simplify!?
 
-        const int q = FloorLog10Pow5(-e2);
+        const int q = FloorLog10Pow5(-e2) - (-e2 > 1);
         RYU_ASSERT(q >= 0);
         const int i = -e2 - q;
         RYU_ASSERT(i >= 0);
@@ -1787,26 +1511,7 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
         e10 = q + e2;
 
         const uint64_t mul = ComputePow5Single(i);
-        vr = MulShift(mv, mul, j);
-        vp = MulShift(mp, mul, j);
-        vm = MulShift(mm, mul, j);
-
-        if (q != 0 && (vp - 1) / 10 <= vm / 10)
-        {
-            // We need to know one removed digit even if we are not going to loop below. We could use
-            // q = X - 1 above, except that would require 33 bits for the result, and we've found that
-            // 32-bit arithmetic is faster even on 64-bit machines.
-
-            const int q1 = q - 1;
-            RYU_ASSERT(q1 >= 0);
-            const int i1 = i + 1; // = -e2 - q1
-            RYU_ASSERT(i1 >= 0);
-            const int k1 = FloorLog2Pow5(i1) + 1 - 64;
-            const int j1 = q1 - k1; // shift
-
-            const uint64_t mul1 = ComputePow5Single(i1);
-            last_removed_digit = MulShift(mv, mul1, j1) % 10;
-        }
+        MulShiftAll(mv, mp, mm, mul, j, vr, vp, vm);
 
         if (q <= 1)
         {
@@ -1844,11 +1549,10 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
 
 //  vp -= vp_is_trailing_zeros;
 
-    uint32_t output;
-
+    uint64_t output;
     if (vm_is_trailing_zeros || vr_is_trailing_zeros)
     {
-        // General case, which happens rarely (~4.0%).
+        uint32_t last_removed_digit = 0;
 
         bool vr_prev_is_trailing_zeros = vr_is_trailing_zeros;
 
@@ -1884,7 +1588,7 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
         if (last_removed_digit == 5 && vr_prev_is_trailing_zeros)
         {
             // Halfway case: The number ends in ...500...00.
-            round_up = vr % 2 != 0;
+            round_up = (static_cast<uint32_t>(vr) % 2 != 0);
         }
 
         // We need to take vr+1 if vr is outside bounds...
@@ -1895,11 +1599,22 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
     }
     else
     {
-        // Specialized for the common case (~96.0%).
+        bool round_up = false;
+
+#if 0
+        while (vm / 100 < vp / 100)
+        {
+            round_up = (vr % 100 >= 100 / 2);
+            vm /= 100;
+            vr /= 100;
+            vp /= 100;
+            e10 += 2;
+        }
+#endif
 
         while (vm / 10 < vp / 10)
         {
-            last_removed_digit = vr % 10;
+            round_up = (vr % 10 >= 10 / 2);
             vm /= 10;
             vr /= 10;
             vp /= 10;
@@ -1908,351 +1623,18 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
 
         // We need to take vr+1 if vr is outside bounds...
         // or we need to round up.
-        const bool inc = (vr == vm || last_removed_digit >= 5);
+        const bool inc = (vr == vm || round_up);
 
         output = vr + (inc ? 1 : 0);
     }
 
-    return {output, e10};
-}
-
-//==================================================================================================
-// ToDigits
-//==================================================================================================
-// Constant data: 200 bytes
-
-namespace impl {
-
-RYU_INLINE char* Utoa_2Digits(char* buf, uint32_t digits)
-{
-    static constexpr char kDigits100[200] = {
-        '0','0','0','1','0','2','0','3','0','4','0','5','0','6','0','7','0','8','0','9',
-        '1','0','1','1','1','2','1','3','1','4','1','5','1','6','1','7','1','8','1','9',
-        '2','0','2','1','2','2','2','3','2','4','2','5','2','6','2','7','2','8','2','9',
-        '3','0','3','1','3','2','3','3','3','4','3','5','3','6','3','7','3','8','3','9',
-        '4','0','4','1','4','2','4','3','4','4','4','5','4','6','4','7','4','8','4','9',
-        '5','0','5','1','5','2','5','3','5','4','5','5','5','6','5','7','5','8','5','9',
-        '6','0','6','1','6','2','6','3','6','4','6','5','6','6','6','7','6','8','6','9',
-        '7','0','7','1','7','2','7','3','7','4','7','5','7','6','7','7','7','8','7','9',
-        '8','0','8','1','8','2','8','3','8','4','8','5','8','6','8','7','8','8','8','9',
-        '9','0','9','1','9','2','9','3','9','4','9','5','9','6','9','7','9','8','9','9',
-    };
-
-    RYU_ASSERT(digits < 100);
-    std::memcpy(buf, &kDigits100[2*digits], 2*sizeof(char));
-    return buf + 2;
-}
-
-RYU_INLINE char* Utoa_4Digits(char* buf, uint32_t digits)
-{
-    RYU_ASSERT(digits < 10000);
-    const uint32_t q = digits / 100;
-    const uint32_t r = digits % 100;
-    Utoa_2Digits(buf + 0, q);
-    Utoa_2Digits(buf + 2, r);
-    return buf + 4;
-}
-
-RYU_INLINE char* Utoa_8Digits(char* buf, uint32_t digits)
-{
-    RYU_ASSERT(digits < 100000000);
-    const uint32_t q = digits / 10000;
-    const uint32_t r = digits % 10000;
-    Utoa_4Digits(buf + 0, q);
-    Utoa_4Digits(buf + 4, r);
-    return buf + 8;
-}
-
-RYU_INLINE int DecimalLength(uint64_t v)
-{
-    RYU_ASSERT(v >= 1);
-    RYU_ASSERT(v < 100000000000000000ull); // 10^17 = 0x0163'4578'5D8A'0000
-
-    if (v >= 10000000000000000ull) { return 17; }
-    if (v >= 1000000000000000ull) { return 16; }
-    if (v >= 100000000000000ull) { return 15; }
-    if (v >= 10000000000000ull) { return 14; }
-    if (v >= 1000000000000ull) { return 13; }
-    if (v >= 100000000000ull) { return 12; }
-    if (v >= 10000000000ull) { return 11; }
-    if (v >= 1000000000ull) { return 10; }
-    if (v >= 100000000ull) { return 9; }
-    if (v >= 10000000ull) { return 8; }
-    if (v >= 1000000ull) { return 7; }
-    if (v >= 100000ull) { return 6; }
-    if (v >= 10000ull) { return 5; }
-    if (v >= 1000ull) { return 4; }
-    if (v >= 100ull) { return 3; }
-    if (v >= 10ull) { return 2; }
-    return 1;
-}
-
-RYU_INLINE int PrintDecimalDigits(char* buf, uint64_t output)
-{
-    const int output_length = DecimalLength(output);
-    int i = output_length;
-
-    // We prefer 32-bit operations, even on 64-bit platforms.
-    // We have at most 17 digits, and uint32_t can store 9 digits.
-    // If output doesn't fit into uint32_t, we cut off 8 digits,
-    // so the rest will fit into uint32_t.
-    if (static_cast<uint32_t>(output >> 32) != 0)
-    {
-        RYU_ASSERT(i > 8);
-        const uint64_t q = Div1e8(output);
-        const uint32_t r = Mod1e8(output, q);
-        output = q;
-        i -= 8;
-        Utoa_8Digits(buf + i, r);
-    }
-
     RYU_ASSERT(output <= UINT32_MAX);
-    uint32_t output2 = static_cast<uint32_t>(output);
-
-    while (output2 >= 10000)
-    {
-        RYU_ASSERT(i > 4);
-        const uint32_t q = output2 / 10000;
-        const uint32_t r = output2 % 10000;
-        output2 = q;
-        i -= 4;
-        Utoa_4Digits(buf + i, r);
-    }
-
-    if (output2 >= 100)
-    {
-        RYU_ASSERT(i > 2);
-        const uint32_t q = output2 / 100;
-        const uint32_t r = output2 % 100;
-        output2 = q;
-        i -= 2;
-        Utoa_2Digits(buf + i, r);
-    }
-
-    if (output2 >= 10)
-    {
-        RYU_ASSERT(i == 2);
-        Utoa_2Digits(buf, output2);
-    }
-    else
-    {
-        RYU_ASSERT(i == 1);
-        buf[0] = static_cast<char>('0' + output2);
-    }
-
-    return output_length;
-}
-
-RYU_INLINE int DecimalLength(uint32_t v)
-{
-    RYU_ASSERT(v >= 1);
-    RYU_ASSERT(v < 1000000000);
-
-    if (v >= 100000000) { return 9; }
-    if (v >= 10000000) { return 8; }
-    if (v >= 1000000) { return 7; }
-    if (v >= 100000) { return 6; }
-    if (v >= 10000) { return 5; }
-    if (v >= 1000) { return 4; }
-    if (v >= 100) { return 3; }
-    if (v >= 10) { return 2; }
-    return 1;
-}
-
-RYU_INLINE int PrintDecimalDigits(char* buf, uint32_t output)
-{
-    const int output_length = DecimalLength(output);
-    int i = output_length;
-
-    while (output >= 10000)
-    {
-        RYU_ASSERT(i > 4);
-        const uint32_t q = output / 10000;
-        const uint32_t r = output % 10000;
-        output = q;
-        i -= 4;
-        Utoa_4Digits(buf + i, r);
-    }
-
-    if (output >= 100)
-    {
-        RYU_ASSERT(i > 2);
-        const uint32_t q = output / 100;
-        const uint32_t r = output % 100;
-        output = q;
-        i -= 2;
-        Utoa_2Digits(buf + i, r);
-    }
-
-    if (output >= 10)
-    {
-        RYU_ASSERT(i == 2);
-        Utoa_2Digits(buf, output);
-    }
-    else
-    {
-        RYU_ASSERT(i == 1);
-        buf[0] = static_cast<char>('0' + output);
-    }
-
-    return output_length;
-}
-
-} // namespace impl
-
-template <typename Float>
-RYU_INLINE void ToDigits(char* buffer, int& num_digits, int& exponent, Float value)
-{
-    const auto dec = ryu::ToDecimal(value);
-
-    num_digits = ryu::impl::PrintDecimalDigits(buffer, dec.digits);
-    exponent = dec.exponent;
+    return {static_cast<uint32_t>(output), e10};
 }
 
 //==================================================================================================
 // ToChars
 //==================================================================================================
-
-namespace impl {
-
-// Appends a decimal representation of 'value' to buffer.
-// Returns a pointer to the element following the digits.
-//
-// PRE: -1000 < value < 1000
-RYU_INLINE char* ExponentToString(char* buffer, int value)
-{
-    RYU_ASSERT(value > -1000);
-    RYU_ASSERT(value <  1000);
-
-    int n = 0;
-
-    if (value < 0)
-    {
-        buffer[n++] = '-';
-        value = -value;
-    }
-    else
-    {
-        buffer[n++] = '+';
-    }
-
-    const uint32_t k = static_cast<uint32_t>(value);
-    if (k < 10)
-    {
-        buffer[n++] = static_cast<char>('0' + k);
-    }
-    else if (k < 100)
-    {
-        Utoa_2Digits(buffer + n, k);
-        n += 2;
-    }
-    else
-    {
-        const uint32_t r = k % 10;
-        const uint32_t q = k / 10;
-        Utoa_2Digits(buffer + n, q);
-        n += 2;
-        buffer[n++] = static_cast<char>('0' + r);
-    }
-
-    return buffer + n;
-}
-
-RYU_INLINE char* FormatFixed(char* buffer, intptr_t num_digits, intptr_t decimal_point, bool force_trailing_dot_zero)
-{
-    RYU_ASSERT(buffer != nullptr);
-    RYU_ASSERT(num_digits >= 1);
-
-    if (num_digits <= decimal_point)
-    {
-        // digits[000]
-        // GRISU_ASSERT(buffer_capacity >= decimal_point + (force_trailing_dot_zero ? 2 : 0));
-
-        std::memset(buffer + num_digits, '0', static_cast<size_t>(decimal_point - num_digits));
-        buffer += decimal_point;
-        if (force_trailing_dot_zero)
-        {
-            *buffer++ = '.';
-            *buffer++ = '0';
-        }
-        return buffer;
-    }
-    else if (0 < decimal_point)
-    {
-        // dig.its
-        // GRISU_ASSERT(buffer_capacity >= length + 1);
-
-        std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, static_cast<size_t>(num_digits - decimal_point));
-        buffer[decimal_point] = '.';
-        return buffer + (num_digits + 1);
-    }
-    else // decimal_point <= 0
-    {
-        // 0.[000]digits
-        // GRISU_ASSERT(buffer_capacity >= 2 + (-decimal_point) + length);
-
-        std::memmove(buffer + (2 + -decimal_point), buffer, static_cast<size_t>(num_digits));
-        buffer[0] = '0';
-        buffer[1] = '.';
-        std::memset(buffer + 2, '0', static_cast<size_t>(-decimal_point));
-        return buffer + (2 + (-decimal_point) + num_digits);
-    }
-}
-
-RYU_INLINE char* FormatScientific(char* buffer, intptr_t num_digits, int exponent, bool force_trailing_dot_zero)
-{
-    RYU_ASSERT(buffer != nullptr);
-    RYU_ASSERT(num_digits >= 1);
-
-    if (num_digits == 1)
-    {
-        // dE+123
-        // GRISU_ASSERT(buffer_capacity >= num_digits + 5);
-
-        buffer += 1;
-        if (force_trailing_dot_zero)
-        {
-            *buffer++ = '.';
-            *buffer++ = '0';
-        }
-    }
-    else
-    {
-        // d.igitsE+123
-        // GRISU_ASSERT(buffer_capacity >= num_digits + 1 + 5);
-
-        std::memmove(buffer + 2, buffer + 1, static_cast<size_t>(num_digits - 1));
-        buffer[1] = '.';
-        buffer += 1 + num_digits;
-    }
-
-    buffer[0] = 'e';
-    buffer = ExponentToString(buffer + 1, exponent);
-
-    return buffer;
-}
-
-// Format the digits similar to printf's %g style.
-template <typename UnsignedInteger>
-RYU_INLINE char* FormatDigits(char* buffer, UnsignedInteger digits, int exponent, bool force_trailing_dot_zero)
-{
-    const int num_digits = PrintDecimalDigits(buffer, digits);
-    const int decimal_point = num_digits + exponent;
-
-    // NB:
-    // These are the values used by JavaScript's ToString applied to Number
-    // type. Printf uses the values -4 and max_digits10 resp. (sort of).
-    constexpr int kMinExp = -6;
-    constexpr int kMaxExp = 21;
-
-    const bool use_fixed = kMinExp < decimal_point && decimal_point <= kMaxExp;
-
-    return use_fixed
-        ? FormatFixed(buffer, num_digits, decimal_point, force_trailing_dot_zero)
-        : FormatScientific(buffer, num_digits, decimal_point - 1, force_trailing_dot_zero);
-}
-
-} // namespace impl
 
 // Generates a decimal representation of the floating-point number `value` in 'buffer'.
 // Note: The result is _not_ null-terminated.
@@ -2299,7 +1681,7 @@ RYU_INLINE char* ToChars(char* buffer, Float value, bool force_trailing_dot_zero
     }
 
     const auto dec = ryu::ToDecimal(value);
-    return ryu::impl::FormatDigits(buffer, dec.digits, dec.exponent, force_trailing_dot_zero);
+    return dtoa::FormatDigits(buffer, dec.digits, dec.exponent, force_trailing_dot_zero);
 }
 
 } // namespace ryu

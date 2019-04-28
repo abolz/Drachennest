@@ -7,41 +7,41 @@ CPU Caches:
 -------------------------------------------------------------------------------------
 Benchmark                                              Time           CPU Iterations
 -------------------------------------------------------------------------------------
-double - Random-bits   /repeats:3_min                305 ns        300 ns    2240000
-double - Uniform 0/1   /repeats:3_min                248 ns        246 ns    2800000
-double - Uniform 0/1e+308   /repeats:3_min           311 ns        307 ns    2240000
-double - Uniform 1e+10/1e+11   /repeats:3_min        285 ns        285 ns    2357895
-double - Uniform 1e+11/1e+12   /repeats:3_min        288 ns        285 ns    2357895
-double - Uniform 1e+12/1e+13   /repeats:3_min        257 ns        257 ns    2800000
-double - Uniform 1e+13/1e+14   /repeats:3_min        288 ns        285 ns    2357895
-double - Uniform 1e+14/1e+15   /repeats:3_min        614 ns        614 ns    1120000
+double - Random-bits   /repeats:3_min                300 ns        298 ns    2357895
+double - Uniform 0/1   /repeats:3_min                249 ns        251 ns    2800000
+double - Uniform 0/1e+308   /repeats:3_min           309 ns        300 ns    2133333
+double - Uniform 1e+10/1e+11   /repeats:3_min        285 ns        283 ns    2488889
+double - Uniform 1e+11/1e+12   /repeats:3_min        294 ns        292 ns    2357895
+double - Uniform 1e+12/1e+13   /repeats:3_min        258 ns        258 ns    2240000
+double - Uniform 1e+13/1e+14   /repeats:3_min        287 ns        285 ns    2357895
+double - Uniform 1e+14/1e+15   /repeats:3_min        620 ns        628 ns     896000
 double - Uniform 1e+15/1e+16   /repeats:3_min        423 ns        424 ns    1659259
-double - Uniform 1e+16/1e+17   /repeats:3_min        883 ns        879 ns     746667
-double - Uniform 1e+17/1e+18   /repeats:3_min        367 ns        369 ns    1947826
-double - Uniform 1e+18/1e+19   /repeats:3_min        283 ns        276 ns    2488889
-double - Uniform 1e+19/1e+20   /repeats:3_min        291 ns        292 ns    2357895
+double - Uniform 1e+16/1e+17   /repeats:3_min        891 ns        879 ns     746667
+double - Uniform 1e+17/1e+18   /repeats:3_min        365 ns        360 ns    1866667
+double - Uniform 1e+18/1e+19   /repeats:3_min        281 ns        278 ns    2357895
+double - Uniform 1e+19/1e+20   /repeats:3_min        288 ns        292 ns    2357895
 double - 1.0-digits   /repeats:3_min                 154 ns        153 ns    4480000
-double - 1.1-digits   /repeats:3_min                 185 ns        184 ns    3733333
-double - 1.2-digits   /repeats:3_min                 198 ns        197 ns    3733333
-double - 1.3-digits   /repeats:3_min                 211 ns        209 ns    3446154
-double - 1.4-digits   /repeats:3_min                 228 ns        229 ns    3200000
-double - 1.5-digits   /repeats:3_min                 224 ns        225 ns    2986667
-double - 1.6-digits   /repeats:3_min                 227 ns        225 ns    3200000
-double - 1.7-digits   /repeats:3_min                 230 ns        230 ns    2986667
-double - 1.8-digits   /repeats:3_min                 229 ns        227 ns    3446154
-double - 1.9-digits   /repeats:3_min                 229 ns        225 ns    2986667
+double - 1.1-digits   /repeats:3_min                 184 ns        180 ns    3733333
+double - 1.2-digits   /repeats:3_min                 197 ns        197 ns    3733333
+double - 1.3-digits   /repeats:3_min                 209 ns        210 ns    3200000
+double - 1.4-digits   /repeats:3_min                 227 ns        225 ns    2986667
+double - 1.5-digits   /repeats:3_min                 223 ns        225 ns    2986667
+double - 1.6-digits   /repeats:3_min                 230 ns        230 ns    2986667
+double - 1.7-digits   /repeats:3_min                 228 ns        225 ns    2986667
+double - 1.8-digits   /repeats:3_min                 227 ns        225 ns    2986667
+double - 1.9-digits   /repeats:3_min                 228 ns        225 ns    2986667
 double - 1.10-digits   /repeats:3_min                234 ns        235 ns    2986667
-double - 1.11-digits   /repeats:3_min                240 ns        235 ns    2986667
-double - 1.12-digits   /repeats:3_min                240 ns        234 ns    2800000
-double - 1.13-digits   /repeats:3_min                245 ns        246 ns    2986667
-double - 1.14-digits   /repeats:3_min                255 ns        243 ns    2635294
-single - Random-bits   /repeats:3_min                287 ns        276 ns    2488889
-single - Uniform 0/1   /repeats:3_min                218 ns        220 ns    3200000
-single - Uniform 0/1e+38   /repeats:3_min            216 ns        215 ns    3200000
-single - 1.0-digits   /repeats:3_min                 162 ns        161 ns    4072727
-single - 1.1-digits   /repeats:3_min                 193 ns        190 ns    3446154
-single - 1.2-digits   /repeats:3_min                 206 ns        204 ns    3446154
-single - 1.3-digits   /repeats:3_min                 219 ns        215 ns    3200000
-single - 1.4-digits   /repeats:3_min                 233 ns        230 ns    2986667
-single - 1.5-digits   /repeats:3_min                 228 ns        229 ns    3200000
-single - 1.6-digits   /repeats:3_min                 230 ns        230 ns    2986667
+double - 1.11-digits   /repeats:3_min                238 ns        234 ns    2800000
+double - 1.12-digits   /repeats:3_min                241 ns        241 ns    2986667
+double - 1.13-digits   /repeats:3_min                242 ns        240 ns    2800000
+double - 1.14-digits   /repeats:3_min                251 ns        249 ns    2635294
+single - Random-bits   /repeats:3_min                283 ns        283 ns    2488889
+single - Uniform 0/1   /repeats:3_min                217 ns        215 ns    3200000
+single - Uniform 0/1e+38   /repeats:3_min            214 ns        215 ns    3200000
+single - 1.0-digits   /repeats:3_min                 161 ns        160 ns    4480000
+single - 1.1-digits   /repeats:3_min                 193 ns        193 ns    3733333
+single - 1.2-digits   /repeats:3_min                 205 ns        204 ns    3446154
+single - 1.3-digits   /repeats:3_min                 218 ns        215 ns    3200000
+single - 1.4-digits   /repeats:3_min                 233 ns        229 ns    2800000
+single - 1.5-digits   /repeats:3_min                 226 ns        225 ns    2986667
+single - 1.6-digits   /repeats:3_min                 229 ns        230 ns    2986667
