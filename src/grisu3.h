@@ -1414,15 +1414,17 @@ GRISU_INLINE int CountLeadingZeros32(uint32_t x)
 
 #if defined(__GNUC__)
     return __builtin_clz(x);
+#elif defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64))
+    return static_cast<int>(_CountLeadingZeros(x));
 #elif defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
     return static_cast<int>(__lzcnt(x));
 #else
-    int z = 0;
+    int lz = 0;
     while ((x >> 31) == 0) {
         x <<= 1;
-        ++z;
+        ++lz;
     }
-    return z;
+    return lz;
 #endif
 }
 
