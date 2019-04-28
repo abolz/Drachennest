@@ -170,6 +170,7 @@ static void CheckSingle(Converter d2s, float f0)
     // Dtoa
     char buf0[32];
     char* end0 = d2s(buf0, 32, f0);
+    *end0 = '\0';
     const int length0 = static_cast<int>(end0 - buf0);
 
     CAPTURE(buf0);
@@ -185,6 +186,7 @@ static void CheckSingle(Converter d2s, float f0)
 
     char buf1[32];
     char* end1 = double_conversion_Ftoa(buf1, 32, f0);
+    *end1 = '\0';
 
     const std::string s0(buf0, end0);
     const std::string s1(buf1, end1);
@@ -224,6 +226,7 @@ static void CheckDouble(Converter d2s, double f0)
     // Dtoa
     char buf0[32];
     char* end0 = d2s(buf0, 32, f0);
+    *end0 = '\0';
     const int length0 = static_cast<int>(end0 - buf0);
 
     CAPTURE(buf0);
@@ -239,6 +242,7 @@ static void CheckDouble(Converter d2s, double f0)
 
     char buf1[32];
     char* end1 = double_conversion_Dtoa(buf1, 32, f0);
+    *end1 = '\0';
 
     const std::string s0(buf0, end0);
     const std::string s1(buf1, end1);
@@ -267,6 +271,29 @@ static void CheckDouble(double f)
     CheckDouble(Grisu2Converter{}, f);
     CheckDouble(Grisu3Converter{}, f);
     CheckDouble(RyuConverter{}, f);
+}
+
+template <typename Converter>
+static void CheckDoubleString(Converter d2s, double value, const std::string& expected)
+{
+    //static_assert(Converter::optimal, "xxx");
+    if (!Converter::optimal)
+        return;
+
+    char buf[32];
+    char* end = d2s(buf, 32, value);
+    std::string actual(buf, end);
+
+    CAPTURE(Converter::Name());
+    CAPTURE(value);
+    CHECK(expected == actual);
+}
+
+static void CheckDoubleString(double value, const std::string& expected)
+{
+    CheckDoubleString(DoubleConversionConverter{}, value, expected);
+    CheckDoubleString(Grisu3Converter{}, value, expected);
+    CheckDoubleString(RyuConverter{}, value, expected);
 }
 
 //==================================================================================================
@@ -450,4 +477,15 @@ TEST_CASE("Double - Grisu2 code paths")
     CheckDouble(5.5645893133766722e+20);
     CheckDouble(53.034830388866226);
     CheckDouble(0.0021066531670178605);
+}
+
+TEST_CASE("Double - Round to even")
+{
+    CheckDoubleString(1.00000000000000005, "1");
+    CheckDoubleString(1.00000000000000015, "1.0000000000000002"); // 1.000000000000000222...
+    CheckDoubleString(1.99999999999999985, "1.9999999999999998"); // 1.999999999999999777...
+    CheckDoubleString(1.99999999999999995, "2");
+    CheckDoubleString(1125899906842623.75, "1125899906842623.8");
+    CheckDoubleString(1125899906842624.25, "1125899906842624.2");
+    CheckDoubleString(562949953421312.25, "562949953421312.2");
 }
