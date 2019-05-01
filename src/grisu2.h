@@ -396,8 +396,10 @@ GRISU_FORCE_INLINE Boundaries ComputeBoundaries(Float value)
 //      2^(q - 2 + alpha) <= c * w < 2^(q + gamma)
 //
 // The choice of (alpha,gamma) determines the size of the table and the form of
-// the digit generation procedure. Using (alpha,gamma)=(-60,-32) works out well
-// in practice:
+// the digit generation procedure.
+//
+// Using (alpha,gamma)=(-60,-32) (or any smaller interval contained int [-60,-32]
+// works out well in practice:
 //
 // The idea is to cut the number c * w = f * 2^e into two parts, which can be
 // processed independently: An integral part p1, and a fractional part p2:
@@ -430,9 +432,20 @@ GRISU_FORCE_INLINE Boundaries ComputeBoundaries(Float value)
 // Since p2 = f mod 2^-e < 2^-e,
 //
 //      -e <= 60   or   e >= -60 := alpha
+//
+// A larger alpha would allow to multiply the fractional part by a larger
+// power of 10 and therefore allow to generate multiple digits in a single
+// iteration.
+//
+// A smaller gamma would (probably) allow to generate a small amount of
+// digits faster.
 
-constexpr int kAlpha = -60;
-constexpr int kGamma = -32;
+//
+// TODO:
+//
+// Test different exponent ranges here, e.g., [-57, -43], and adjust DigitGen
+// to produce 2 decimal digits per iteration in the (p2 > delta) branch.
+//
 
 // Now
 //
@@ -517,6 +530,12 @@ struct CachedPower { // c = f * 2^e ~= 10^k
     int k; // decimal exponent
 };
 
+#if 0
+constexpr int kAlpha = -60;
+constexpr int kGamma = -32;
+// k_min = -307
+// k_max =  324
+
 constexpr int kCachedPowersSize         =   79;
 constexpr int kCachedPowersMinDecExp    = -300;
 constexpr int kCachedPowersMaxDecExp    =  324;
@@ -525,11 +544,8 @@ constexpr int kCachedPowersDecExpStep   =    8;
 // Returns (an approximation) 10^(MinDecExp + index * DecExpStep) in the form f * 2^e.
 GRISU_FORCE_INLINE CachedPower GetCachedPower(int index)
 {
-    // Let e = floor(log_2 10^k) + 1 - 64.
-    // Negative powers of 10 are stored as: f = round_up(2^-e / 10^-k).
-    // Positive powers of 10 are stored as: f = round_up(10^k / 2^e).
-    static constexpr uint64_t kSignificands[/*632 bytes*/] = {
-        0xAB70FE17C79AC6CA, // e = -1060, k = -300 >>> double-precision
+    static constexpr uint64_t kSignificands[] = {
+        0xAB70FE17C79AC6CA, // e = -1060, k = -300
         0xFF77B1FCBEBCDC4F, // e = -1034, k = -292
         0xBE5691EF416BD60C, // e = -1007, k = -284
         0x8DD01FAD907FFC3C, // e =  -980, k = -276
@@ -561,7 +577,7 @@ GRISU_FORCE_INLINE CachedPower GetCachedPower(int index)
         0x8A08F0F8BF0F156B, // e =  -289, k =  -68
         0xCDB02555653131B6, // e =  -263, k =  -60
         0x993FE2C6D07B7FAC, // e =  -236, k =  -52
-        0xE45C10C42A2B3B06, // e =  -210, k =  -44 >>> single-precision
+        0xE45C10C42A2B3B06, // e =  -210, k =  -44
         0xAA242499697392D3, // e =  -183, k =  -36
         0xFD87B5F28300CA0E, // e =  -157, k =  -28
         0xBCE5086492111AEB, // e =  -130, k =  -20
@@ -571,7 +587,7 @@ GRISU_FORCE_INLINE CachedPower GetCachedPower(int index)
         0xE8D4A51000000000, // e =   -24, k =   12
         0xAD78EBC5AC620000, // e =     3, k =   20
         0x813F3978F8940984, // e =    30, k =   28
-        0xC097CE7BC90715B3, // e =    56, k =   36 <<< single-precision
+        0xC097CE7BC90715B3, // e =    56, k =   36
         0x8F7E32CE7BEA5C70, // e =    83, k =   44
         0xD5D238A4ABE98068, // e =   109, k =   52
         0x9F4F2726179A2245, // e =   136, k =   60
@@ -607,7 +623,7 @@ GRISU_FORCE_INLINE CachedPower GetCachedPower(int index)
         0xBF21E44003ACDD2D, // e =   933, k =  300
         0x8E679C2F5E44FF8F, // e =   960, k =  308
         0xD433179D9C8CB841, // e =   986, k =  316
-        0x9E19DB92B4E31BA9, // e =  1013, k =  324 <<< double-precision
+        0x9E19DB92B4E31BA9, // e =  1013, k =  324
     };
 
     GRISU_ASSERT(index >= 0);
@@ -618,6 +634,191 @@ GRISU_FORCE_INLINE CachedPower GetCachedPower(int index)
 
     return {kSignificands[index], e, k};
 }
+#endif
+#if 1
+constexpr int kAlpha = -57;
+constexpr int kGamma = -43;
+// k_min = -306
+// k_max =  325
+
+constexpr int kCachedPowersSize       =  159;
+constexpr int kCachedPowersMinDecExp  = -306;
+constexpr int kCachedPowersMaxDecExp  =  326;
+constexpr int kCachedPowersDecExpStep =    4;
+
+inline CachedPower GetCachedPower(int index)
+{
+    static constexpr uint64_t kSignificands[] = {
+        0xB3C4F1BA87BC8697, // e = -1080, k = -306
+        0xDB71E91432B1A24B, // e = -1067, k = -302
+        0x85F0468293F0EB4E, // e = -1053, k = -298
+        0xA37FCE126597973D, // e = -1040, k = -294
+        0xC795830D75038C1E, // e = -1027, k = -290
+        0xF3A20279ED56D48A, // e = -1014, k = -286
+        0x94B3A202EB1C3F39, // e = -1000, k = -282
+        0xB58547448FFFFB2E, // e =  -987, k = -278
+        0xDD95317F31C7FA1D, // e =  -974, k = -274
+        0x873E4F75E2224E68, // e =  -960, k = -270
+        0xA5178FFF668AE0B6, // e =  -947, k = -266
+        0xC987434744AC874F, // e =  -934, k = -262
+        0xF6019DA07F549B2B, // e =  -921, k = -258
+        0x96267C7535B763B5, // e =  -907, k = -254
+        0xB749FAED14125D37, // e =  -894, k = -250
+        0xDFBDCECE67006AC9, // e =  -881, k = -246
+        0x888F99797A5E012D, // e =  -867, k = -242
+        0xA6B34AD8C9DFC070, // e =  -854, k = -238
+        0xCB7DDCDDA26DA269, // e =  -841, k = -234
+        0xF867241C8CC6D4C1, // e =  -828, k = -230
+        0x979CF3CA6CEC5B5B, // e =  -814, k = -226
+        0xB913179899F68584, // e =  -801, k = -222
+        0xE1EBCE4DC7F16DFC, // e =  -788, k = -218
+        0x89E42CAAF9491B61, // e =  -774, k = -214
+        0xA8530886B54DBDEC, // e =  -761, k = -210
+        0xCD795BE870516656, // e =  -748, k = -206
+        0xFAD2A4B13D1B5D6C, // e =  -735, k = -202
+        0x991711052D8BF3C5, // e =  -721, k = -198
+        0xBAE0A846D2195713, // e =  -708, k = -194
+        0xE41F3D6A7377EECA, // e =  -695, k = -190
+        0x8B3C113C38F9F37F, // e =  -681, k = -186
+        0xA9F6D30A038D1DBC, // e =  -668, k = -182
+        0xCF79CC9DB955C2CC, // e =  -655, k = -178
+        0xFD442E4688BD304B, // e =  -642, k = -174
+        0x9A94DD3E8CF578BA, // e =  -628, k = -170
+        0xBCB2B812DB11A5DE, // e =  -615, k = -166
+        0xE65829B3046B0AFA, // e =  -602, k = -162
+        0x8C974F7383725573, // e =  -588, k = -158
+        0xAB9EB47C81F5114F, // e =  -575, k = -154
+        0xD17F3B51FCA3A7A1, // e =  -562, k = -150
+        0xFFBBCFE994E5C620, // e =  -549, k = -146
+        0x9C1661A651213E2D, // e =  -535, k = -142
+        0xBE89523386091466, // e =  -522, k = -138
+        0xE896A0D7E51E1566, // e =  -509, k = -134
+        0x8DF5EFABC5979C90, // e =  -495, k = -130
+        0xAD4AB7112EB3929E, // e =  -482, k = -126
+        0xD389B47879823479, // e =  -469, k = -122
+        0x811CCC668829B887, // e =  -455, k = -118
+        0x9D9BA7832936EDC1, // e =  -442, k = -114
+        0xC06481FB9BCF8D3A, // e =  -429, k = -110
+        0xEADAB0ABA3B2DBE5, // e =  -416, k = -106
+        0x8F57FA54C2A9EAB7, // e =  -402, k = -102
+        0xAEFAE51477A06B04, // e =  -389, k =  -98
+        0xD59944A37C0752A2, // e =  -376, k =  -94
+        0x825ECC24C8737830, // e =  -362, k =  -90
+        0x9F24B832E6B0F436, // e =  -349, k =  -86
+        0xC24452DA229B021C, // e =  -336, k =  -82
+        0xED246723473E3813, // e =  -323, k =  -78
+        0x90BD77F3483BB9BA, // e =  -309, k =  -74
+        0xB0AF48EC79ACE837, // e =  -296, k =  -70
+        0xD7ADF884AA879177, // e =  -283, k =  -66
+        0x83A3EEEEF9153E89, // e =  -269, k =  -62
+        0xA0B19D2AB70E6ED6, // e =  -256, k =  -58
+        0xC428D05AA4751E4D, // e =  -243, k =  -54
+        0xEF73D256A5C0F77D, // e =  -230, k =  -50
+        0x9226712162AB070E, // e =  -216, k =  -46
+        0xB267ED1940F1C61C, // e =  -203, k =  -42
+        0xD9C7DCED53C72256, // e =  -190, k =  -38
+        0x84EC3C97DA624AB5, // e =  -176, k =  -34
+        0xA2425FF75E14FC32, // e =  -163, k =  -30
+        0xC612062576589DDB, // e =  -150, k =  -26
+        0xF1C90080BAF72CB1, // e =  -137, k =  -22
+        0x9392EE8E921D5D07, // e =  -123, k =  -18
+        0xB424DC35095CD80F, // e =  -110, k =  -14
+        0xDBE6FECEBDEDD5BF, // e =   -97, k =  -10
+        0x8637BD05AF6C69B6, // e =   -83, k =   -6
+        0xA3D70A3D70A3D70A, // e =   -70, k =   -2
+        0xC800000000000000, // e =   -57, k =    2
+        0xF424000000000000, // e =   -44, k =    6
+        0x9502F90000000000, // e =   -30, k =   10
+        0xB5E620F480000000, // e =   -17, k =   14
+        0xDE0B6B3A76400000, // e =    -4, k =   18
+        0x878678326EAC9000, // e =    10, k =   22
+        0xA56FA5B99019A5C8, // e =    23, k =   26
+        0xC9F2C9CD04674EDF, // e =    36, k =   30
+        0xF684DF56C3E01BC7, // e =    49, k =   34
+        0x96769950B50D88F4, // e =    63, k =   38
+        0xB7ABC627050305AE, // e =    76, k =   42
+        0xE0352F62A19E306F, // e =    89, k =   46
+        0x88D8762BF324CD10, // e =   103, k =   50
+        0xA70C3C40A64E6C52, // e =   116, k =   54
+        0xCBEA6F8CEB02BB3A, // e =   129, k =   58
+        0xF8EBAD2B84E0D58C, // e =   142, k =   62
+        0x97EDD871CFDA3A57, // e =   156, k =   66
+        0xB975D6B6EE39E437, // e =   169, k =   70
+        0xE264589A4DCDAB15, // e =   182, k =   74
+        0x8A2DBF142DFCC7AB, // e =   196, k =   78
+        0xA8ACD7C0222311BD, // e =   209, k =   82
+        0xCDE6FD5E09ABCF27, // e =   222, k =   86
+        0xFB5878494ACE3A5F, // e =   235, k =   90
+        0x9968BF6ABBE85F20, // e =   249, k =   94
+        0xBB445DA9CA61281F, // e =   262, k =   98
+        0xE498F455C38B997A, // e =   275, k =  102
+        0x8B865B215899F46D, // e =   289, k =  106
+        0xAA51823E34A7EEDF, // e =   302, k =  110
+        0xCFE87F7CEF46FF17, // e =   315, k =  114
+        0xFDCB4FA002162A63, // e =   328, k =  118
+        0x9AE757596946075F, // e =   342, k =  122
+        0xBD176620A501FC00, // e =   355, k =  126
+        0xE6D3102AD96CEC1E, // e =   368, k =  130
+        0x8CE2529E2734BB1D, // e =   382, k =  134
+        0xABFA45DA0EDBDE69, // e =   395, k =  138
+        0xD1EF0244AF2364FF, // e =   408, k =  142
+        0x802221226BE55A65, // e =   422, k =  146
+        0x9C69A97284B578D8, // e =   435, k =  150
+        0xBEEEFB584AFF8604, // e =   448, k =  154
+        0xE912B9D1478CEB17, // e =   461, k =  158
+        0x8E41ADE9FBEBC27D, // e =   475, k =  162
+        0xADA72CCC20054AEA, // e =   488, k =  166
+        0xD3FA922F2D1675F2, // e =   501, k =  170
+        0x8161AFB94B44F57D, // e =   515, k =  174
+        0x9DEFBF01B061ADAB, // e =   528, k =  178
+        0xC0CB28A98FCF3C80, // e =   541, k =  182
+        0xEB57FF22FC0C795A, // e =   554, k =  186
+        0x8FA475791A569D11, // e =   568, k =  190
+        0xAF58416654A6BABB, // e =   581, k =  194
+        0xD60B3BD56A5586F2, // e =   594, k =  198
+        0x82A45B450226B39D, // e =   608, k =  202
+        0x9F79A169BD203E41, // e =   621, k =  206
+        0xC2ABF989935DDBFE, // e =   634, k =  210
+        0xEDA2EE1C7064130C, // e =   647, k =  214
+        0x910AB1D4DB9914A0, // e =   661, k =  218
+        0xB10D8E1456105DAD, // e =   674, k =  222
+        0xD8210BEFD30EFA5A, // e =   687, k =  226
+        0x83EA2B892091E44E, // e =   701, k =  230
+        0xA1075A24E4421731, // e =   714, k =  234
+        0xC491798A08A2AD4F, // e =   727, k =  238
+        0xEFF394DCFF8A948F, // e =   740, k =  242
+        0x92746B9BE2F8552C, // e =   754, k =  246
+        0xB2C71D5BCA9023F8, // e =   767, k =  250
+        0xDA3C0F568CC4F3E9, // e =   780, k =  254
+        0x8533285C936B35DF, // e =   794, k =  258
+        0xA298F2C501F45F43, // e =   807, k =  262
+        0xC67BB4597CE2CE49, // e =   820, k =  266
+        0xF24A01A73CF2DCD0, // e =   833, k =  270
+        0x93E1AB8252F33B46, // e =   847, k =  274
+        0xB484F9DC9641E9DB, // e =   860, k =  278
+        0xDC5C5301C56B75F7, // e =   873, k =  282
+        0x867F59A9D4BED6C0, // e =   887, k =  286
+        0xA42E74F3D032F526, // e =   900, k =  290
+        0xC86AB5C39FA63441, // e =   913, k =  294
+        0xF4A642E14C6262C9, // e =   926, k =  298
+        0x95527A5202DF0CCB, // e =   940, k =  302
+        0xB6472E511C81471E, // e =   953, k =  306
+        0xDE81E40A034BCF50, // e =   966, k =  310
+        0x87CEC76F1C830549, // e =   980, k =  314
+        0xA5C7EA73224DEFF3, // e =   993, k =  318
+        0xCA5E89B18B602368, // e =  1006, k =  322
+        0xF70867153AA2DB39, // e =  1019, k =  326
+    };
+
+    GRISU_ASSERT(index >= 0);
+    GRISU_ASSERT(index < kCachedPowersSize);
+
+    const int k = kCachedPowersMinDecExp + index * kCachedPowersDecExpStep;
+    const int e = FloorLog2Pow10(k) + 1 - 64;
+
+    return {kSignificands[index], e, k};
+}
+#endif
 
 // For a normalized DiyFp w = f * 2^e, this function returns a (normalized)
 // cached power-of-ten c = f_c * 2^e_c, such that the exponent of the product
@@ -645,19 +846,14 @@ GRISU_FORCE_INLINE CachedPower GetCachedPowerForBinaryExponent(int e)
     GRISU_ASSERT(kAlpha <= cached.e + e + 64);
     GRISU_ASSERT(kGamma >= cached.e + e + 64);
 
-    // NB:
-    // Actually this function returns c, such that -60 <= e_c + e + 64 <= -34.
-    GRISU_ASSERT(-60 <= cached.e + e + 64);
-    GRISU_ASSERT(-34 >= cached.e + e + 64);
-
     return cached;
 }
 
 #if GRISU_ROUND
-// Modifies the generated digits in the buffer to approach (round towards) w.
+// Modifies the generated digits to approach (round towards) w.
 //
 // Input:
-//  * digits of H/10^kappa in [digits, digits + num_digits)
+//  * digits of H/10^kappa
 //  * distance    = (H - w) * unit
 //  * delta       = (H - L) * unit
 //  * rest        = (H - digits * 10^kappa) * unit
@@ -669,9 +865,9 @@ GRISU_FORCE_INLINE void Grisu2Round(uint64_t& digits, uint64_t distance, uint64_
     GRISU_ASSERT(rest <= delta);
     GRISU_ASSERT(ten_kappa > 0);
 
-    // By generating the digits of H we got the largest (closest to H) buffer
+    // By generating the digits of H we got the largest (closest to H) value
     // that is still in the interval [L, H]. In the case where w < B <= H we
-    // try to decrement the buffer.
+    // try to decrement this value.
     //
     //                                  <---- distance ----->
     //              <---------------------------- delta ---->
@@ -682,7 +878,7 @@ GRISU_FORCE_INLINE void Grisu2Round(uint64_t& digits, uint64_t distance, uint64_
     //                                         = digits * 10^kappa
     //
     // ten_kappa represents a unit-in-the-last-place in the decimal
-    // representation stored in the buffer.
+    // representation stored in 'digits'.
     //
     // There are three stopping conditions:
     // (The position of the numbers is measured relative to H.)
@@ -712,12 +908,12 @@ GRISU_FORCE_INLINE void Grisu2Round(uint64_t& digits, uint64_t distance, uint64_
 }
 #endif
 
-// Generates V = digits * 10^exponent, such that L <= V <= H.
+// Generates V = decimal_digits * 10^decimal_exponent, such that L <= V <= H.
 // L and H must be normalized and share the same exponent -60 <= e <= -32.
 #if GRISU_ROUND
-GRISU_FORCE_INLINE void Grisu2DigitGen(uint64_t& digits, int& exponent, DiyFp L, DiyFp w, DiyFp H)
+GRISU_FORCE_INLINE void Grisu2DigitGen(uint64_t& decimal_digits, int& decimal_exponent, DiyFp L, DiyFp w, DiyFp H)
 #else
-GRISU_FORCE_INLINE void Grisu2DigitGen(uint64_t& digits, int& exponent, DiyFp L, DiyFp H)
+GRISU_FORCE_INLINE void Grisu2DigitGen(uint64_t& decimal_digits, int& decimal_exponent, DiyFp L, DiyFp H)
 #endif
 {
     static_assert(DiyFp::SignificandSize == 64, "internal error");
@@ -763,8 +959,7 @@ GRISU_FORCE_INLINE void Grisu2DigitGen(uint64_t& digits, int& exponent, DiyFp L,
     uint32_t p1 = static_cast<uint32_t>(H.f >> -one.e); // p1 = f div 2^-e (Since -e >= 32, p1 fits into a 32-bit int.)
     uint64_t p2 = H.f & (one.f - 1);                    // p2 = f mod 2^-e
 
-    GRISU_ASSERT(p1 >= 4);            // (2^(64-2) - 1) >> 60
-    GRISU_ASSERT(p1 <= 798336123);    // Not trivial. Depends on the implementation of GetCachedPowerForBinaryExponent!
+    GRISU_ASSERT(p1 >= 4); // (2^(64-2) - 1) >> 60
 
     // Generate the digits of the integral part p1 = d[n-1]...d[1]d[0]
     //
@@ -786,24 +981,17 @@ GRISU_FORCE_INLINE void Grisu2DigitGen(uint64_t& digits, int& exponent, DiyFp L,
     //
     //      rest * 2^e = (d[n-1]...d[0] * 2^-e + p2) * 2^e <= delta * 2^e
 
-    // The common case is that all the digits of p1 are needed.
-    // Optimize for this case and correct later if required.
-    uint64_t d10 = p1;
-    int e10 = 0;
+    uint64_t digits = p1;
+    int exponent = 0;
 
     if (p2 > delta)
     {
-        // The digits of the integral part have been generated (and all of them
-        // are significand):
+        // We have
         //
         //      H = d[k-1]...d[1]d[0] + p2 * 2^e
         //        = digits            + p2 * 2^e
         //
         // Now generate the digits of the fractional part p2 * 2^e.
-        //
-        // Note:
-        // No decimal point is generated: the exponent is adjusted instead.
-        //
         // p2 actually represents the fraction
         //
         //      p2 * 2^e
@@ -832,11 +1020,92 @@ GRISU_FORCE_INLINE void Grisu2DigitGen(uint64_t& digits, int& exponent, DiyFp L,
         // and stop as soon as 10^-m * r * 2^e <= delta * 2^e
 
         // unit = 1
-//      int m = 0;
+        int m = 0;
         for (;;)
         {
-            GRISU_ASSERT(d10 <= 9999999999999999ull);
+            GRISU_ASSERT(digits <= 9999999999999999ull);
+#if 1
+// kAlpha >= -57 --->
+            uint64_t p2_prev = p2;
 
+            //
+            //      H = digits * 10^-m + 10^-m * (d[-m-1] / 10 + d[-m-2] / 10^2 + ...) * 2^e
+            //        = digits * 10^-m + 10^-m * (p2                                 ) * 2^e
+            //        = digits * 10^-m + 10^-m * (1/10 * (10 * p2)                   ) * 2^e
+            //        = digits * 10^-m + 10^-m * (1/10 * ((10*p2 div 2^-e) * 2^-e + (10*p2 mod 2^-e)) * 2^e
+            //
+
+            GRISU_ASSERT(p2 <= 0xFFFFFFFFFFFFFFFFull / 100);
+            p2 *= 100;
+            const uint32_t d = static_cast<uint32_t>(p2 >> -one.e); // d = (100 * p2) div 2^-e
+            const uint64_t r = p2 & (one.f - 1);                    // r = (100 * p2) mod 2^-e
+            GRISU_ASSERT(d <= 99);
+            //
+            //      H = digits * 100^-m + 100^-m * (1/100 * (d * 2^-e + r) * 2^e
+            //        = digits * 100^-m + 100^-m * (1/100 * (d + r * 2^e))
+            //        = (digits * 100 + d) * 10^(-m-2) + 10^(-m-2) * r * 2^e
+            //
+            digits = 100 * digits + d;
+            //
+            //      H = digits * 10^(-m-2) + 10^(-m-2) * r * 2^e
+            //
+            p2 = r;
+            m += 2;
+            //
+            //      H = digits * 10^-m + 10^-m * p2 * 2^e
+            //
+
+            // Keep the units in sync. (unit *= 100)
+            delta    *= 100;
+#if GRISU_ROUND
+            distance *= 100;
+#endif
+
+            // Check if enough digits have been generated.
+            //
+            //      10^-m * p2 * 2^e <= delta * 2^e
+            //              p2 * 2^e <= 10^m * delta * 2^e
+            //                    p2 <= 10^m * delta
+            if (p2 <= delta)
+            {
+                p2_prev *= 10;
+//              const uint32_t d_prev = static_cast<uint32_t>(p2_prev >> -one.e);
+                const uint64_t r_prev = p2_prev & (one.f - 1);
+//              GRISU_ASSERT(d_prev <= 9);
+
+                const uint64_t delta_prev = delta / 10;
+                if (r_prev <= delta_prev)
+                {
+                    digits /= 10;
+                    p2 = r_prev;
+                    m--;
+
+                    // Keep the units in sync.
+                    delta = delta_prev;
+#if GRISU_ROUND
+                    distance /= 10;
+#endif
+                }
+
+                // V = digits * 10^-m, with L <= V <= H.
+                exponent = -m;
+
+#if GRISU_ROUND
+                rest = p2;
+
+                // 1 ulp in the decimal representation is now 10^-m.
+                // Since delta and distance are now scaled by 10^m, we need to do
+                // the same with ulp in order to keep the units in sync.
+                //
+                //      10^m * 10^-m = 1 = 2^-e * 2^e = ten_m * 2^e
+                //
+                ten_kappa = one.f; // one.f == 2^-e
+#endif
+
+                break;
+            }
+// <--- kAlpha >= -57
+#else
             //
             //      H = digits * 10^-m + 10^-m * (d[-m-1] / 10 + d[-m-2] / 10^2 + ...) * 2^e
             //        = digits * 10^-m + 10^-m * (p2                                 ) * 2^e
@@ -853,13 +1122,12 @@ GRISU_FORCE_INLINE void Grisu2DigitGen(uint64_t& digits, int& exponent, DiyFp L,
             //        = digits * 10^-m + 10^-m * (1/10 * (d + r * 2^e))
             //        = (digits * 10 + d) * 10^(-m-1) + 10^(-m-1) * r * 2^e
             //
-            d10 = d10 * 10 + d;
+            digits = 10 * digits + d;
             //
             //      H = digits * 10^(-m-1) + 10^(-m-1) * r * 2^e
             //
             p2 = r;
-//          m++;
-            e10--;
+            m++;
             //
             //      H = digits * 10^-m + 10^-m * p2 * 2^e
             //
@@ -878,7 +1146,7 @@ GRISU_FORCE_INLINE void Grisu2DigitGen(uint64_t& digits, int& exponent, DiyFp L,
             if (p2 <= delta)
             {
                 // V = digits * 10^-m, with L <= V <= H.
-//              e10 = -m;
+                exponent = -m;
 
 #if GRISU_ROUND
                 rest = p2;
@@ -894,13 +1162,14 @@ GRISU_FORCE_INLINE void Grisu2DigitGen(uint64_t& digits, int& exponent, DiyFp L,
 
                 break;
             }
+#endif
         }
     }
     else // p2 <= delta
     {
         GRISU_ASSERT((uint64_t{p1} << -one.e) + p2 > delta); // Loop terminates.
 
-        // In this case: Too many digits of p1 might have been generated.
+        // In this case: p1 contains too many digits.
         //
         // Find the largest 0 <= n < k = length, such that
         //
@@ -924,46 +1193,45 @@ GRISU_FORCE_INLINE void Grisu2DigitGen(uint64_t& digits, int& exponent, DiyFp L,
         //
         ten_kappa = one.f; // Start with 2^-e
 
-        uint32_t d = p1; // digits = p1, fits into a 32-bit integer
+        // We can work with 32-bit integers here since p1 fits into a 32-bit
+        // integer.
+        uint32_t dn = p1;
         for (int n = 0; /**/; ++n)
         {
             GRISU_ASSERT(rest <= delta);
 
             // rn = d[n]...d[0] * 2^-e + p2
-            const uint32_t qn = d / 10;
-            const uint64_t rn = ten_kappa * (d - 10 * qn) + rest;
+            const uint32_t qn = dn / 10;
+            const uint64_t rn = ten_kappa * (dn - 10 * qn) + rest;
 
             if (rn > delta)
             {
-                d10 = d;
-                e10 = n;
+                digits = dn;
+                exponent = n;
                 break;
             }
 
-            d = qn;
+            dn = qn;
             rest = rn;
             ten_kappa *= 10;
         }
     }
 
-    // The buffer now contains a correct decimal representation of the input
-    // number w = digits * 10^exponent.
+    // Now w = digits * 10^exponent.
+    // Optionally round the digits towards w.
 
 #if GRISU_ROUND
-    Grisu2Round(d10, distance, delta, rest, ten_kappa);
+    Grisu2Round(digits, distance, delta, rest, ten_kappa);
 #endif
 
-    digits = d10;
-    exponent = e10;
+    decimal_digits = digits;
+    decimal_exponent = exponent;
 }
 
-// v = digits * 10^exponent
-// length is the length of the buffer (number of decimal digits)
-// The buffer must be large enough, i.e. >= max_digits10.
 #if GRISU_ROUND
-/*GRISU_FORCE_INLINE*/GRISU_INLINE void Grisu2(uint64_t& digits, int& exponent, DiyFp m_minus, DiyFp v, DiyFp m_plus)
+/*GRISU_FORCE_INLINE*/GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp m_minus, DiyFp v, DiyFp m_plus)
 #else
-/*GRISU_FORCE_INLINE*/GRISU_INLINE void Grisu2(uint64_t& digits, int& exponent, DiyFp m_minus, DiyFp m_plus)
+/*GRISU_FORCE_INLINE*/GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp m_minus, DiyFp m_plus)
 #endif
 {
     GRISU_ASSERT(m_plus.e == m_minus.e);
@@ -1029,14 +1297,14 @@ GRISU_FORCE_INLINE void Grisu2DigitGen(uint64_t& digits, int& exponent, DiyFp L,
     const DiyFp H(w_plus.f  - 1, w_plus.e );
 
 #if GRISU_ROUND
-    Grisu2DigitGen(digits, exponent, L, w, H);
+    Grisu2DigitGen(decimal_digits, decimal_exponent, L, w, H);
 #else
-    Grisu2DigitGen(digits, exponent, L, H);
+    Grisu2DigitGen(decimal_digits, decimal_exponent, L, H);
 #endif
     // w = digits * 10^exponent
 
     // v = w * 10^k
-    exponent += -cached.k; // cached.k = -k
+    decimal_exponent += -cached.k; // cached.k = -k
     // v = digits * 10^exponent
 }
 
@@ -1059,31 +1327,18 @@ GRISU_INLINE F64ToDecimalResult ToDecimal(double value)
     GRISU_ASSERT(grisu2::impl::IEEE<double>(value).IsFinite());
     GRISU_ASSERT(value > 0);
 
-    // Compute the boundaries of 'value'.
-    // These boundaries obviously depend on the type 'Float'.
-    //
-    // If the boundaries of 'value' are always computed for double-precision numbers, regardless of
-    // type of 'Float', all single-precision numbers can be recovered using strtod (and strtof).
-    // However, the resulting decimal representations are not exactly "short".
-    //
-    // On the other hand, if the boundaries are computed for single-precision numbers, there is a
-    // single number (7.0385307e-26f) which can't be recovered using strtod (instead of strtof).
-    // The resulting 'double' when cast to 'float' is off by 1 ulp, i.e. for f = 7.0385307e-26f,
-    //      f != (float)strtod(ftoa(f))
-    // For all other single-precision numbers, equality holds.
-
     const auto boundaries = grisu2::impl::ComputeBoundaries(value);
 
-    uint64_t digits;
-    int exponent;
+    F64ToDecimalResult dec;
+
 #if GRISU_ROUND
-    grisu2::impl::Grisu2(digits, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
+    grisu2::impl::Grisu2(dec.digits, dec.exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
 #else
-    grisu2::impl::Grisu2(digits, exponent, boundaries.m_minus, boundaries.m_plus);
+    grisu2::impl::Grisu2(dec.digits, dec.exponent, boundaries.m_minus, boundaries.m_plus);
 #endif
 
-    GRISU_ASSERT(digits <= 99999999999999999ull);
-    return {digits, exponent};
+    GRISU_ASSERT(dec.digits <= 99999999999999999ull);
+    return dec;
 }
 
 struct F32ToDecimalResult {
@@ -1093,15 +1348,19 @@ struct F32ToDecimalResult {
 
 GRISU_INLINE F32ToDecimalResult ToDecimal(float value)
 {
+    //
+    // TODO:
+    //
+    // Test if a specialized implementation for 'float's using a DiyFp with a
+    // 32-bit sigificand would be faster...
+    //
+
     static_assert(grisu2::impl::DiyFp::SignificandSize >= std::numeric_limits<float>::digits + 3,
         "Grisu2 requires at least three extra bits of precision");
 
     GRISU_ASSERT(grisu2::impl::IEEE<float>(value).IsFinite());
     GRISU_ASSERT(value > 0);
 
-    // Compute the boundaries of 'value'.
-    // These boundaries obviously depend on the type 'Float'.
-    //
     // If the boundaries of 'value' are always computed for double-precision numbers, regardless of
     // type of 'Float', all single-precision numbers can be recovered using strtod (and strtof).
     // However, the resulting decimal representations are not exactly "short".
@@ -1114,16 +1373,17 @@ GRISU_INLINE F32ToDecimalResult ToDecimal(float value)
 
     const auto boundaries = grisu2::impl::ComputeBoundaries(value);
 
-    uint64_t digits;
-    int exponent;
+    uint64_t decimal_digits;
+    int decimal_exponent;
+
 #if GRISU_ROUND
-    grisu2::impl::Grisu2(digits, exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
+    grisu2::impl::Grisu2(decimal_digits, decimal_exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
 #else
-    grisu2::impl::Grisu2(digits, exponent, boundaries.m_minus, boundaries.m_plus);
+    grisu2::impl::Grisu2(decimal_digits, decimal_exponent, boundaries.m_minus, boundaries.m_plus);
 #endif
 
-    GRISU_ASSERT(digits <= 999999999);
-    return {static_cast<uint32_t>(digits), exponent};
+    GRISU_ASSERT(decimal_digits <= 999999999);
+    return {static_cast<uint32_t>(decimal_digits), decimal_exponent};
 }
 
 //==================================================================================================
