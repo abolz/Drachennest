@@ -32,58 +32,13 @@ def FormatHexChunks(n, bits_per_chunk = 64):
     return s
 
 #===============================================================================
-# Grisu
-#===============================================================================
-
-def FloorLog2Pow10(e):
-    assert e >= -1233
-    assert e <= 1232
-    return (e * 1741647) // 2**19
-
-def RoundUp(num, den):
-    assert num >= 0
-    assert den > 0
-    p, r = divmod(num, den)
-    if 2 * r >= den:
-        p += 1
-    return p
-
-def ComputeGrisuPower(k, bits):
-    assert bits > 0
-    e = FloorLog2Pow10(k) + 1 - bits
-    if k >= 0:
-        if e > 0:
-            f = RoundUp(10**k, 2**e)
-        else:
-            f = 10**k * 2**(-e)
-    else:
-        f = RoundUp(2**(-e), 10**(-k))
-    assert f >= 2**(bits - 1)
-    assert f < 2**bits
-    return f, e
-
-def PrintGrisuPowers(bits, min_exponent, max_exponent, step = 1):
-    print '// Let e = FloorLog2Pow10(k) + 1 - {}'.format(bits)
-    print '// For k >= 0, stores 10^k in the form: round_up(10^k / 2^e )'
-    print '// For k <= 0, stores 10^k in the form: round_up(2^-e / 10^-k)'
-    for k in range(min_exponent, max_exponent + 1, step):
-        f, e = ComputeGrisuPower(k, bits)
-        print FormatHexChunks(f, bits_per_chunk=64) + ', // e = {:5d}, k = {:4d}'.format(e, k)
-
-# For double-precision:
-# PrintGrisuPowers(bits=64, min_exponent=-300, max_exponent=324, step=8)
-
-# For single-precision:
-# PrintGrisuPowers(bits=32, min_exponent=-37, max_exponent=46, step=1)
-
-#===============================================================================
 # Ryu
 #===============================================================================
 
 def FloorLog2Pow5(e):
-    assert e >= -1764
-    assert e <= 1763
-    return (e * 1217359) // 2**19
+    assert e >= -12654
+    assert e <=  12654
+    return (e * 38955489) >> 24
 
 def Ceil(num, den):
     assert num >= 0
@@ -107,16 +62,22 @@ def ComputeRyuPower(k, bits):
     assert f < 2**bits
     return f, e
 
-def PrintRyuPowers(bits, min_exponent, max_exponent):
+def PrintRyuPowers(bits, min_exponent, max_exponent, bits_per_chunk=64):
     print '// Let e = FloorLog2Pow5(k) + 1 - {}'.format(bits)
     print '// For k >= 0, stores 5^k in the form: floor( 5^k / 2^e )'
     print '// For k <= 0, stores 5^k in the form:  ceil(2^-e / 5^-k)'
     for k in range(min_exponent, max_exponent + 1):
         f, e = ComputeRyuPower(k, bits)
-        print FormatHexChunks(f, bits_per_chunk=64) + ', // e = {:5d}, k = {:4d}'.format(e, k)
+        print FormatHexChunks(f, bits_per_chunk) + ', // e = {:5d}, k = {:4d}'.format(e, k)
 
-# For double-precision:
-# PrintRyuPowers(bits=128, min_exponent=-291, max_exponent=325)
+# float16:
+# PrintRyuPowers(bits=32, min_exponent=0, max_exponent=9, bits_per_chunk=32)
 
-# For single-precision:
-PrintRyuPowers(bits=64, min_exponent=-30, max_exponent=47)
+# float32:
+# PrintRyuPowers(bits=64, min_exponent=-29, max_exponent=47, bits_per_chunk=64)
+
+# float64:
+PrintRyuPowers(bits=128, min_exponent=-290, max_exponent=325, bits_per_chunk=64)
+
+# float80:
+# PrintRyuPowers(bits=160, min_exponent=-4911, max_exponent=4953, bits_per_chunk=32)
