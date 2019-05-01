@@ -23,11 +23,11 @@
 #define HAS_CHARCONV 1
 #endif
 
-//#define BENCH_GRISU2 1
+#define BENCH_GRISU2 1
 //#define BENCH_GRISU2_TO_DECIMAL 1
 //#define BENCH_GRISU3 1
 //#define BENCH_RYU 1
-#define BENCH_RYU_TO_DECIMAL 1
+//#define BENCH_RYU_TO_DECIMAL 1
 //#define BENCH_CHARCONV 1
 //#define BENCH_DOUBLE_CONVERSION 1
 //#define BENCH_SPRINTF 1
