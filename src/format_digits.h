@@ -157,7 +157,7 @@ DTOA_FORCE_INLINE int DecimalLength(uint32_t v)
     };
 
     constexpr int Bits = 32;
-    const uint32_t y = ((19 * (Bits - 1) + (1 << 6)) - 19 * static_cast<uint32_t>(CountLeadingZeros32(v))) >> 6;
+    const int y = ((19 * (Bits - 1) + (1 << 6)) - 19 * CountLeadingZeros32(v)) >> 6;
     return y + (Table[y] < v);
 }
 
@@ -188,7 +188,7 @@ DTOA_FORCE_INLINE int DecimalLength(uint64_t v)
     };
 
     constexpr int Bits = 64;
-    const uint32_t y = ((19 * (Bits - 1) + (1 << 6)) - 19 * static_cast<uint32_t>(CountLeadingZeros64(v))) >> 6;
+    const int y = ((19 * (Bits - 1) + (1 << 6)) - 19 * CountLeadingZeros64(v)) >> 6;
     return y + (Table[y] < v);
 }
 
