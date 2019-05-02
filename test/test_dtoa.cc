@@ -284,7 +284,7 @@ static void CheckDoubleString(Converter d2s, double value, const std::string& ex
 
     char buf[32];
     char* end = d2s(buf, 32, value);
-    std::string actual(buf, end);
+    const std::string actual(buf, end);
 
     CAPTURE(Converter::Name());
     CAPTURE(value);
@@ -490,4 +490,26 @@ TEST_CASE("Double - Round to even")
     CheckDoubleString(1125899906842623.75, "1125899906842623.8");
     CheckDoubleString(1125899906842624.25, "1125899906842624.2");
     CheckDoubleString(562949953421312.25, "562949953421312.2");
+}
+
+TEST_CASE("Double - Integers")
+{
+    CheckDoubleString(1.0, "1");
+    CheckDoubleString(10.0, "10");
+    CheckDoubleString(100.0, "100");
+    CheckDoubleString(1000.0, "1000");
+    CheckDoubleString(10000.0, "10000");
+    CheckDoubleString(100000.0, "100000");
+    CheckDoubleString(1000000.0, "1000000");
+    CheckDoubleString(10000000.0, "10000000");
+    CheckDoubleString(100000000.0, "100000000");
+    CheckDoubleString(1000000000.0, "1000000000");
+    CheckDoubleString(10000000000.0, "10000000000");
+    CheckDoubleString(100000000000.0, "100000000000");
+    CheckDoubleString(1000000000000.0, "1000000000000");
+    CheckDoubleString(10000000000000.0, "10000000000000");
+    CheckDoubleString(100000000000000.0, "100000000000000");
+    CheckDoubleString(1000000000000000.0, "1000000000000000");
+    CheckDoubleString(9007199254740000.0, "9007199254740000");
+    CheckDoubleString(9007199254740992.0, "9007199254740992");
 }

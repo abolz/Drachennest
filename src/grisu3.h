@@ -15,6 +15,7 @@
 #pragma once
 
 #include "format_digits.h"
+#include "ieee.h"
 
 #include <cassert>
 #include <cstdint>
@@ -46,7 +47,28 @@
 #define GRISU_FORCE_INLINE GRISU_FORCE_INLINE_ATTR
 #endif
 
+#ifndef GRISU_SMALL_INT_OPTIMIZATION
+#define GRISU_SMALL_INT_OPTIMIZATION 1
+#endif
+
 namespace grisu3 {
+
+//==================================================================================================
+//
+//==================================================================================================
+
+template <typename Float>
+struct ToDecimalResult;
+
+template <> struct ToDecimalResult<double> {
+    uint64_t digits; // num_digits <= 17
+    int exponent;
+};
+
+template <> struct ToDecimalResult<float> {
+    uint32_t digits; // num_digits <= 9
+    int exponent;
+};
 
 //==================================================================================================
 // Grisu3
@@ -68,16 +90,6 @@ namespace grisu3 {
 //
 
 namespace impl {
-
-template <typename Dest, typename Source>
-GRISU_FORCE_INLINE Dest ReinterpretBits(Source source)
-{
-    static_assert(sizeof(Dest) == sizeof(Source), "size mismatch");
-
-    Dest dest;
-    std::memcpy(&dest, &source, sizeof(Source));
-    return dest;
-}
 
 struct DiyFp // f * 2^e
 {
@@ -207,83 +219,13 @@ GRISU_FORCE_INLINE DiyFp NormalizeTo(DiyFp x, int e)
     return DiyFp(x.f << delta, e);
 }
 
-template <int Precision>
-struct BitsType;
-
-template <> struct BitsType<24> { using type = uint32_t; };
-template <> struct BitsType<53> { using type = uint64_t; };
-
-template <typename Float>
-struct IEEE
-{
-    // NB:
-    // Works for double == long double.
-    static_assert(std::numeric_limits<Float>::is_iec559 &&
-                  ((std::numeric_limits<Float>::digits == 24 && std::numeric_limits<Float>::max_exponent == 128) ||
-                   (std::numeric_limits<Float>::digits == 53 && std::numeric_limits<Float>::max_exponent == 1024)),
-        "IEEE-754 single- or double-precision implementation required");
-
-    using value_type = Float;
-    using bits_type = typename BitsType<std::numeric_limits<Float>::digits>::type;
-
-    static constexpr int       SignificandSize = std::numeric_limits<value_type>::digits; // = p   (includes the hidden bit)
-    static constexpr int       ExponentBias    = std::numeric_limits<value_type>::max_exponent - 1 + (SignificandSize - 1);
-    static constexpr int       MaxExponent     = std::numeric_limits<value_type>::max_exponent - 1 - (SignificandSize - 1);
-    static constexpr int       MinExponent     = std::numeric_limits<value_type>::min_exponent - 1 - (SignificandSize - 1);
-    static constexpr bits_type HiddenBit       = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
-    static constexpr bits_type SignificandMask = HiddenBit - 1;                           // = 2^(p-1) - 1
-    static constexpr bits_type ExponentMask    = bits_type{2 * std::numeric_limits<value_type>::max_exponent - 1} << (SignificandSize - 1);
-    static constexpr bits_type SignMask        = ~(~bits_type{0} >> 1);
-
-    bits_type bits;
-
-    explicit IEEE(bits_type bits_) : bits(bits_) {}
-    explicit IEEE(value_type value) : bits(ReinterpretBits<bits_type>(value)) {}
-
-    bits_type PhysicalSignificand() const {
-        return bits & SignificandMask;
-    }
-
-    bits_type PhysicalExponent() const {
-        return (bits & ExponentMask) >> (SignificandSize - 1);
-    }
-
-    bool IsFinite() const {
-        return (bits & ExponentMask) != ExponentMask;
-    }
-
-    bool IsInf() const {
-        return (bits & ExponentMask) == ExponentMask && (bits & SignificandMask) == 0;
-    }
-
-    bool IsNaN() const {
-        return (bits & ExponentMask) == ExponentMask && (bits & SignificandMask) != 0;
-    }
-
-    bool IsZero() const {
-        return (bits & ~SignMask) == 0;
-    }
-
-    bool SignBit() const {
-        return (bits & SignMask) != 0;
-    }
-
-    value_type Value() const {
-        return ReinterpretBits<value_type>(bits);
-    }
-
-    value_type AbsValue() const {
-        return ReinterpretBits<value_type>(bits & ~SignMask);
-    }
-};
-
 // Decomposes `value` into `f * 2^e`.
 // The result is not normalized.
 // PRE: `value` must be finite and non-negative, i.e. >= +0.0.
 template <typename Float>
 GRISU_FORCE_INLINE DiyFp DiyFpFromFloat(Float value)
 {
-    using Fp = IEEE<Float>;
+    using Fp = dtoa::IEEE<Float>;
 
     const Fp v(value);
     GRISU_ASSERT(v.IsFinite());
@@ -335,7 +277,7 @@ struct Boundaries {
 template <typename Float>
 GRISU_FORCE_INLINE Boundaries ComputeBoundaries(Float value)
 {
-    using Fp = IEEE<Float>;
+    using Fp = dtoa::IEEE<Float>;
 
     GRISU_ASSERT(Fp(value).IsFinite());
     GRISU_ASSERT(value > 0);
@@ -1848,19 +1790,14 @@ GRISU_INLINE void Dragon4(uint64_t& digits, int& exponent, uint64_t f, int e, bo
 // ToDecimal
 //==================================================================================================
 
-struct F64ToDecimalResult {
-    uint64_t digits;
-    int exponent;
-};
-
-GRISU_INLINE F64ToDecimalResult ToDecimal(double value)
+GRISU_INLINE ToDecimalResult<double> ToDecimal(double value)
 {
-    using Fp = grisu3::impl::IEEE<double>;
+    using Fp = dtoa::IEEE<double>;
 
     static_assert(grisu3::impl::DiyFp::SignificandSize >= std::numeric_limits<double>::digits + 3,
         "Grisu2 requires at least three extra bits of precision");
 
-    GRISU_ASSERT(grisu3::impl::IEEE<double>(value).IsFinite());
+    GRISU_ASSERT(dtoa::IEEE<double>(value).IsFinite());
     GRISU_ASSERT(value > 0);
 
     // Compute the boundaries of 'value'.
@@ -1898,19 +1835,14 @@ GRISU_INLINE F64ToDecimalResult ToDecimal(double value)
     return {digits, exponent};
 }
 
-struct F32ToDecimalResult {
-    uint32_t digits;
-    int exponent;
-};
-
-GRISU_INLINE F32ToDecimalResult ToDecimal(float value)
+GRISU_INLINE ToDecimalResult<float> ToDecimal(float value)
 {
-    using Fp = grisu3::impl::IEEE<float>;
+    using Fp = dtoa::IEEE<float>;
 
     static_assert(grisu3::impl::DiyFp::SignificandSize >= std::numeric_limits<float>::digits + 3,
         "Grisu2 requires at least three extra bits of precision");
 
-    GRISU_ASSERT(grisu3::impl::IEEE<float>(value).IsFinite());
+    GRISU_ASSERT(dtoa::IEEE<float>(value).IsFinite());
     GRISU_ASSERT(value > 0);
 
     // Compute the boundaries of 'value'.
@@ -1959,7 +1891,7 @@ GRISU_INLINE F32ToDecimalResult ToDecimal(float value)
 template <typename Float>
 GRISU_INLINE char* ToChars(char* buffer, Float value, bool force_trailing_dot_zero = false)
 {
-    using Fp = grisu3::impl::IEEE<Float>;
+    using Fp = dtoa::IEEE<Float>;
     const Fp v(value);
 
     if (!v.IsFinite())
@@ -1994,7 +1926,27 @@ GRISU_INLINE char* ToChars(char* buffer, Float value, bool force_trailing_dot_ze
         return buffer;
     }
 
-    const auto dec = grisu3::ToDecimal(value);
+    ToDecimalResult<Float> dec;
+
+#if GRISU_SMALL_INT_OPTIMIZATION
+    const bool is_small_int = dtoa::impl::ToSmallInt(dec.digits, value);
+    if (is_small_int)
+    {
+        dec.exponent = 0;
+
+        // Move trailing zeros into the exponent.
+        //while (dec.digits % 10 == 0)
+        //{
+        //    dec.digits /= 10;
+        //    dec.exponent++;
+        //}
+    }
+    else
+#endif
+    {
+        dec = grisu3::ToDecimal(value);
+    }
+
     return dtoa::FormatDigits(buffer, dec.digits, dec.exponent, force_trailing_dot_zero);
 }
 

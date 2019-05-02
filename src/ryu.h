@@ -16,6 +16,7 @@
 #pragma once
 
 #include "format_digits.h"
+#include "ieee.h"
 
 #include <cassert>
 #include <climits>
@@ -48,107 +49,34 @@
 #define RYU_FORCE_INLINE RYU_FORCE_INLINE_ATTR
 #endif
 
+#ifndef RYU_SMALL_INT_OPTIMIZATION
+#define RYU_SMALL_INT_OPTIMIZATION 1
+#endif
+
 namespace ryu {
-namespace impl {
 
 //==================================================================================================
 //
 //==================================================================================================
-
-template <typename Dest, typename Source>
-RYU_FORCE_INLINE Dest ReinterpretBits(Source source)
-{
-    static_assert(sizeof(Dest) == sizeof(Source), "size mismatch");
-
-    Dest dest;
-    std::memcpy(&dest, &source, sizeof(Source));
-    return dest;
-}
-
-template <int Precision> struct BitsType;
-template <> struct BitsType<24> { using type = uint32_t; };
-template <> struct BitsType<53> { using type = uint64_t; };
 
 template <typename Float>
-struct IEEE
-{
-    // NB:
-    // Works for double == long double.
-    static_assert(std::numeric_limits<Float>::is_iec559 &&
-                  ((std::numeric_limits<Float>::digits == 24 && std::numeric_limits<Float>::max_exponent == 128) ||
-                   (std::numeric_limits<Float>::digits == 53 && std::numeric_limits<Float>::max_exponent == 1024)),
-        "IEEE-754 single- or double-precision implementation required");
+struct ToDecimalResult;
 
-    using value_type = Float;
-    using bits_type = typename BitsType<std::numeric_limits<Float>::digits>::type;
-
-    static constexpr int       SignificandSize = std::numeric_limits<value_type>::digits; // = p   (includes the hidden bit)
-    static constexpr int       ExponentBias    = std::numeric_limits<value_type>::max_exponent - 1 + (SignificandSize - 1);
-    static constexpr int       MaxExponent     = std::numeric_limits<value_type>::max_exponent - 1 - (SignificandSize - 1);
-    static constexpr int       MinExponent     = std::numeric_limits<value_type>::min_exponent - 1 - (SignificandSize - 1);
-    static constexpr bits_type HiddenBit       = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
-    static constexpr bits_type SignificandMask = HiddenBit - 1;                           // = 2^(p-1) - 1
-    static constexpr bits_type ExponentMask    = bits_type{2 * std::numeric_limits<value_type>::max_exponent - 1} << (SignificandSize - 1);
-    static constexpr bits_type SignMask        = ~(~bits_type{0} >> 1);
-
-    bits_type bits;
-
-    explicit IEEE(bits_type bits_) : bits(bits_) {}
-    explicit IEEE(value_type value) : bits(ReinterpretBits<bits_type>(value)) {}
-
-    bits_type PhysicalSignificand() const {
-        return bits & SignificandMask;
-    }
-
-    bits_type PhysicalExponent() const {
-        return (bits & ExponentMask) >> (SignificandSize - 1);
-    }
-
-    // Returns the significand for a normalized double.
-    bits_type NormalizedSignificand() const {
-        return HiddenBit | PhysicalSignificand();
-    }
-
-    // Returns the exponent for a normalized double.
-    int NormalizedExponent() const {
-        return static_cast<int>(PhysicalExponent()) - ExponentBias;
-    }
-
-    bool IsFinite() const {
-        return (bits & ExponentMask) != ExponentMask;
-    }
-
-    bool IsInf() const {
-        return (bits & ExponentMask) == ExponentMask && (bits & SignificandMask) == 0;
-    }
-
-    bool IsNaN() const {
-        return (bits & ExponentMask) == ExponentMask && (bits & SignificandMask) != 0;
-    }
-
-    bool IsZero() const {
-        return (bits & ~SignMask) == 0;
-    }
-
-    bool SignBit() const {
-        return (bits & SignMask) != 0;
-    }
-
-    value_type Value() const {
-        return ReinterpretBits<value_type>(bits);
-    }
-
-    value_type AbsValue() const {
-        return ReinterpretBits<value_type>(bits & ~SignMask);
-    }
+template <> struct ToDecimalResult<double> {
+    uint64_t digits; // num_digits <= 17
+    int exponent;
 };
 
-using Double = IEEE<double>;
-using Single = IEEE<float>;
+template <> struct ToDecimalResult<float> {
+    uint32_t digits; // num_digits <= 9
+    int exponent;
+};
 
 //==================================================================================================
 //
 //==================================================================================================
+
+namespace impl {
 
 // Returns floor(x / 2^n).
 RYU_FORCE_INLINE int FloorDivPow2(int x, int n)
@@ -981,13 +909,9 @@ RYU_FORCE_INLINE bool MultipleOfPow2(uint64_t value, int p)
 
 } // namespace impl
 
-struct F64ToDecimalResult {
-    uint64_t digits;
-    int exponent;
-};
-
-RYU_INLINE F64ToDecimalResult ToDecimal(double value)
+RYU_INLINE ToDecimalResult<double> ToDecimal(double value)
 {
+    using Double = dtoa::IEEE<double>;
     using namespace ryu::impl;
 
     RYU_ASSERT(Double(value).IsFinite());
@@ -1392,13 +1316,9 @@ RYU_FORCE_INLINE bool MultipleOfPow2(uint32_t value, int p)
 
 } // namespace impl
 
-struct F32ToDecimalResult {
-    uint32_t digits;
-    int exponent;
-};
-
-RYU_INLINE F32ToDecimalResult ToDecimal(float value)
+RYU_INLINE ToDecimalResult<float> ToDecimal(float value)
 {
+    using Single = dtoa::IEEE<float>;
     using namespace ryu::impl;
 
     RYU_ASSERT(Single(value).IsFinite());
@@ -1643,10 +1563,8 @@ RYU_INLINE F32ToDecimalResult ToDecimal(float value)
 template <typename Float>
 RYU_INLINE char* ToChars(char* buffer, Float value, bool force_trailing_dot_zero = false)
 {
-    using Fp = ryu::impl::IEEE<Float>;
+    using Fp = dtoa::IEEE<Float>;
     const Fp v(value);
-
-    const bool is_neg = v.SignBit();
 
     if (!v.IsFinite())
     {
@@ -1655,7 +1573,7 @@ RYU_INLINE char* ToChars(char* buffer, Float value, bool force_trailing_dot_zero
             std::memcpy(buffer, "NaN", 3);
             return buffer + 3;
         }
-        if (is_neg)
+        if (v.SignBit())
         {
             *buffer++ = '-';
         }
@@ -1680,7 +1598,27 @@ RYU_INLINE char* ToChars(char* buffer, Float value, bool force_trailing_dot_zero
         return buffer;
     }
 
-    const auto dec = ryu::ToDecimal(value);
+    ToDecimalResult<Float> dec;
+
+#if RYU_SMALL_INT_OPTIMIZATION
+    const bool is_small_int = dtoa::impl::ToSmallInt(dec.digits, value);
+    if (is_small_int)
+    {
+        dec.exponent = 0;
+
+        // Move trailing zeros into the exponent.
+        //while (dec.digits % 10 == 0)
+        //{
+        //    dec.digits /= 10;
+        //    dec.exponent++;
+        //}
+    }
+    else
+#endif
+    {
+        dec = ryu::ToDecimal(value);
+    }
+
     return dtoa::FormatDigits(buffer, dec.digits, dec.exponent, force_trailing_dot_zero);
 }
 

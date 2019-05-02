@@ -46,6 +46,84 @@
 namespace dtoa {
 namespace impl {
 
+DTOA_FORCE_INLINE bool ToSmallInt(uint64_t& i, double value)
+{
+#if 1
+//  if (1.0 <= value && value <= 9007199254740992.0) // 1 <= x <= 2^53
+    if (1.0 <= value && value < 9007199254740992.0) // 1 <= x < 2^53
+    {
+        const int64_t t = static_cast<int64_t>(value);
+        i = static_cast<uint64_t>(t);
+        return value == static_cast<double>(t);
+    }
+
+    return false;
+#else
+    const Double d(x);
+
+    if (0x3FF0000000000000ull <= d.bits && d.bits < 0x4340000000000000ull) // 1 <= x < 2^53
+    {
+        // x = f * 2^e is a normalized floating-point number.
+        const auto f = d.NormalizedSignificand();
+        const auto e = d.NormalizedExponent();
+        DTOA_ASSERT(-e >= 0);
+        DTOA_ASSERT(-e < Double::SignificandSize);
+
+        // Test whether the lower -e bits are 0, i.e.
+        // whether the fractional part of x is 0.
+        const uint64_t mask = (uint64_t{1} << -e) - 1;
+        i = f >> -e;
+        return (f & mask) == 0;
+    }
+    //else
+    //{
+    //    i = uint64_t{1} << Double::SignificandSize;
+    //    return d.bits == 0x4340000000000000ull;
+    //}
+
+    return false;
+#endif
+}
+
+DTOA_FORCE_INLINE bool ToSmallInt(uint32_t& i, float value)
+{
+#if 1
+//  if (1.0f <= value && value <= 16777216.0f) // 1 <= x <= 2^24
+    if (1.0f <= value && value < 16777216.0f) // 1 <= x < 2^24
+    {
+        const int32_t t = static_cast<int32_t>(value);
+        i = static_cast<uint32_t>(t);
+        return value == static_cast<double>(t);
+    }
+
+    return false;
+#else
+    const Single d(x);
+
+    if (0x3F800000u <= d.bits && d.bits < 0x4B800000u) // 1 <= x <= 2^24
+    {
+        // x = f * 2^e is a normalized floating-point number.
+        const auto f = d.NormalizedSignificand();
+        const auto e = d.NormalizedExponent();
+        DTOA_ASSERT(-e >= 0);
+        DTOA_ASSERT(-e < Single::SignificandSize);
+
+        // Test whether the lower -e bits are 0, i.e.
+        // whether the fractional part of x is 0.
+        const uint32_t mask = (uint32_t{1} << -e) - 1;
+        i = f >> -e;
+        return (f & mask) == 0;
+    }
+    //else
+    //{
+    //    i = uint32_t{1} << Single::SignificandSize;
+    //    return d.bits == 0x4B800000u;
+    //}
+
+    return false;
+#endif
+}
+
 DTOA_FORCE_INLINE char* Utoa_2Digits(char* buf, uint32_t digits)
 {
     static constexpr char Digits100[200] = {
