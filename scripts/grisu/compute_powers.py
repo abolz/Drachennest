@@ -96,14 +96,17 @@ def ComputeBinaryExponentRange(q, p, exponent_bits):
     max_exp = (2**exponent_bits - 2 - bias) - (p - 1)           - (q - p)
     return min_exp, max_exp
 
-def PrintGrisuPowersForExponentRange(alpha, gamma):
+def PrintGrisuPowersForExponentRange(alpha, gamma, q = 64, p = 53, exponent_bits = 11):
     assert alpha + 3 <= gamma
 
     # DiyFp precision q = 64
     # For IEEE double-precision p = 53, exponent_bits = 11
-    e_min, e_max = ComputeBinaryExponentRange(q=64, p=53, exponent_bits=11)
+    # e_min, e_max = ComputeBinaryExponentRange(q=64, p=53, exponent_bits=11)
+    # e_min, e_max = ComputeBinaryExponentRange(q=32, p=24, exponent_bits=8)
+    e_min, e_max = ComputeBinaryExponentRange(q, p, exponent_bits)
 
     k_del = max(1, FloorLog10Pow2(gamma - alpha))
+    # k_del = 1
     assert k_del >= 1
     k_min = CeilLog10Pow2(alpha - e_max - 1)
     k_max = CeilLog10Pow2(alpha - e_min - 1)
@@ -116,6 +119,7 @@ def PrintGrisuPowersForExponentRange(alpha, gamma):
     print 'constexpr int kGamma = {:3d};'.format(gamma)
     print '// k_min = {:4d}'.format(k_min)
     print '// k_max = {:4d}'.format(k_max)
+#   print '// k_del = {:4d}'.format(k_del)
 #   print '// k_min (max) = {}'.format(k_min + (k_del - 1))
     print ''
     print 'constexpr int kCachedPowersSize       = {:>4d};'.format(num_cached)
@@ -125,29 +129,31 @@ def PrintGrisuPowersForExponentRange(alpha, gamma):
     print ''
     print 'inline CachedPower GetCachedPower(int index)'
     print '{'
-    print '    static constexpr uint64_t kSignificands[] = {'
+    print '    static constexpr uint{}_t kSignificands[] = {{'.format(q)
     for k in range(k_min_cached, k_max_cached + 1, k_del):
-        f, e = ComputeGrisuPower(k, 64)
-        print '        ' + FormatHexChunks(f, bits_per_chunk=64) + ', // e = {:5d}, k = {:4d}'.format(e, k)
+        f, e = ComputeGrisuPower(k, q)
+        print '        ' + FormatHexChunks(f, q) + ', // e = {:5d}, k = {:4d}'.format(e, k)
     print '    };'
     print ''
     print '    GRISU_ASSERT(index >= 0);'
     print '    GRISU_ASSERT(index < kCachedPowersSize);'
     print ''
     print '    const int k = kCachedPowersMinDecExp + index * kCachedPowersDecExpStep;'
-    print '    const int e = FloorLog2Pow10(k) + 1 - {};'.format(64)
+    print '    const int e = FloorLog2Pow10(k) + 1 - {};'.format(q)
     print ''
     print '    return {kSignificands[index], e, k};'
     print '}'
 
-PrintGrisuPowersForExponentRange(-60, -32)
-# PrintGrisuPowersForExponentRange(0, 3)
-# PrintGrisuPowersForExponentRange(-35, -32)
-# PrintGrisuPowersForExponentRange(-32, 0)
-# PrintGrisuPowersForExponentRange(-31, 0)
-# PrintGrisuPowersForExponentRange(-60, -45)
-# PrintGrisuPowersForExponentRange(-60, -51)
-# PrintGrisuPowersForExponentRange(-60, -33)
-# PrintGrisuPowersForExponentRange(-60, -46)
-# PrintGrisuPowersForExponentRange(-57, -43)
-# PrintGrisuPowersForExponentRange(-3, 0)
+# PrintGrisuPowersForExponentRange(-60, -32, q=64, p=53, exponent_bits=11)
+# PrintGrisuPowersForExponentRange(-59, -32, q=64, p=53, exponent_bits=11)
+# PrintGrisuPowersForExponentRange(-56, -42, q=64, p=53, exponent_bits=11)
+# PrintGrisuPowersForExponentRange(-3, 0, q=64, p=53, exponent_bits=11)
+# PrintGrisuPowersForExponentRange(-28, 0, q=64, p=53, exponent_bits=11)
+# PrintGrisuPowersForExponentRange(-53, -46, q=64, p=53, exponent_bits=11)
+# PrintGrisuPowersForExponentRange(-50, -36, q=64, p=53, exponent_bits=11)
+# PrintGrisuPowersForExponentRange(-50, -47, q=64, p=53, exponent_bits=11)
+# PrintGrisuPowersForExponentRange(-50, -36, q=64, p=53, exponent_bits=11)
+PrintGrisuPowersForExponentRange(-50, -41, q=64, p=53, exponent_bits=11)
+
+# PrintGrisuPowersForExponentRange(0, 3, q=32, p=24, exponent_bits= 8)
+# PrintGrisuPowersForExponentRange(0, 3, q=64, p=53, exponent_bits=11)

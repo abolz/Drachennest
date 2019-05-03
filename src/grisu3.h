@@ -48,7 +48,7 @@
 #endif
 
 #ifndef GRISU_SMALL_INT_OPTIMIZATION
-#define GRISU_SMALL_INT_OPTIMIZATION 1
+#define GRISU_SMALL_INT_OPTIMIZATION 0
 #endif
 
 namespace grisu3 {

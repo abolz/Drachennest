@@ -50,7 +50,7 @@
 #endif
 
 #ifndef RYU_SMALL_INT_OPTIMIZATION
-#define RYU_SMALL_INT_OPTIMIZATION 1
+#define RYU_SMALL_INT_OPTIMIZATION 0
 #endif
 
 namespace ryu {

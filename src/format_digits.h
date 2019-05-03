@@ -420,6 +420,17 @@ DTOA_FORCE_INLINE int DecimalLength(uint32_t v)
     DTOA_ASSERT(v >= 1);
     DTOA_ASSERT(v <= 999999999);
 
+#if 0
+    if (v < 10) { return 1; }
+    if (v < 100) { return 2; }
+    if (v < 1000) { return 3; }
+    if (v < 10000) { return 4; }
+    if (v < 100000) { return 5; }
+    if (v < 1000000) { return 6; }
+    if (v < 10000000) { return 7; }
+    if (v < 100000000) { return 8; }
+    return 9;
+#else
     if (v >= 100000000) { return 9; }
     if (v >= 10000000) { return 8; }
     if (v >= 1000000) { return 7; }
@@ -429,6 +440,7 @@ DTOA_FORCE_INLINE int DecimalLength(uint32_t v)
     if (v >= 100) { return 3; }
     if (v >= 10) { return 2; }
     return 1;
+#endif
 }
 
 DTOA_FORCE_INLINE int DecimalLength(uint64_t v)
@@ -436,6 +448,25 @@ DTOA_FORCE_INLINE int DecimalLength(uint64_t v)
     DTOA_ASSERT(v >= 1);
     DTOA_ASSERT(v <= 99999999999999999ull);
 
+#if 0
+    if (v < 10ull) { return 1; }
+    if (v < 100ull) { return 2; }
+    if (v < 1000ull) { return 3; }
+    if (v < 10000ull) { return 4; }
+    if (v < 100000ull) { return 5; }
+    if (v < 1000000ull) { return 6; }
+    if (v < 10000000ull) { return 7; }
+    if (v < 100000000ull) { return 8; }
+    if (v < 1000000000ull) { return 9; }
+    if (v < 10000000000ull) { return 10; }
+    if (v < 100000000000ull) { return 11; }
+    if (v < 1000000000000ull) { return 12; }
+    if (v < 10000000000000ull) { return 13; }
+    if (v < 100000000000000ull) { return 14; }
+    if (v < 1000000000000000ull) { return 15; }
+    if (v < 10000000000000000ull) { return 16; }
+    return 17;
+#else
     if (v >= 10000000000000000ull) { return 17; }
     if (v >= 1000000000000000ull) { return 16; }
     if (v >= 100000000000000ull) { return 15; }
@@ -453,6 +484,7 @@ DTOA_FORCE_INLINE int DecimalLength(uint64_t v)
     if (v >= 100ull) { return 3; }
     if (v >= 10ull) { return 2; }
     return 1;
+#endif
 }
 
 DTOA_FORCE_INLINE void PrintDecimalDigits(char* buf, uint32_t output, int output_length)
@@ -497,7 +529,7 @@ DTOA_FORCE_INLINE void PrintDecimalDigits(char* buf, uint64_t output, int output
     // so the rest will fit into uint32_t.
     if (static_cast<uint32_t>(output >> 32) != 0)
     {
-        DTOA_ASSERT(i > 8);
+        DTOA_ASSERT(output_length > 8);
         const uint64_t q = output / 100000000;
         const uint32_t r = static_cast<uint32_t>(output % 100000000);
         output = q;
@@ -520,7 +552,7 @@ DTOA_FORCE_INLINE void PrintDecimalDigits(char* buf, uint64_t output, int output
 
     if (output2 >= 100)
     {
-        DTOA_ASSERT(i > 2);
+        DTOA_ASSERT(output_length > 2);
         const uint32_t q = output2 / 100;
         const uint32_t r = output2 % 100;
         output2 = q;
@@ -544,7 +576,7 @@ DTOA_FORCE_INLINE void PrintDecimalDigits(char* buf, uint64_t output, int output
 
 } // namespace impl
 
-#if 1
+#if 0
 
 // Print digits * 10^decimal_exponent in a form similar to printf("%g").
 // PRE: sizeof(buffer) >= 32
@@ -620,7 +652,7 @@ DTOA_INLINE char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exp
             // TODO:
             //
             // 0 < decimal_point < num_digits
-            //  ==> num_digits - decimal_point <= 17 - 1 = 16
+            //  ==> 1 <= num_digits - decimal_point <= 17 - 1 = 16
             // So we need to move at most 16 bytes one place to the right.
             // If we always copy 16 bytes, the buffer would need to be at least
             // 16 + 1 + 16 = 33 bytes large.
