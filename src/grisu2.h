@@ -750,7 +750,7 @@ GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp 
     //
 
     static_assert(DiyFp::SignificandSize == 64, "internal error");
-    static_assert(kAlpha >= -57, "internal error");
+    static_assert(kAlpha >= -50, "internal error");
     static_assert(kGamma <= -32, "internal error");
 
     // Generates the digits (and the exponent) of a decimal floating-point

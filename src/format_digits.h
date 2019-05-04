@@ -576,7 +576,7 @@ DTOA_FORCE_INLINE void PrintDecimalDigits(char* buf, uint64_t output, int output
 
 } // namespace impl
 
-#if 0
+#if 1
 
 // Print digits * 10^decimal_exponent in a form similar to printf("%g").
 // PRE: sizeof(buffer) >= 32
