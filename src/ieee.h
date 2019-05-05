@@ -16,6 +16,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 
 namespace dtoa {

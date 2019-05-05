@@ -29,28 +29,6 @@
 #define GRISU_ASSERT(X) assert(X)
 #endif
 
-#ifndef GRISU_FORCE_INLINE_ATTR
-#if __GNUC__
-#define GRISU_FORCE_INLINE_ATTR __attribute__((always_inline)) inline
-#elif _MSC_VER
-#define GRISU_FORCE_INLINE_ATTR __forceinline
-#else
-#define GRISU_FORCE_INLINE_ATTR inline
-#endif
-#endif
-
-#ifndef GRISU_INLINE
-#define GRISU_INLINE inline
-#endif
-
-#ifndef GRISU_FORCE_INLINE
-#define GRISU_FORCE_INLINE GRISU_FORCE_INLINE_ATTR
-#endif
-
-#ifndef GRISU_SMALL_INT_OPTIMIZATION
-#define GRISU_SMALL_INT_OPTIMIZATION 0
-#endif
-
 #ifndef GRISU_ROUND
 #define GRISU_ROUND 0
 #endif
@@ -64,18 +42,60 @@ namespace grisu2 {
 template <typename Float>
 struct ToDecimalResult;
 
-template <> struct ToDecimalResult<double> {
-    uint64_t digits; // num_digits <= 17
+template <> struct ToDecimalResult<double>
+{
+    using SignificandType = uint64_t; // num_digits <= 17
+    static constexpr SignificandType MaxDigits = 99999999999999999ull;
+
+    SignificandType digits;
     int exponent;
 };
 
-template <> struct ToDecimalResult<float> {
-    uint32_t digits; // num_digits <= 9
+template <> struct ToDecimalResult<float>
+{
+    using SignificandType = uint32_t; // num_digits <= 9
+    static constexpr SignificandType MaxDigits = 999999999;
+
+    SignificandType digits;
     int exponent;
 };
 
 //==================================================================================================
-// DoubleToDigits
+//
+//==================================================================================================
+
+namespace impl {
+
+// Returns: floor(x / 2^n)
+inline /*__forceinline*/ int SAR(int x, int n)
+{
+    // Technically, right-shift of negative integers is implementation defined...
+    // Should easily get optimized into SAR (or equivalent) instruction.
+#if 1
+    return x < 0 ? ~(~x >> n) : (x >> n);
+#else
+    return x >> n;
+#endif
+}
+
+// Returns: floor(log_2(10^e))
+inline /*__forceinline*/ int FloorLog2Pow10(int e)
+{
+    GRISU_ASSERT(e >= -1233);
+    GRISU_ASSERT(e <=  1232);
+    return SAR(e * 1741647, 19);
+}
+
+// Returns: ceil(log_10(2^e))
+inline /*__forceinline*/ int CeilLog10Pow2(int e)
+{
+    GRISU_ASSERT(e >= -2620);
+    GRISU_ASSERT(e <=  2620);
+    return SAR(e * 315653 + ((1 << 20) - 1), 20);
+}
+
+//==================================================================================================
+// Grisu2
 //
 // Implements the Grisu2 algorithm for (IEEE) binary to decimal floating-point conversion.
 //
@@ -86,14 +106,12 @@ template <> struct ToDecimalResult<float> {
 // [2]  Burger, Dybvig, "Printing Floating-Point Numbers Quickly and Accurately",
 //      Proceedings of the ACM SIGPLAN 1996 Conference on Programming Language Design and Implementation, PLDI 1996
 //==================================================================================================
-// Constant data: 632 + 200 = 832 bytes
+// Constant data: 159 * 64 bits = 1272 bytes
 
 //
 // TODO:
 // Clean up comments...
 //
-
-namespace impl {
 
 struct DiyFp // f * 2^e
 {
@@ -106,47 +124,34 @@ struct DiyFp // f * 2^e
     constexpr DiyFp(uint64_t f_, int e_) : f(f_), e(e_) {}
 };
 
-// Returns x - y.
-// PRE: x.e == y.e and x.f >= y.f
-GRISU_FORCE_INLINE DiyFp Subtract(DiyFp x, DiyFp y)
-{
-    GRISU_ASSERT(x.e == y.e);
-    GRISU_ASSERT(x.f >= y.f);
-
-    return DiyFp(x.f - y.f, x.e);
-}
-
 // Returns x * y.
 // The result is rounded (ties up). (Only the upper q bits are returned.)
-GRISU_FORCE_INLINE DiyFp Multiply(DiyFp x, DiyFp y)
+inline /*__forceinline*/ uint64_t MultiplyHighRoundUp(uint64_t x, uint64_t y)
 {
-    static_assert(DiyFp::SignificandSize == 64, "internal error");
-
     // Computes:
     //  f = round((x.f * y.f) / 2^q)
-    //  e = x.e + y.e + q
 
 #if defined(__SIZEOF_INT128__)
     __extension__ using Uint128 = unsigned __int128;
 
-    const Uint128 p = Uint128{x.f} * Uint128{y.f};
+    const Uint128 p = Uint128{x} * Uint128{y};
 
     uint64_t h = static_cast<uint64_t>(p >> 64);
     uint64_t l = static_cast<uint64_t>(p);
     h += l >> 63; // round, ties up: [h, l] += 2^q / 2
 
-    return DiyFp(h, x.e + y.e + 64);
+    return h;
 #elif defined(_MSC_VER) && defined(_M_X64)
     uint64_t h = 0;
-    uint64_t l = _umul128(x.f, y.f, &h);
+    uint64_t l = _umul128(x, y, &h);
     h += l >> 63; // round, ties up: [h, l] += 2^q / 2
 
-    return DiyFp(h, x.e + y.e + 64);
+    return h;
 #else
-    const uint32_t x_lo = static_cast<uint32_t>(x.f);
-    const uint32_t x_hi = static_cast<uint32_t>(x.f >> 32);
-    const uint32_t y_lo = static_cast<uint32_t>(y.f);
-    const uint32_t y_hi = static_cast<uint32_t>(y.f >> 32);
+    const uint32_t x_lo = static_cast<uint32_t>(x);
+    const uint32_t x_hi = static_cast<uint32_t>(x >> 32);
+    const uint32_t y_lo = static_cast<uint32_t>(y);
+    const uint32_t y_hi = static_cast<uint32_t>(y >> 32);
 
     const uint64_t b00 = uint64_t{x_lo} * y_lo;
     const uint64_t b01 = uint64_t{x_lo} * y_hi;
@@ -167,13 +172,14 @@ GRISU_FORCE_INLINE DiyFp Multiply(DiyFp x, DiyFp y)
     const uint32_t r = mid2_lo >> 31;
     const uint64_t h = b11 + mid1_hi + mid2_hi + r;
 
-    return DiyFp(h, x.e + y.e + 64);
+    return h;
 #endif
 }
 
-// Returns the number of leading 0-bits in x, starting at the most significant bit position.
+// Returns the number of leading 0-bits in x, starting at the most significant
+// bit position.
 // If x is 0, the result is undefined.
-GRISU_FORCE_INLINE int CountLeadingZeros64(uint64_t x)
+inline int CountLeadingZeros(uint64_t x)
 {
     GRISU_ASSERT(x != 0);
 
@@ -199,125 +205,6 @@ GRISU_FORCE_INLINE int CountLeadingZeros64(uint64_t x)
 #endif
 }
 
-// Normalize x such that the significand is >= 2^(q-1).
-// PRE: x.f != 0
-GRISU_FORCE_INLINE DiyFp Normalize(DiyFp x)
-{
-    static_assert(DiyFp::SignificandSize == 64, "internal error");
-
-    // For double: lz >= 64-53 = 11
-    // For single: lz >= 64-24 = 40
-    const int lz = CountLeadingZeros64(x.f);
-    return DiyFp(x.f << lz, x.e - lz);
-}
-
-// Normalize x such that the result has the exponent E.
-// PRE: e >= x.e and the upper e - x.e bits of x.f must be zero.
-GRISU_FORCE_INLINE DiyFp NormalizeTo(DiyFp x, int e)
-{
-    const int delta = x.e - e;
-
-    GRISU_ASSERT(delta >= 0);
-    GRISU_ASSERT(((x.f << delta) >> delta) == x.f);
-
-    return DiyFp(x.f << delta, e);
-}
-
-// Decomposes `value` into `f * 2^e`.
-// The result is not normalized.
-// PRE: `value` must be finite and non-negative, i.e. >= +0.0.
-template <typename Float>
-GRISU_FORCE_INLINE DiyFp DiyFpFromFloat(Float value)
-{
-    using Fp = dtoa::IEEE<Float>;
-
-    const Fp v(value);
-    GRISU_ASSERT(v.IsFinite());
-    GRISU_ASSERT(!v.SignBit());
-
-    const auto F = v.PhysicalSignificand();
-    const auto E = v.PhysicalExponent();
-
-    // If v is denormal:
-    //      value = 0.F * 2^(1 - bias) = (          F) * 2^(1 - bias - (p-1))
-    // If v is normalized:
-    //      value = 1.F * 2^(E - bias) = (2^(p-1) + F) * 2^(E - bias - (p-1))
-
-    return (E == 0) // denormal?
-        ? DiyFp(F, Fp::MinExponent)
-        : DiyFp(F | Fp::HiddenBit, static_cast<int>(E) - Fp::ExponentBias);
-}
-
-// Compute the boundaries m- and m+ of the floating-point value
-// v = f * 2^e.
-//
-// Determine v- and v+, the floating-point predecessor and successor if v,
-// respectively.
-//
-//      v- = v - 2^e        if f != 2^(p-1) or e == e_min                (A)
-//         = v - 2^(e-1)    if f == 2^(p-1) and e > e_min                (B)
-//
-//      v+ = v + 2^e
-//
-// Let m- = (v- + v) / 2 and m+ = (v + v+) / 2. All real numbers _strictly_
-// between m- and m+ round to v, regardless of how the input rounding
-// algorithm breaks ties.
-//
-//      ---+-------------+-------------+-------------+-------------+---  (A)
-//         v-            m-            v             m+            v+
-//
-//      -----------------+------+------+-------------+-------------+---  (B)
-//                       v-     m-     v             m+            v+
-
-struct Boundaries {
-#if GRISU_ROUND
-    DiyFp v;
-#endif
-    DiyFp m_minus;
-    DiyFp m_plus;
-};
-
-// Compute the (normalized) DiyFp representing the input number 'value' and its
-// boundaries.
-// PRE: 'value' must be finite and positive
-template <typename Float>
-GRISU_FORCE_INLINE Boundaries ComputeBoundaries(Float value)
-{
-    using Fp = dtoa::IEEE<Float>;
-
-    GRISU_ASSERT(Fp(value).IsFinite());
-    GRISU_ASSERT(value > 0);
-
-    const auto v = DiyFpFromFloat(value);
-
-    // Compute the boundaries of v.
-    const bool lower_boundary_is_closer = (v.f == Fp::HiddenBit && v.e > Fp::MinExponent);
-    const auto m_minus = DiyFp(4*v.f - 2 + lower_boundary_is_closer, v.e - 2);
-    const auto m_plus = DiyFp(4*v.f + 2, v.e - 2);
-
-#if GRISU_ROUND
-    // Determine the normalized w = v.
-    const auto w = Normalize(v);
-
-    // Determine the normalized w+ = m+.
-    // Since e_(w+) == e_(w), one can use NormalizeTo instead of Normalize.
-    const auto w_plus = NormalizeTo(m_plus, w.e);
-
-    // Determine w- = m- such that e_(w-) = e_(w+).
-    const auto w_minus = NormalizeTo(m_minus, w_plus.e);
-
-    return {w, w_minus, w_plus};
-#else
-    // Determine the normalized w+ = m+.
-    const auto w_plus = Normalize(m_plus);
-
-    // Determine w- = m- such that e_(w-) = e_(w+).
-    const auto w_minus = NormalizeTo(m_minus, w_plus.e);
-
-    return {w_minus, w_plus};
-#endif
-}
-
 // Given normalized DiyFp w, Grisu needs to find a (normalized) cached
 // power-of-ten c, such that the exponent of the product c * w = f * 2^e lies
 // within a certain range [alpha, gamma] (Definition 3.2 from [1])
@@ -340,55 +227,6 @@ GRISU_FORCE_INLINE Boundaries ComputeBoundaries(Float value)
 // The choice of (alpha,gamma) determines the size of the table and the form of
 // the digit generation procedure.
 //
-// Using (alpha,gamma)=(-60,-32) (or any smaller interval contained int [-60,-32]
-// works out well in practice:
-//
-// The idea is to cut the number c * w = f * 2^e into two parts, which can be
-// processed independently: An integral part p1, and a fractional part p2:
-//
-//      f * 2^e = ( (f div 2^-e) * 2^-e + (f mod 2^-e) ) * 2^e
-//              = (f div 2^-e) + (f mod 2^-e) * 2^e
-//              = p1 + p2 * 2^e
-//
-// The conversion of p1 into decimal form requires a series of divisions and
-// modulos by (a power of) 10. These operations are faster for 32-bit than for
-// 64-bit integers, so p1 should ideally fit into a 32-bit integer. This can be
-// achieved by choosing
-//
-//      -e >= 32   or   e <= -32 := gamma
-//
-// In order to convert the fractional part
-//
-//      p2 * 2^e = p2 / 2^-e = d[-1] / 10^1 + d[-2] / 10^2 + ...
-//
-// into decimal form, the fraction is repeatedly multiplied by 10 and the digits
-// d[-i] are extracted in order:
-//
-//      (10 * p2) div 2^-e = d[-1]
-//      (10 * p2) mod 2^-e = d[-2] / 10^1 + ...
-//
-// The multiplication by 10 must not overflow. It is sufficient to choose
-//
-//      10 * p2 < 16 * p2 = 2^4 * p2 <= 2^64.
-//
-// Since p2 = f mod 2^-e < 2^-e,
-//
-//      -e <= 60   or   e >= -60 := alpha
-//
-// A larger alpha would allow to multiply the fractional part by a larger
-// power of 10 and therefore allow to generate multiple digits in a single
-// iteration.
-//
-// A smaller gamma would (probably) allow to generate a small amount of
-// digits faster.
-
-//
-// TODO:
-//
-// Test different exponent ranges here, e.g., [-57, -43], and adjust DigitGen
-// to produce 2 decimal digits per iteration in the (p2 > delta) branch.
-//
-
 // Now
 //
 //      alpha <= e_c + e + q <= gamma                                        (1)
@@ -427,44 +265,15 @@ GRISU_FORCE_INLINE Boundaries ComputeBoundaries(Float value)
 //
 // For IEEE single-precision the range is [-180, 96].
 //
-// This binary exponent range [-1137,960] results in a decimal exponent range
-// [-307,324]. One does not need to store a cached power for each k in this
-// range. For each such k it suffices to find a cached power such that the
-// exponent of the product lies in [alpha,gamma].
+// One does not need to store a cached power for each k in this range. For each
+// such k it suffices to find a cached power such that the exponent of the
+// product lies in [alpha,gamma].
 // This implies that the difference of the decimal exponents of adjacent table
 // entries must be less than or equal to
 //
-//      floor( (gamma - alpha) * log_10(2) ) = 8.
+//      floor( (gamma - alpha) * log_10(2) )
 //
 // (A smaller distance gamma-alpha would require a larger table.)
-
-// Returns: floor(x / 2^n)
-GRISU_FORCE_INLINE int SAR(int x, int n)
-{
-    // Technically, right-shift of negative integers is implementation defined...
-    // Should easily get optimized into SAR (or equivalent) instruction.
-#if 1
-    return x < 0 ? ~(~x >> n) : (x >> n);
-#else
-    return x >> n;
-#endif
-}
-
-// Returns: floor(log_2(10^e))
-GRISU_FORCE_INLINE int FloorLog2Pow10(int e)
-{
-    GRISU_ASSERT(e >= -1233);
-    GRISU_ASSERT(e <=  1232);
-    return SAR(e * 1741647, 19);
-}
-
-// Returns: ceil(log_10(2^e))
-GRISU_FORCE_INLINE int CeilLog10Pow2(int e)
-{
-    GRISU_ASSERT(e >= -2620);
-    GRISU_ASSERT(e <=  2620);
-    return SAR(e * 315653 + ((1 << 20) - 1), 20);
-}
 
 struct CachedPower { // c = f * 2^e ~= 10^k
     uint64_t f;
@@ -474,6 +283,13 @@ struct CachedPower { // c = f * 2^e ~= 10^k
 
 constexpr int kAlpha = -50;
 constexpr int kGamma = -36;
+// k_min = -304
+// k_max =  327
+
+constexpr int kCachedPowersSize       =  159;
+constexpr int kCachedPowersMinDecExp  = -304;
+constexpr int kCachedPowersMaxDecExp  =  328;
+constexpr int kCachedPowersDecExpStep =    4;
 
 // For a normalized DiyFp w = f * 2^e, this function returns a (normalized)
 // cached power-of-ten c = f_c * 2^e_c, such that the exponent of the product
@@ -481,13 +297,8 @@ constexpr int kGamma = -36;
 //
 //      kAlpha <= e_c + e + q <= kGamma.
 //
-GRISU_FORCE_INLINE CachedPower GetCachedPowerForBinaryExponent(int e)
+inline /*__forceinline*/ CachedPower GetCachedPowerForBinaryExponent(int e)
 {
-    static constexpr int kCachedPowersSize       =  159;
-    static constexpr int kCachedPowersMinDecExp  = -304;
-    static constexpr int kCachedPowersMaxDecExp  =  328;
-    static constexpr int kCachedPowersDecExpStep =    4;
-
     static constexpr uint64_t kSignificands[] = {
         0x8C71DCD9BA0B4926, // e = -1073, k = -304
         0xAB70FE17C79AC6CA, // e = -1060, k = -300
@@ -659,34 +470,175 @@ GRISU_FORCE_INLINE CachedPower GetCachedPowerForBinaryExponent(int e)
 
     const unsigned index = static_cast<unsigned>(k - (kCachedPowersMinDecExp - (kCachedPowersDecExpStep - 1))) / kCachedPowersDecExpStep;
     GRISU_ASSERT(index < kCachedPowersSize);
-    static_cast<void>(kCachedPowersSize);
 
     const int k_cached = kCachedPowersMinDecExp + static_cast<int>(index) * kCachedPowersDecExpStep;
-    const int e_cached = FloorLog2Pow10(k_cached) + 1 - DiyFp::SignificandSize;
+    const int e_cached = FloorLog2Pow10(k_cached) + 1 - 64;
 
     const CachedPower cached = {kSignificands[index], e_cached, k_cached};
-    GRISU_ASSERT(kAlpha <= cached.e + e + DiyFp::SignificandSize);
-    GRISU_ASSERT(kGamma >= cached.e + e + DiyFp::SignificandSize);
+    GRISU_ASSERT(kAlpha <= cached.e + e + 64);
+    GRISU_ASSERT(kGamma >= cached.e + e + 64);
 
     return cached;
 }
 
-#if GRISU_ROUND
-GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp m_minus, DiyFp v, DiyFp m_plus)
-#else
-GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp m_minus, DiyFp m_plus)
-#endif
+template <typename Float>
+inline void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, Float value)
 {
+    static_assert(DiyFp::SignificandSize >= std::numeric_limits<double>::digits + 3,
+        "Grisu2 requires q >= p + 3");
+    static_assert(DiyFp::SignificandSize == 64,
+        "This implementation requires q = 64");
+
+    // Compute the boundaries m- and m+ of the floating-point value
+    // v = f * 2^e.
+    //
+    // Determine v- and v+, the floating-point predecessor and successor if v,
+    // respectively.
+    //
+    //      v- = v - 2^e        if f != 2^(p-1) or e == e_min                (A)
+    //         = v - 2^(e-1)    if f == 2^(p-1) and e > e_min                (B)
+    //
+    //      v+ = v + 2^e
+    //
+    // Let m- = (v- + v) / 2 and m+ = (v + v+) / 2. All real numbers _strictly_
+    // between m- and m+ round to v, regardless of how the input rounding
+    // algorithm breaks ties.
+    //
+    //      ---+-------------+-------------+-------------+-------------+---  (A)
+    //         v-            m-            v             m+            v+
+    //
+    //      -----------------+------+------+-------------+-------------+---  (B)
+    //                       v-     m-     v             m+            v+
+
+    using Fp = dtoa::IEEE<Float>;
+
+    GRISU_ASSERT(Fp(value).IsFinite());
+    GRISU_ASSERT(value > 0);
+
+    const auto ieee_value = Fp(value);
+    const auto ieee_significand = ieee_value.PhysicalSignificand();
+    const auto ieee_exponent    = ieee_value.PhysicalExponent();
+
+#if 0
+//    if constexpr (std::is_same<Float, double>::value)
+    {
+        // Fast path for small integers in the range [0, 2^53).
+        if (0x3FF0000000000000ull <= ieee_value.bits && ieee_value.bits < 0x4340000000000000ull) // 1 <= x < 2^53
+        {
+            // x = f * 2^e is a normalized floating-point number.
+            const auto f = ieee_significand | Fp::HiddenBit;
+            const auto e = static_cast<int>(ieee_exponent) - Fp::ExponentBias;
+            GRISU_ASSERT(-e >= 0);
+            GRISU_ASSERT(-e < Fp::SignificandSize);
+
+            // Test whether the lower -e bits are 0, i.e.
+            // whether the fractional part of x is 0.
+            const uint64_t mask = (uint64_t{1} << -e) - 1;
+            if ((f & mask) == 0)
+            {
+                uint64_t digits = f >> -e;
+                int exponent = 0;
+
+                // Move trailing zeros into the exponent.
+                for (;;)
+                {
+                    const uint64_t q = digits / 10;
+                    const uint32_t r = static_cast<uint32_t>(digits % 10);
+                    if (r != 0)
+                        break;
+                    digits = q;
+                    exponent++;
+                }
+
+                decimal_digits = digits;
+                decimal_exponent = exponent;
+                return;
+            }
+        }
+    }
+#endif
+
+    int shared_exponent;
+
+#if GRISU_ROUND
+    uint64_t m_minus;
+    uint64_t v;
+    uint64_t m_plus;
+    if (ieee_exponent != 0) // normalized floating-point number
+    {
+        const bool lower_boundary_is_closer = (ieee_significand == 0 && ieee_exponent > 1);
+
+        const auto f2 = ieee_significand | Fp::HiddenBit;
+        const auto e2 = static_cast<int>(ieee_exponent) - Fp::ExponentBias;
+
+        const auto fm = 4 * f2 - 2 + (lower_boundary_is_closer ? 1 : 0);
+        const auto fv = 4 * f2;
+        const auto fp = 4 * f2 + 2;
+
+        const auto shift = DiyFp::SignificandSize - Fp::SignificandSize - 2;
+
+        shared_exponent = e2 - 2 - shift;
+        m_minus = uint64_t{fm} << shift;
+        v       = uint64_t{fv} << shift;
+        m_plus  = uint64_t{fp} << shift;
+    }
+    else
+    {
+        const auto f2 = ieee_significand;
+        const auto e2 = 1 - Fp::ExponentBias;
+
+        const auto fm = 4 * f2 - 2;
+        const auto fv = 4 * f2;
+        const auto fp = 4 * f2 + 2;
+
+        const int shift = CountLeadingZeros(fv);
+
+        shared_exponent = e2 - 2 - shift;
+        m_minus = uint64_t{fm} << shift;
+        v       = uint64_t{fv} << shift;
+        m_plus  = uint64_t{fp} << shift;
+    }
+#else // ^^^ GRISU_ROUND ^^^
+    uint64_t m_minus;
+    uint64_t m_plus;
+    if (ieee_exponent != 0) // normalized floating-point number
+    {
+        const bool lower_boundary_is_closer = (ieee_significand == 0 && ieee_exponent > 1);
+
+        const auto f2 = ieee_significand | Fp::HiddenBit;
+        const auto e2 = static_cast<int>(ieee_exponent) - Fp::ExponentBias;
+
+        const auto fm = 4 * f2 - 2 + (lower_boundary_is_closer ? 1 : 0);
+        const auto fp = 4 * f2 + 2;
+
+        const auto shift = DiyFp::SignificandSize - Fp::SignificandSize - 2;
+
+        shared_exponent = e2 - 2 - shift;
+        m_minus = uint64_t{fm} << shift;
+        m_plus  = uint64_t{fp} << shift;
+    }
+    else
+    {
+        const auto f2 = ieee_significand;
+        const auto e2 = 1 - Fp::ExponentBias;
+
+        const auto fm = 4 * f2 - 2;
+        const auto fp = 4 * f2 + 2;
+
+        const auto shift = CountLeadingZeros(fp);
+
+        shared_exponent = e2 - 2 - shift;
+        m_minus = uint64_t{fm} << shift;
+        m_plus  = uint64_t{fp} << shift;
+    }
+#endif // ^^^ not GRISU_ROUND ^^^
+
     //
     // Step 1:
     // Compute rounding interval
     //
 
-    GRISU_ASSERT(m_plus.e == m_minus.e);
-#if GRISU_ROUND
-    GRISU_ASSERT(m_plus.e == v.e);
-#endif
-    //GRISU_ASSERT(m_plus.f - m_minus.f >= 1536); // delta >= 2^(q-p-1) + 2^(q-p-2) = 1024 + 512
+    //GRISU_ASSERT(m_plus - m_minus >= 1536); // delta >= 2^(q-p-1) + 2^(q-p-2) = 1024 + 512
 
     //  --------+-----------------------+-----------------------+--------    (A)
     //          m-                      v                       m+
@@ -697,27 +649,26 @@ GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp 
     // First scale v (and m- and m+) such that the exponent is in the range
     // [alpha, gamma].
 
-    const auto cached = GetCachedPowerForBinaryExponent(m_plus.e);
+    const auto cached = GetCachedPowerForBinaryExponent(shared_exponent);
 
-    const DiyFp c_minus_k(cached.f, cached.e); // = c ~= 10^-k
-
+    const uint64_t w_minus = MultiplyHighRoundUp(m_minus, cached.f); // XXX: round down?
 #if GRISU_ROUND
-    const DiyFp w       = Multiply(v,       c_minus_k);
-#endif
-    const DiyFp w_minus = Multiply(m_minus, c_minus_k);
-    const DiyFp w_plus  = Multiply(m_plus,  c_minus_k);
+    const uint64_t w       = MultiplyHighRoundUp(v,       cached.f); // XXX: compute from w_minus/w_plus?
+#endif // ^^^ GRISU_ROUND ^^^
+    const uint64_t w_plus  = MultiplyHighRoundUp(m_plus,  cached.f);
 
     // The exponent of the products is = v.e + c_minus_k.e + q and is in the
     // range [alpha, gamma].
-    GRISU_ASSERT(w_plus.e >= kAlpha);
-    GRISU_ASSERT(w_plus.e <= kGamma);
+    const int e = shared_exponent + cached.e + 64;
+    GRISU_ASSERT(e >= kAlpha);
+    GRISU_ASSERT(e <= kGamma);
 
     // Note:
     // The result of Multiply() is **NOT** neccessarily normalized.
     // But since m+ and c are normalized, w_plus.f >= 2^(q - 2).
-    GRISU_ASSERT(w_plus.f >= (uint64_t{1} << (64 - 2)));
+    GRISU_ASSERT(w_plus >= (uint64_t{1} << (64 - 2)));
 
-    //GRISU_ASSERT(w_plus.f - w_minus.f >= 768); // delta >= 2^(q-p-2) + 2^(q-p-3) = 512 + 256
+    //GRISU_ASSERT(w_plus - w_minus >= 768); // delta >= 2^(q-p-2) + 2^(q-p-3) = 512 + 256
 
     //  ----(---+---)---------------(---+---)---------------(---+---)----
     //          w-                      w                       w+
@@ -741,15 +692,15 @@ GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp 
     // And DigitGen generates the shortest possible such number in [L, H].
     // Note that this does not mean that Grisu2 always generates the shortest
     // possible number in the interval (m-, m+).
-    const DiyFp L(w_minus.f + 1, w_minus.e);
-    const DiyFp H(w_plus.f  - 1, w_plus.e );
+
+    const uint64_t L = w_minus + 1;
+    const uint64_t H = w_plus  - 1;
 
     //
     // Step 2:
     // Generate digits
     //
 
-    static_assert(DiyFp::SignificandSize == 64, "internal error");
     static_assert(kAlpha >= -50, "internal error");
     static_assert(kGamma <= -32, "internal error");
 
@@ -766,17 +717,12 @@ GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp 
     // This routine generates the digits of H from left to right and stops as
     // soon as V is in [L, H].
 
-    GRISU_ASSERT(H.e >= kAlpha);
-    GRISU_ASSERT(H.e <= kGamma);
-    GRISU_ASSERT(H.e == L.e);
 #if GRISU_ROUND
-    GRISU_ASSERT(H.e == w.e);
+    GRISU_ASSERT(H >= w);
+    uint64_t distance = H - w; // (significand of (H - w), implicit exponent is H.e)
 #endif // ^^^ GRISU_ROUND ^^^
-
-#if GRISU_ROUND
-    uint64_t distance = Subtract(H, w).f; // (significand of (H - w), implicit exponent is e)
-#endif // ^^^ GRISU_ROUND ^^^
-    uint64_t delta    = Subtract(H, L).f; // (significand of (H - L), implicit exponent is e)
+    GRISU_ASSERT(H >= L);
+    uint64_t delta    = H - L; // (significand of (H - L), implicit exponent is H.e)
     uint64_t rest;
     uint64_t ten_kappa;
 
@@ -787,32 +733,12 @@ GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp 
     //           = ((p1        ) * 2^-e + (p2        )) * 2^e
     //           = p1 + p2 * 2^e
 
-    const DiyFp one(uint64_t{1} << -H.e, H.e); // one = 2^-e * 2^e
+    const DiyFp one(uint64_t{1} << -e, e); // one = 2^-e * 2^e
 
-    uint32_t p1 = static_cast<uint32_t>(H.f >> -one.e); // p1 = f div 2^-e (Since -e >= 32, p1 fits into a 32-bit int.)
-    uint64_t p2 = H.f & (one.f - 1);                    // p2 = f mod 2^-e
+    uint32_t p1 = static_cast<uint32_t>(H >> -one.e); // p1 = f div 2^-e (Since -e >= 32, p1 fits into a 32-bit int.)
+    uint64_t p2 = H & (one.f - 1);                    // p2 = f mod 2^-e
 
     GRISU_ASSERT(p1 >= 4); // (2^(64-2) - 1) >> 60
-
-    // Generate the digits of the integral part p1 = d[n-1]...d[1]d[0]
-    //
-    //      10^(k-1) <= p1 < 10^k
-    //
-    //      p1 = (p1 div 10^(k-1)) * 10^(k-1) + (p1 mod 10^(k-1))
-    //         = (d[k-1]         ) * 10^(k-1) + (p1 mod 10^(k-1))
-    //
-    //      H = p1                                             + p2 * 2^e
-    //        = d[k-1] * 10^(k-1) + (p1 mod 10^(k-1))          + p2 * 2^e
-    //        = d[k-1] * 10^(k-1) + ((p1 mod 10^(k-1)) * 2^-e + p2) * 2^e
-    //        = d[k-1] * 10^(k-1) + (                         rest) * 2^e
-    //
-    // Now generate the digits d[n] of p1 from left to right (n = k-1,...,0)
-    //
-    //      p1 = d[k-1]...d[n] * 10^n + d[n-1]...d[0]
-    //
-    // but stop as soon as
-    //
-    //      rest * 2^e = (d[n-1]...d[0] * 2^-e + p2) * 2^e <= delta * 2^e
 
     uint64_t digits = p1;
     int exponent = 0;
@@ -855,7 +781,7 @@ GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp 
         // unit = 1
         int m = 0;
 
-        auto remove_digits = [&](uint32_t pow10, int e10)
+        auto remove_digits = /*__forceinline*/ [&](uint32_t pow10, int e10)
         {
             GRISU_ASSERT(p2 <= 0xFFFFFFFFFFFFFFFFull / pow10);
             const uint64_t s = pow10 * p2;
@@ -886,8 +812,8 @@ GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp 
 
             GRISU_ASSERT(p2 <= 0xFFFFFFFFFFFFFFFFull / 10000);
             const uint64_t s = 10000 * p2;
-            const uint32_t d = static_cast<uint32_t>(s >> -one.e); // d = (100 * p2) div 2^-e
-            const uint64_t r = s & (one.f - 1);                    // r = (100 * p2) mod 2^-e
+            const uint32_t d = static_cast<uint32_t>(s >> -one.e);
+            const uint64_t r = s & (one.f - 1);
             GRISU_ASSERT(d <= 9999);
 
             if (r <= 10000 * delta)
@@ -945,10 +871,6 @@ GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp 
         //      rest * 2^e <= delta * 2^e
         //
 
-        // We can work with 32-bit integers here since p1 fits into a 32-bit
-        // integer.
-        uint32_t d1 = p1;
-
         rest = p2;
 
         // 10^n is now 1 ulp in the decimal representation V. The rounding
@@ -965,27 +887,27 @@ GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp 
             GRISU_ASSERT(rest <= delta);
 
             // rn = d[n]...d[0] * 2^-e + p2
-            const uint32_t q = d1 / 10;
-            const uint32_t r = d1 % 10;
+            const uint32_t q = p1 / 10;
+            const uint32_t r = p1 % 10;
             const uint64_t r_next = ten_kappa * r + rest;
 
             if (r_next > delta)
             {
-                digits = d1;
+                digits = p1;
                 exponent = n;
                 break;
             }
 
-            d1 = q;
+            p1 = q;
             rest = r_next;
             n += 1;
             ten_kappa *= 10;
         }
 #else
-        auto remove_digits = [&](uint32_t pow10, int e10)
+        auto remove_digits = /*__forceinline*/ [&](uint32_t pow10, int e10)
         {
-            const uint32_t q = d1 / pow10;
-            const uint32_t r = d1 % pow10;
+            const uint32_t q = p1 / pow10;
+            const uint32_t r = p1 % pow10;
             const uint64_t r_next = ten_kappa * r + rest;
 
             if (r_next <= delta)
@@ -1007,8 +929,8 @@ GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp 
             GRISU_ASSERT(rest <= delta);
 
             // rn = d[n]...d[0] * 2^-e + p2
-            const uint32_t q = d1 / 10000;
-            const uint32_t r = d1 % 10000;
+            const uint32_t q = p1 / 10000;
+            const uint32_t r = p1 % 10000;
             const uint64_t r_next = ten_kappa * r + rest;
 
             if (r_next > delta)
@@ -1018,15 +940,15 @@ GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp 
                 }
                 else
                 {
-                    digits = d1;
+                    digits = p1;
                     exponent = n;
                 }
                 break;
             }
 
-            d1 = q;
-            rest = r_next;
+            p1 = q;
             n += 4;
+            rest = r_next;
             ten_kappa *= 10000;
         }
 #endif
@@ -1101,65 +1023,29 @@ GRISU_INLINE void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, DiyFp 
 // ToDecimal
 //==================================================================================================
 
-GRISU_INLINE ToDecimalResult<double> ToDecimal(double value)
+inline ToDecimalResult<double> ToDecimal(double value)
 {
-    static_assert(grisu2::impl::DiyFp::SignificandSize >= std::numeric_limits<double>::digits + 3,
-        "Grisu2 requires at least three extra bits of precision");
-
-    GRISU_ASSERT(dtoa::IEEE<double>(value).IsFinite());
-    GRISU_ASSERT(value > 0);
-
-    const auto boundaries = grisu2::impl::ComputeBoundaries(value);
-
     ToDecimalResult<double> dec;
 
-#if GRISU_ROUND
-    grisu2::impl::Grisu2(dec.digits, dec.exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
-#else
-    grisu2::impl::Grisu2(dec.digits, dec.exponent, boundaries.m_minus, boundaries.m_plus);
-#endif
+    grisu2::impl::Grisu2(dec.digits, dec.exponent, value);
 
-    GRISU_ASSERT(dec.digits <= 99999999999999999ull);
+    GRISU_ASSERT(dec.digits <= ToDecimalResult<double>::MaxDigits);
     return dec;
 }
 
-GRISU_INLINE ToDecimalResult<float> ToDecimal(float value)
+inline ToDecimalResult<float> ToDecimal(float value)
 {
     //
     // TODO:
+    // Test if a specialized implementation for 'float's using a q = 32 would be faster...
     //
-    // Test if a specialized implementation for 'float's using a DiyFp with a
-    // 32-bit sigificand would be faster...
-    //
-
-    static_assert(grisu2::impl::DiyFp::SignificandSize >= std::numeric_limits<float>::digits + 3,
-        "Grisu2 requires at least three extra bits of precision");
-
-    GRISU_ASSERT(dtoa::IEEE<float>(value).IsFinite());
-    GRISU_ASSERT(value > 0);
-
-    // If the boundaries of 'value' are always computed for double-precision numbers, regardless of
-    // type of 'Float', all single-precision numbers can be recovered using strtod (and strtof).
-    // However, the resulting decimal representations are not exactly "short".
-    //
-    // On the other hand, if the boundaries are computed for single-precision numbers, there is a
-    // single number (7.0385307e-26f) which can't be recovered using strtod (instead of strtof).
-    // The resulting 'double' when cast to 'float' is off by 1 ulp, i.e. for f = 7.0385307e-26f,
-    //      f != (float)strtod(ftoa(f))
-    // For all other single-precision numbers, equality holds.
-
-    const auto boundaries = grisu2::impl::ComputeBoundaries(value);
 
     uint64_t decimal_digits;
     int decimal_exponent;
 
-#if GRISU_ROUND
-    grisu2::impl::Grisu2(decimal_digits, decimal_exponent, boundaries.m_minus, boundaries.v, boundaries.m_plus);
-#else
-    grisu2::impl::Grisu2(decimal_digits, decimal_exponent, boundaries.m_minus, boundaries.m_plus);
-#endif
+    grisu2::impl::Grisu2(decimal_digits, decimal_exponent, value);
 
-    GRISU_ASSERT(decimal_digits <= 999999999);
+    GRISU_ASSERT(decimal_digits <= ToDecimalResult<float>::MaxDigits);
     return {static_cast<uint32_t>(decimal_digits), decimal_exponent};
 }
 
@@ -1172,7 +1058,7 @@ GRISU_INLINE ToDecimalResult<float> ToDecimal(float value)
 //
 // PRE: The buffer must be large enough (32 bytes is sufficient).
 template <typename Float>
-GRISU_INLINE char* ToChars(char* buffer, Float value, bool force_trailing_dot_zero = false)
+inline char* ToChars(char* buffer, Float value, bool force_trailing_dot_zero = false)
 {
     using Fp = dtoa::IEEE<Float>;
     const Fp v(value);
@@ -1209,27 +1095,7 @@ GRISU_INLINE char* ToChars(char* buffer, Float value, bool force_trailing_dot_ze
         return buffer;
     }
 
-    ToDecimalResult<Float> dec;
-
-#if GRISU_SMALL_INT_OPTIMIZATION
-    const bool is_small_int = dtoa::impl::ToSmallInt(dec.digits, value);
-    if (is_small_int)
-    {
-        dec.exponent = 0;
-
-        // Move trailing zeros into the exponent.
-        //while (dec.digits % 10 == 0)
-        //{
-        //    dec.digits /= 10;
-        //    dec.exponent++;
-        //}
-    }
-    else
-#endif
-    {
-        dec = grisu2::ToDecimal(value);
-    }
-
+    const auto dec = grisu2::ToDecimal(value);
     return dtoa::FormatDigits(buffer, dec.digits, dec.exponent, force_trailing_dot_zero);
 }
 

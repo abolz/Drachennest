@@ -40,7 +40,7 @@
 #endif
 
 #ifndef DTOA_FORCE_INLINE
-#define DTOA_FORCE_INLINE DTOA_FORCE_INLINE_ATTR
+#define DTOA_FORCE_INLINE inline // DTOA_FORCE_INLINE_ATTR
 #endif
 
 namespace dtoa {
@@ -576,8 +576,6 @@ DTOA_FORCE_INLINE void PrintDecimalDigits(char* buf, uint64_t output, int output
 
 } // namespace impl
 
-#if 1
-
 // Print digits * 10^decimal_exponent in a form similar to printf("%g").
 // PRE: sizeof(buffer) >= 32
 template <typename UnsignedInt>
@@ -739,150 +737,5 @@ DTOA_INLINE char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exp
 
     return buffer;
 }
-
-#else
-
-// Print digits * 10^decimal_exponent in a form similar to printf("%g").
-// PRE: sizeof(buffer) >= 64
-template <typename UnsignedInt>
-DTOA_INLINE char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent, bool force_trailing_dot_zero = false)
-{
-    //
-    // TODO:
-    //
-    // If the buffer were large enough (say > 64 bytes), the memset and memmove
-    // call could use a compile-time constant, effectively removing them...
-    //
-
-    const int num_digits = dtoa::impl::DecimalLength(digits);
-    const int decimal_point = num_digits + decimal_exponent;
-
-    // NB:
-    // These are the values used by JavaScript's ToString applied to Number
-    // type. Printf uses the values -4 and max_digits10 resp. (sort of).
-    constexpr int MinExp = -6;
-    constexpr int MaxExp = 21;
-
-    const bool use_fixed = MinExp < decimal_point && decimal_point <= MaxExp;
-
-    char* first = buffer;
-    if (use_fixed)
-    {
-        // Prepare the buffer.
-        // Avoid calling memset with variable arguments below...
-        // Need 21 '0's. Round up to a multiple of 8.
-        std::memset(buffer, '0', 24);
-
-        if (decimal_point <= 0)
-        {
-            first += 2 + (-decimal_point);
-        }
-    }
-    else
-    {
-        first += 1;
-    }
-
-    dtoa::impl::PrintDecimalDigits(first, digits, num_digits);
-
-    if (use_fixed)
-    {
-        if (num_digits <= decimal_point)
-        {
-            // digits[000]
-            // DTOA_ASSERT(buffer_capacity >= decimal_point + (force_trailing_dot_zero ? 2 : 0));
-
-            buffer += decimal_point;
-            if (force_trailing_dot_zero)
-            {
-                *buffer++ = '.';
-                *buffer++ = '0';
-            }
-        }
-        else if (0 < decimal_point)
-        {
-            // dig.its
-            // DTOA_ASSERT(buffer_capacity >= length + 1);
-
-#if _MSC_VER
-            unsigned char t[16];
-            std::memcpy(t, buffer + decimal_point, 16);
-            std::memcpy(buffer + (decimal_point + 1), t, 16);
-#else
-            std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, 16);
-#endif
-            buffer[decimal_point] = '.';
-            buffer += num_digits + 1;
-        }
-        else // decimal_point <= 0
-        {
-            // 0.[000]digits
-            // DTOA_ASSERT(buffer_capacity >= 2 + (-decimal_point) + length);
-
-            buffer[1] = '.';
-            buffer += (2 + (-decimal_point) + num_digits);
-        }
-    }
-    else
-    {
-        // buffer = ?ddddd ==> d?dddd
-        buffer[0] = buffer[1];
-
-        if (num_digits == 1)
-        {
-            // dE+123
-            // DTOA_ASSERT(buffer_capacity >= num_digits + 5);
-
-            buffer += 1;
-            if (force_trailing_dot_zero)
-            {
-                *buffer++ = '.';
-                *buffer++ = '0';
-            }
-        }
-        else
-        {
-            // d.igitsE+123
-            // DTOA_ASSERT(buffer_capacity >= num_digits + 1 + 5);
-
-            buffer[1] = '.';
-            buffer += 1 + num_digits;
-        }
-
-        int scientific_exponent = decimal_point - 1;
-        *buffer++ = 'e';
-
-        if (scientific_exponent < 0)
-        {
-            scientific_exponent = -scientific_exponent;
-            *buffer++ = '-';
-        }
-        else
-        {
-             *buffer++ = '+';
-        }
-
-        const uint32_t k = static_cast<uint32_t>(scientific_exponent);
-        if (k < 10)
-        {
-            *buffer++ = static_cast<char>('0' + k);
-        }
-        else if (k < 100)
-        {
-            buffer = dtoa::impl::Utoa_2Digits(buffer, k);
-        }
-        else
-        {
-            const uint32_t r = k % 10;
-            const uint32_t q = k / 10;
-            buffer = dtoa::impl::Utoa_2Digits(buffer, q);
-            *buffer++ = static_cast<char>('0' + r);
-        }
-    }
-
-    return buffer;
-}
-
-#endif
 
 } // namespace dtoa
