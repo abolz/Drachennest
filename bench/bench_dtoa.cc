@@ -13,27 +13,26 @@
 
 #include <math.h>
 
-#include "charconv.h"
-#include "double-conversion.h"
 #include "grisu2.h"
 #include "grisu3.h"
 #include "ryu.h"
+#include "charconv.h"
+#include "double-conversion.h"
 
 #if _MSC_VER >= 1920
 #define HAS_CHARCONV 1
 #endif
 
 #define BENCH_GRISU2 1
-//#define BENCH_GRISU2_TO_DECIMAL 1
 //#define BENCH_GRISU3 1
 //#define BENCH_RYU 1
-//#define BENCH_RYU_TO_DECIMAL 1
 //#define BENCH_CHARCONV 1
 //#define BENCH_DOUBLE_CONVERSION 1
 //#define BENCH_SPRINTF 1
 
 #define BENCH_SINGLE 1
 #define BENCH_DOUBLE 1
+#define BENCH_TO_DECIMAL 1
 
 constexpr int BufSize = 64;
 
@@ -161,14 +160,18 @@ static inline char const* StrPrintf(char const* format, Args&&... args)
 #endif
 }
 
-#if BENCH_RYU_TO_DECIMAL || BENCH_GRISU2_TO_DECIMAL
-#if BENCH_RYU_TO_DECIMAL
-inline uint32_t ToDecimal(int& exponent, float  value) { return ryu_Ftoa(exponent, value); }
-inline uint64_t ToDecimal(int& exponent, double value) { return ryu_Dtoa(exponent, value); }
-#endif
-#if BENCH_GRISU2_TO_DECIMAL
+#if BENCH_TO_DECIMAL
+#if BENCH_GRISU2
 inline uint32_t ToDecimal(int& exponent, float  value) { return grisu2_Ftoa(exponent, value); }
 inline uint64_t ToDecimal(int& exponent, double value) { return grisu2_Dtoa(exponent, value); }
+#endif
+#if BENCH_GRISU3
+inline uint32_t ToDecimal(int& exponent, float  value) { return grisu3_Ftoa(exponent, value); }
+inline uint64_t ToDecimal(int& exponent, double value) { return grisu3_Dtoa(exponent, value); }
+#endif
+#if BENCH_RYU
+inline uint32_t ToDecimal(int& exponent, float  value) { return ryu_Ftoa(exponent, value); }
+inline uint64_t ToDecimal(int& exponent, double value) { return ryu_Dtoa(exponent, value); }
 #endif
 
 template <typename, typename Float>
@@ -215,17 +218,11 @@ static inline void RegisterBenchmarks(char const* name, std::vector<Float> const
 #if BENCH_GRISU2
     using D2S = D2S_Grisu2;
 #endif
-#if BENCH_GRISU2_TO_DECIMAL
-    using D2S = void;
-#endif
 #if BENCH_GRISU3
     using D2S = D2S_Grisu3;
 #endif
 #if BENCH_RYU
     using D2S = D2S_Ryu;
-#endif
-#if BENCH_RYU_TO_DECIMAL
-    using D2S = void;
 #endif
 #if BENCH_CHARCONV
     using D2S = D2S_Charconv;
