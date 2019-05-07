@@ -25,106 +25,10 @@
 #define DTOA_ASSERT(X) assert(X)
 #endif
 
-#ifndef DTOA_FORCE_INLINE_ATTR
-#if __GNUC__
-#define DTOA_FORCE_INLINE_ATTR __attribute__((always_inline)) inline
-#elif _MSC_VER
-#define DTOA_FORCE_INLINE_ATTR __forceinline
-#else
-#define DTOA_FORCE_INLINE_ATTR inline
-#endif
-#endif
-
-#ifndef DTOA_INLINE
-#define DTOA_INLINE inline
-#endif
-
-#ifndef DTOA_FORCE_INLINE
-#define DTOA_FORCE_INLINE inline // DTOA_FORCE_INLINE_ATTR
-#endif
-
 namespace dtoa {
 namespace impl {
 
-DTOA_FORCE_INLINE bool ToSmallInt(uint64_t& i, double value)
-{
-#if 1
-//  if (1.0 <= value && value <= 9007199254740992.0) // 1 <= x <= 2^53
-    if (1.0 <= value && value < 9007199254740992.0) // 1 <= x < 2^53
-    {
-        const int64_t t = static_cast<int64_t>(value);
-        i = static_cast<uint64_t>(t);
-        return value == static_cast<double>(t);
-    }
-
-    return false;
-#else
-    const Double d(x);
-
-    if (0x3FF0000000000000ull <= d.bits && d.bits < 0x4340000000000000ull) // 1 <= x < 2^53
-    {
-        // x = f * 2^e is a normalized floating-point number.
-        const auto f = d.NormalizedSignificand();
-        const auto e = d.NormalizedExponent();
-        DTOA_ASSERT(-e >= 0);
-        DTOA_ASSERT(-e < Double::SignificandSize);
-
-        // Test whether the lower -e bits are 0, i.e.
-        // whether the fractional part of x is 0.
-        const uint64_t mask = (uint64_t{1} << -e) - 1;
-        i = f >> -e;
-        return (f & mask) == 0;
-    }
-    //else
-    //{
-    //    i = uint64_t{1} << Double::SignificandSize;
-    //    return d.bits == 0x4340000000000000ull;
-    //}
-
-    return false;
-#endif
-}
-
-DTOA_FORCE_INLINE bool ToSmallInt(uint32_t& i, float value)
-{
-#if 1
-//  if (1.0f <= value && value <= 16777216.0f) // 1 <= x <= 2^24
-    if (1.0f <= value && value < 16777216.0f) // 1 <= x < 2^24
-    {
-        const int32_t t = static_cast<int32_t>(value);
-        i = static_cast<uint32_t>(t);
-        return value == static_cast<double>(t);
-    }
-
-    return false;
-#else
-    const Single d(x);
-
-    if (0x3F800000u <= d.bits && d.bits < 0x4B800000u) // 1 <= x <= 2^24
-    {
-        // x = f * 2^e is a normalized floating-point number.
-        const auto f = d.NormalizedSignificand();
-        const auto e = d.NormalizedExponent();
-        DTOA_ASSERT(-e >= 0);
-        DTOA_ASSERT(-e < Single::SignificandSize);
-
-        // Test whether the lower -e bits are 0, i.e.
-        // whether the fractional part of x is 0.
-        const uint32_t mask = (uint32_t{1} << -e) - 1;
-        i = f >> -e;
-        return (f & mask) == 0;
-    }
-    //else
-    //{
-    //    i = uint32_t{1} << Single::SignificandSize;
-    //    return d.bits == 0x4B800000u;
-    //}
-
-    return false;
-#endif
-}
-
-DTOA_FORCE_INLINE char* Utoa_2Digits(char* buf, uint32_t digits)
+inline char* Utoa_2Digits(char* buf, uint32_t digits)
 {
     static constexpr char Digits100[200] = {
         '0','0','0','1','0','2','0','3','0','4','0','5','0','6','0','7','0','8','0','9',
@@ -144,7 +48,7 @@ DTOA_FORCE_INLINE char* Utoa_2Digits(char* buf, uint32_t digits)
     return buf + 2;
 }
 
-DTOA_FORCE_INLINE char* Utoa_4Digits(char* buf, uint32_t digits)
+inline char* Utoa_4Digits(char* buf, uint32_t digits)
 {
     DTOA_ASSERT(digits <= 9999);
     const uint32_t q = digits / 100;
@@ -154,7 +58,7 @@ DTOA_FORCE_INLINE char* Utoa_4Digits(char* buf, uint32_t digits)
     return buf + 4;
 }
 
-DTOA_FORCE_INLINE char* Utoa_8Digits(char* buf, uint32_t digits)
+inline char* Utoa_8Digits(char* buf, uint32_t digits)
 {
     DTOA_ASSERT(digits <= 99999999);
     const uint32_t q = digits / 10000;
@@ -168,7 +72,7 @@ DTOA_FORCE_INLINE char* Utoa_8Digits(char* buf, uint32_t digits)
 
 // Returns the number of leading 0-bits in x, starting at the most significant bit position.
 // If x is 0, the result is undefined.
-DTOA_FORCE_INLINE int CountLeadingZeros32(uint32_t x)
+inline int CountLeadingZeros32(uint32_t x)
 {
     DTOA_ASSERT(x != 0);
 
@@ -190,7 +94,7 @@ DTOA_FORCE_INLINE int CountLeadingZeros32(uint32_t x)
 
 // Returns the number of leading 0-bits in x, starting at the most significant bit position.
 // If x is 0, the result is undefined.
-DTOA_FORCE_INLINE int CountLeadingZeros64(uint64_t x)
+inline int CountLeadingZeros64(uint64_t x)
 {
     DTOA_ASSERT(x != 0);
 
@@ -216,7 +120,7 @@ DTOA_FORCE_INLINE int CountLeadingZeros64(uint64_t x)
 #endif
 }
 
-DTOA_FORCE_INLINE int DecimalLength(uint32_t v)
+inline int DecimalLength(uint32_t v)
 {
     DTOA_ASSERT(v >= 1);
     DTOA_ASSERT(v <= 999999999);
@@ -239,7 +143,7 @@ DTOA_FORCE_INLINE int DecimalLength(uint32_t v)
     return y + (Table[y] < v);
 }
 
-DTOA_FORCE_INLINE int DecimalLength(uint64_t v)
+inline int DecimalLength(uint64_t v)
 {
     DTOA_ASSERT(v >= 1);
     DTOA_ASSERT(v <= 99999999999999999ull); // 10^17 = 0x0163'4578'5D8A'0000
@@ -270,7 +174,7 @@ DTOA_FORCE_INLINE int DecimalLength(uint64_t v)
     return y + (Table[y] < v);
 }
 
-DTOA_FORCE_INLINE void PrintDecimalDigits(char* buf, uint32_t digits, int num_digits)
+inline void PrintDecimalDigits(char* buf, uint32_t digits, int num_digits)
 {
     DTOA_ASSERT(digits >= 1);
     DTOA_ASSERT(digits <= 999999999);
@@ -329,7 +233,7 @@ DTOA_FORCE_INLINE void PrintDecimalDigits(char* buf, uint32_t digits, int num_di
     }
 }
 
-DTOA_FORCE_INLINE void PrintDecimalDigits(char* buf, uint64_t digits, int num_digits)
+inline void PrintDecimalDigits(char* buf, uint64_t digits, int num_digits)
 {
     DTOA_ASSERT(digits >= 1);
     DTOA_ASSERT(digits <= 99999999999999999ull);
@@ -415,22 +319,11 @@ DTOA_FORCE_INLINE void PrintDecimalDigits(char* buf, uint64_t digits, int num_di
 
 #else
 
-DTOA_FORCE_INLINE int DecimalLength(uint32_t v)
+inline int DecimalLength(uint32_t v)
 {
     DTOA_ASSERT(v >= 1);
     DTOA_ASSERT(v <= 999999999);
 
-#if 0
-    if (v < 10) { return 1; }
-    if (v < 100) { return 2; }
-    if (v < 1000) { return 3; }
-    if (v < 10000) { return 4; }
-    if (v < 100000) { return 5; }
-    if (v < 1000000) { return 6; }
-    if (v < 10000000) { return 7; }
-    if (v < 100000000) { return 8; }
-    return 9;
-#else
     if (v >= 100000000) { return 9; }
     if (v >= 10000000) { return 8; }
     if (v >= 1000000) { return 7; }
@@ -440,33 +333,13 @@ DTOA_FORCE_INLINE int DecimalLength(uint32_t v)
     if (v >= 100) { return 3; }
     if (v >= 10) { return 2; }
     return 1;
-#endif
 }
 
-DTOA_FORCE_INLINE int DecimalLength(uint64_t v)
+inline int DecimalLength(uint64_t v)
 {
     DTOA_ASSERT(v >= 1);
     DTOA_ASSERT(v <= 99999999999999999ull);
 
-#if 0
-    if (v < 10ull) { return 1; }
-    if (v < 100ull) { return 2; }
-    if (v < 1000ull) { return 3; }
-    if (v < 10000ull) { return 4; }
-    if (v < 100000ull) { return 5; }
-    if (v < 1000000ull) { return 6; }
-    if (v < 10000000ull) { return 7; }
-    if (v < 100000000ull) { return 8; }
-    if (v < 1000000000ull) { return 9; }
-    if (v < 10000000000ull) { return 10; }
-    if (v < 100000000000ull) { return 11; }
-    if (v < 1000000000000ull) { return 12; }
-    if (v < 10000000000000ull) { return 13; }
-    if (v < 100000000000000ull) { return 14; }
-    if (v < 1000000000000000ull) { return 15; }
-    if (v < 10000000000000000ull) { return 16; }
-    return 17;
-#else
     if (v >= 10000000000000000ull) { return 17; }
     if (v >= 1000000000000000ull) { return 16; }
     if (v >= 100000000000000ull) { return 15; }
@@ -484,10 +357,9 @@ DTOA_FORCE_INLINE int DecimalLength(uint64_t v)
     if (v >= 100ull) { return 3; }
     if (v >= 10ull) { return 2; }
     return 1;
-#endif
 }
 
-DTOA_FORCE_INLINE void PrintDecimalDigits(char* buf, uint32_t output, int output_length)
+inline void PrintDecimalDigits(char* buf, uint32_t output, int output_length)
 {
     while (output >= 10000)
     {
@@ -521,7 +393,7 @@ DTOA_FORCE_INLINE void PrintDecimalDigits(char* buf, uint32_t output, int output
     }
 }
 
-DTOA_FORCE_INLINE void PrintDecimalDigits(char* buf, uint64_t output, int output_length)
+inline void PrintDecimalDigits(char* buf, uint64_t output, int output_length)
 {
     // We prefer 32-bit operations, even on 64-bit platforms.
     // We have at most 17 digits, and uint32_t can store 9 digits.
@@ -579,7 +451,7 @@ DTOA_FORCE_INLINE void PrintDecimalDigits(char* buf, uint64_t output, int output
 // Print digits * 10^decimal_exponent in a form similar to printf("%g").
 // PRE: sizeof(buffer) >= 32
 template <typename UnsignedInt>
-DTOA_INLINE char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent, bool force_trailing_dot_zero = false)
+inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent, bool force_trailing_dot_zero = false)
 {
     //
     // TODO:

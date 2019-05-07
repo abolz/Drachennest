@@ -2,6 +2,8 @@
 #include "grisu2.h"
 #include "grisu3.h"
 #include "ryu.h"
+// #include "swift.h"
+// #include "floaxie.h"
 
 #include "catch.hpp"
 
@@ -10,6 +12,8 @@
 #include <iostream>
 #include <limits>
 #include <string>
+
+#include "scan_number.h"
 
 #define TEST_OPTIMAL 0
 
@@ -50,6 +54,22 @@ struct D2S_Ryu
     char* operator()(char* buf, int buflen, float f) { return ryu_Ftoa(buf, buflen, f); }
     char* operator()(char* buf, int buflen, double f) { return ryu_Dtoa(buf, buflen, f); }
 };
+
+// struct D2S_Swift
+// {
+//     static const bool optimal = true;
+//     static const char* Name() { return "swift"; }
+//     char* operator()(char* buf, int buflen, float f) { return swift_Ftoa(buf, buflen, f); }
+//     char* operator()(char* buf, int buflen, double f) { return swift_Dtoa(buf, buflen, f); }
+// };
+
+// struct D2S_Floaxie
+// {
+//     static const bool optimal = false;
+//     static const char* Name() { return "floaxie"; }
+//     char* operator()(char* buf, int buflen, float f) { return floaxie_Ftoa(buf, buflen, f); }
+//     char* operator()(char* buf, int buflen, double f) { return floaxie_Dtoa(buf, buflen, f); }
+// };
 
 //==================================================================================================
 //
@@ -190,22 +210,24 @@ static void CheckSingle(Converter d2s, float f0)
     char* end1 = double_conversion_Ftoa(buf1, BufSize, f0);
     *end1 = '\0';
 
-    const std::string s0(buf0, end0);
-    const std::string s1(buf1, end1);
     if (Converter::optimal)
     {
-        CHECK(s0 == s1);
+        const auto num0 = ScanNumber(buf0, end0);
+        const auto num1 = ScanNumber(buf1, end1);
+        CHECK(num0.digits == num1.digits);
     }
     else
     {
 #if TEST_OPTIMAL
-        if (s0.size() != s1.size())
+        const auto num0 = ScanNumber(buf0, end0);
+        const auto num1 = ScanNumber(buf1, end1);
+        if (num0.digits.size() != num1.digits.size())
         {
-            printf("%s: not short [0x%08X]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, s0.c_str(), s1.c_str());
+            printf("%s: not short [0x%08X]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, num0.digits.c_str(), num1.digits.c_str());
         }
-        else if (s0 != s1)
+        else if (num0.digits != num1.digits)
         {
-            printf("%s: not optimal [0x%08X]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, s0.c_str(), s1.c_str());
+            printf("%s: not optimal [0x%08X]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, num0.digits.c_str(), num1.digits.c_str());
         }
 #endif
     }
@@ -213,10 +235,12 @@ static void CheckSingle(Converter d2s, float f0)
 
 static void CheckSingle(float f)
 {
-    //CheckSingle(D2S_DoubleConversion{}, f);
+    // CheckSingle(D2S_DoubleConversion{}, f);
     CheckSingle(D2S_Grisu2{}, f);
     CheckSingle(D2S_Grisu3{}, f);
     CheckSingle(D2S_Ryu{}, f);
+    // CheckSingle(D2S_Swift{}, f);
+    // CheckSingle(D2S_Floaxie{}, f);
 }
 
 template <typename Converter>
@@ -246,22 +270,24 @@ static void CheckDouble(Converter d2s, double f0)
     char* end1 = double_conversion_Dtoa(buf1, BufSize, f0);
     *end1 = '\0';
 
-    const std::string s0(buf0, end0);
-    const std::string s1(buf1, end1);
     if (Converter::optimal)
     {
-        CHECK(s0 == s1);
+        const auto num0 = ScanNumber(buf0, end0);
+        const auto num1 = ScanNumber(buf1, end1);
+        CHECK(num0.digits == num1.digits);
     }
     else
     {
 #if TEST_OPTIMAL
-        if (s0.size() != s1.size())
+        const auto num0 = ScanNumber(buf0, end0);
+        const auto num1 = ScanNumber(buf1, end1);
+        if (num0.digits.size() != num1.digits.size())
         {
-            printf("%s: not short [0x%016llX]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, s0.c_str(), s1.c_str());
+            printf("%s: not short [0x%016llX]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, num0.digits.c_str(), num1.digits.c_str());
         }
-        else if (s0 != s1)
+        else if (num0.digits != num1.digits)
         {
-            printf("%s: not optimal [0x%016llX]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, s0.c_str(), s1.c_str());
+            printf("%s: not optimal [0x%016llX]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, num0.digits.c_str(), num1.digits.c_str());
         }
 #endif
     }
@@ -269,26 +295,31 @@ static void CheckDouble(Converter d2s, double f0)
 
 static void CheckDouble(double f)
 {
-    //CheckDouble(D2S_DoubleConversion{}, f);
+    // CheckDouble(D2S_DoubleConversion{}, f);
     CheckDouble(D2S_Grisu2{}, f);
     CheckDouble(D2S_Grisu3{}, f);
     CheckDouble(D2S_Ryu{}, f);
+    // CheckDouble(D2S_Swift{}, f);
+    // CheckDouble(D2S_Floaxie{}, f);
 }
 
 template <typename Converter>
 static void CheckDoubleString(Converter d2s, double value, const std::string& expected)
 {
-    //static_assert(Converter::optimal, "xxx");
+    // static_assert(Converter::optimal, "xxx");
     if (!Converter::optimal)
         return;
 
     char buf[32];
     char* end = d2s(buf, 32, value);
-    const std::string actual(buf, end);
+
+    const auto num_actual = ScanNumber(buf, end);
+    const auto num_expected = ScanNumber(expected);
 
     CAPTURE(Converter::Name());
     CAPTURE(value);
-    CHECK(expected == actual);
+    CHECK(num_actual.digits == num_expected.digits);
+    CHECK(num_actual.exponent == num_expected.exponent);
 }
 
 static void CheckDoubleString(double value, const std::string& expected)
@@ -296,6 +327,7 @@ static void CheckDoubleString(double value, const std::string& expected)
     CheckDoubleString(D2S_DoubleConversion{}, value, expected);
     CheckDoubleString(D2S_Grisu3{}, value, expected);
     CheckDoubleString(D2S_Ryu{}, value, expected);
+    // CheckDoubleString(D2S_Swift{}, value, expected);
 }
 
 //==================================================================================================
@@ -469,7 +501,6 @@ TEST_CASE("Double - Regression")
 // Some numbers to check different code paths in grisu2::Dtoa
 TEST_CASE("Double - Grisu2 code paths")
 {
-    CheckDouble(-1.0);
     CheckDouble(1e+4);
     CheckDouble(1.2e+6);
     CheckDouble(4.9406564584124654e-324);    // DigitGen: exit integral loop

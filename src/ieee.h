@@ -74,14 +74,19 @@ struct IEEE
         return (bits & ExponentMask) >> (SignificandSize - 1);
     }
 
-    // Returns the significand for a normalized double.
-    bits_type NormalizedSignificand() const {
-        return HiddenBit | PhysicalSignificand();
-    }
+    struct Decomposed {
+        bits_type f;
+        int e;
+    };
 
-    // Returns the exponent for a normalized double.
-    int NormalizedExponent() const {
-        return static_cast<int>(PhysicalExponent()) - ExponentBias;
+    // Returns f, e such that value = f * 2^e
+    Decomposed Decompose() const {
+        const auto F = PhysicalSignificand();
+        const auto E = PhysicalExponent();
+        if (E == 0)
+            return {F, 1 - ExponentBias};
+        else
+            return {F | HiddenBit, static_cast<int>(E) - ExponentBias};
     }
 
     bool IsFinite() const {
@@ -112,5 +117,8 @@ struct IEEE
         return dtoa::impl::ReinterpretBits<value_type>(bits & ~SignMask);
     }
 };
+
+//using Double = IEEE<double>;
+//using Single = IEEE<float>;
 
 } // namespace dtoa

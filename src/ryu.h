@@ -31,26 +31,8 @@
 #define RYU_ASSERT(X) assert(X)
 #endif
 
-#ifndef RYU_FORCE_INLINE_ATTR
-#if __GNUC__
-#define RYU_FORCE_INLINE_ATTR __attribute__((always_inline)) inline
-#elif _MSC_VER
-#define RYU_FORCE_INLINE_ATTR __forceinline
-#else
-#define RYU_FORCE_INLINE_ATTR inline
-#endif
-#endif
-
-#ifndef RYU_INLINE
-#define RYU_INLINE inline
-#endif
-
-#ifndef RYU_FORCE_INLINE
-#define RYU_FORCE_INLINE inline // RYU_FORCE_INLINE_ATTR
-#endif
-
-#ifndef RYU_SMALL_INT_OPTIMIZATION
-#define RYU_SMALL_INT_OPTIMIZATION 0
+#ifndef RYU_SMALL_INTEGER_OPTIMIZATION
+#define RYU_SMALL_INTEGER_OPTIMIZATION 1
 #endif
 
 namespace ryu {
@@ -79,7 +61,7 @@ template <> struct ToDecimalResult<float> {
 namespace impl {
 
 // Returns floor(x / 2^n).
-RYU_FORCE_INLINE int FloorDivPow2(int x, int n)
+inline int FloorDivPow2(int x, int n)
 {
     // Technically, right-shift of negative integers is implementation defined...
     // Should easily be optimized into SAR (or equivalent) instruction.
@@ -90,38 +72,38 @@ RYU_FORCE_INLINE int FloorDivPow2(int x, int n)
 #endif
 }
 
-RYU_FORCE_INLINE int FloorLog2Pow5(int e)
+inline int FloorLog2Pow5(int e)
 {
     RYU_ASSERT(e >= -1764);
     RYU_ASSERT(e <=  1763);
     return FloorDivPow2(e * 1217359, 19);
 }
 
-RYU_FORCE_INLINE int FloorLog10Pow2(int e)
+inline int FloorLog10Pow2(int e)
 {
     RYU_ASSERT(e >= -2620);
     RYU_ASSERT(e <=  2620);
     return FloorDivPow2(e * 315653, 20);
 }
 
-RYU_FORCE_INLINE int FloorLog10Pow5(int e)
+inline int FloorLog10Pow5(int e)
 {
     RYU_ASSERT(e >= -2620);
     RYU_ASSERT(e <=  2620);
     return FloorDivPow2(e * 732923, 20);
 }
 
-RYU_FORCE_INLINE uint32_t Lo32(uint64_t x)
+inline uint32_t Lo32(uint64_t x)
 {
     return static_cast<uint32_t>(x);
 }
 
-RYU_FORCE_INLINE uint32_t Hi32(uint64_t x)
+inline uint32_t Hi32(uint64_t x)
 {
     return static_cast<uint32_t>(x >> 32);
 }
 
-RYU_FORCE_INLINE uint64_t Load64(uint32_t lo, uint32_t hi)
+inline uint64_t Load64(uint32_t lo, uint32_t hi)
 {
     return lo | uint64_t{hi} << 32;
 }
@@ -138,7 +120,7 @@ struct Uint64x2 {
     uint64_t lo;
 };
 
-RYU_FORCE_INLINE Uint64x2 ComputePow5Double(int k)
+inline Uint64x2 ComputePow5Double(int k)
 {
     // Let e = FloorLog2Pow5(k) + 1 - 128
     // For k >= 0, stores 5^k in the form: floor( 5^k / 2^e )
@@ -769,7 +751,7 @@ RYU_FORCE_INLINE Uint64x2 ComputePow5Double(int k)
     return Pow5[static_cast<unsigned>(k - MinDecExp)];
 }
 
-RYU_FORCE_INLINE Uint64x2 Mul128(uint64_t a, uint64_t b)
+inline Uint64x2 Mul128(uint64_t a, uint64_t b)
 {
 #if defined(__SIZEOF_INT128__)
     __extension__ using uint128_t = unsigned __int128;
@@ -798,7 +780,7 @@ RYU_FORCE_INLINE Uint64x2 Mul128(uint64_t a, uint64_t b)
 #endif
 }
 
-RYU_FORCE_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int n)
+inline uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int n)
 {
     // For the __shiftright128 intrinsic, the shift value is always modulo 64.
     // In the current implementation of the double-precision version of Ryu, the
@@ -822,7 +804,7 @@ RYU_FORCE_INLINE uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int n)
 #endif
 }
 
-RYU_FORCE_INLINE uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
+inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 {
     RYU_ASSERT((m >> 55) == 0); // m is maximum 55 bits
 
@@ -867,14 +849,14 @@ RYU_FORCE_INLINE uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 #endif
 }
 
-RYU_FORCE_INLINE void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, const Uint64x2* mul, int j, uint64_t& vr, uint64_t& vp, uint64_t& vm)
+inline void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, const Uint64x2* mul, int j, uint64_t& vr, uint64_t& vp, uint64_t& vm)
 {
     vr = MulShift(mv, mul, j);
     vp = MulShift(mp, mul, j);
     vm = MulShift(mm, mul, j);
 }
 
-/*RYU_FORCE_INLINE*/RYU_INLINE int Pow5Factor(uint64_t value)
+/*inline*/inline int Pow5Factor(uint64_t value)
 {
     // For 64-bit integers: result <= 27
     // Since value here has at most 55-bits: result <= 23
@@ -893,12 +875,12 @@ RYU_FORCE_INLINE void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, const U
     }
 }
 
-/*RYU_FORCE_INLINE*/RYU_INLINE bool MultipleOfPow5(uint64_t value, int p)
+/*inline*/inline bool MultipleOfPow5(uint64_t value, int p)
 {
     return Pow5Factor(value) >= p;
 }
 
-RYU_FORCE_INLINE bool MultipleOfPow2(uint64_t value, int p)
+inline bool MultipleOfPow2(uint64_t value, int p)
 {
     RYU_ASSERT(p >= 0);
     RYU_ASSERT(p <= 63);
@@ -909,7 +891,7 @@ RYU_FORCE_INLINE bool MultipleOfPow2(uint64_t value, int p)
 
 } // namespace impl
 
-RYU_INLINE ToDecimalResult<double> ToDecimal(double value)
+inline ToDecimalResult<double> ToDecimal(double value)
 {
     using Double = dtoa::IEEE<double>;
     using namespace ryu::impl;
@@ -927,6 +909,39 @@ RYU_INLINE ToDecimalResult<double> ToDecimal(double value)
     // Decode bits into mantissa, and exponent.
     const uint64_t ieee_mantissa = ieee_value.PhysicalSignificand();
     const uint64_t ieee_exponent = ieee_value.PhysicalExponent();
+
+#if RYU_SMALL_INTEGER_OPTIMIZATION
+    if (0x3FF0000000000000ull <= ieee_value.bits && ieee_value.bits < 0x4340000000000000ull) // 1 <= x < 2^53
+    {
+        // x = m * 2^e is a normalized floating-point number.
+        uint64_t m = ieee_mantissa | Double::HiddenBit;
+        int      e = static_cast<int>(ieee_exponent) - Double::ExponentBias;
+        DTOA_ASSERT(-e >= 0);
+        DTOA_ASSERT(-e < Double::SignificandSize);
+
+        // Test whether the lower -e bits are 0, i.e.
+        // whether the fractional part of value is 0.
+        const uint64_t mask = (uint64_t{1} << -e) - 1;
+        if ((m & mask) == 0)
+        {
+            m >>= -e;
+
+            // Move trailing zeros into the exponent.
+            int k = 0;
+            for (;;)
+            {
+                const uint64_t q = m / 10;
+                const uint64_t r = m % 10;
+                if (r != 0)
+                    break;
+                m = q;
+                k++;
+            }
+
+            return {m, k};
+        }
+    }
+#endif
 
     uint64_t m2;
     int e2;
@@ -1164,7 +1179,7 @@ RYU_INLINE ToDecimalResult<double> ToDecimal(double value)
 
 namespace impl {
 
-RYU_FORCE_INLINE uint64_t ComputePow5Single(int k)
+inline uint64_t ComputePow5Single(int k)
 {
 #if 0
     // May use this if the double-precision table is available.
@@ -1265,7 +1280,7 @@ RYU_FORCE_INLINE uint64_t ComputePow5Single(int k)
 #endif
 }
 
-RYU_FORCE_INLINE uint64_t MulShift(uint32_t m, uint64_t mul, int j)
+inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
 {
     RYU_ASSERT(j >= 57);
     RYU_ASSERT(j <= 63);
@@ -1278,14 +1293,14 @@ RYU_FORCE_INLINE uint64_t MulShift(uint32_t m, uint64_t mul, int j)
     return shifted_sum;
 }
 
-RYU_FORCE_INLINE void MulShiftAll(uint32_t mv, uint32_t mp, uint32_t mm, uint64_t mul, int j, uint64_t& vr, uint64_t& vp, uint64_t& vm)
+inline void MulShiftAll(uint32_t mv, uint32_t mp, uint32_t mm, uint64_t mul, int j, uint64_t& vr, uint64_t& vp, uint64_t& vm)
 {
     vr = MulShift(mv, mul, j);
     vp = MulShift(mp, mul, j);
     vm = MulShift(mm, mul, j);
 }
 
-/*RYU_FORCE_INLINE*/RYU_INLINE int Pow5Factor(uint32_t value)
+/*inline*/inline int Pow5Factor(uint32_t value)
 {
     int factor = 0;
     for (;;) {
@@ -1300,12 +1315,12 @@ RYU_FORCE_INLINE void MulShiftAll(uint32_t mv, uint32_t mp, uint32_t mm, uint64_
     }
 }
 
-/*RYU_FORCE_INLINE*/RYU_INLINE bool MultipleOfPow5(uint32_t value, int p)
+/*inline*/inline bool MultipleOfPow5(uint32_t value, int p)
 {
     return Pow5Factor(value) >= p;
 }
 
-RYU_FORCE_INLINE bool MultipleOfPow2(uint32_t value, int p)
+inline bool MultipleOfPow2(uint32_t value, int p)
 {
     RYU_ASSERT(p >= 0);
     RYU_ASSERT(p <= 31);
@@ -1316,7 +1331,7 @@ RYU_FORCE_INLINE bool MultipleOfPow2(uint32_t value, int p)
 
 } // namespace impl
 
-RYU_INLINE ToDecimalResult<float> ToDecimal(float value)
+inline ToDecimalResult<float> ToDecimal(float value)
 {
     using Single = dtoa::IEEE<float>;
     using namespace ryu::impl;
@@ -1334,6 +1349,39 @@ RYU_INLINE ToDecimalResult<float> ToDecimal(float value)
     // Decode bits into mantissa, and exponent.
     const uint32_t ieee_mantissa = ieee_value.PhysicalSignificand();
     const uint32_t ieee_exponent = ieee_value.PhysicalExponent();
+
+#if RYU_SMALL_INTEGER_OPTIMIZATION
+    if (0x3F800000u <= ieee_value.bits && ieee_value.bits < 0x4B800000u) // 1 <= x < 2^24
+    {
+        // x = m * 2^e is a normalized floating-point number.
+        uint32_t m = ieee_mantissa | Single::HiddenBit;
+        int      e = static_cast<int>(ieee_exponent) - Single::ExponentBias;
+        DTOA_ASSERT(-e >= 0);
+        DTOA_ASSERT(-e < Single::SignificandSize);
+
+        // Test whether the lower -e bits are 0, i.e.
+        // whether the fractional part of value is 0.
+        const uint32_t mask = (uint32_t{1} << -e) - 1;
+        if ((m & mask) == 0)
+        {
+            m >>= -e;
+
+            // Move trailing zeros into the exponent.
+            int k = 0;
+            for (;;)
+            {
+                const uint32_t q = m / 10;
+                const uint32_t r = m % 10;
+                if (r != 0)
+                    break;
+                m = q;
+                k++;
+            }
+
+            return {m, k};
+        }
+    }
+#endif
 
     uint32_t m2;
     int e2;
@@ -1561,7 +1609,7 @@ RYU_INLINE ToDecimalResult<float> ToDecimal(float value)
 //
 // PRE: The buffer must be large enough (32 bytes is sufficient).
 template <typename Float>
-RYU_INLINE char* ToChars(char* buffer, Float value, bool force_trailing_dot_zero = false)
+inline char* ToChars(char* buffer, Float value, bool force_trailing_dot_zero = false)
 {
     using Fp = dtoa::IEEE<Float>;
     const Fp v(value);
@@ -1598,27 +1646,7 @@ RYU_INLINE char* ToChars(char* buffer, Float value, bool force_trailing_dot_zero
         return buffer;
     }
 
-    ToDecimalResult<Float> dec;
-
-#if RYU_SMALL_INT_OPTIMIZATION
-    const bool is_small_int = dtoa::impl::ToSmallInt(dec.digits, value);
-    if (is_small_int)
-    {
-        dec.exponent = 0;
-
-        // Move trailing zeros into the exponent.
-        //while (dec.digits % 10 == 0)
-        //{
-        //    dec.digits /= 10;
-        //    dec.exponent++;
-        //}
-    }
-    else
-#endif
-    {
-        dec = ryu::ToDecimal(value);
-    }
-
+    const auto dec = ryu::ToDecimal(value);
     return dtoa::FormatDigits(buffer, dec.digits, dec.exponent, force_trailing_dot_zero);
 }
 

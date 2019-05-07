@@ -30,7 +30,7 @@
 //#define BENCH_DOUBLE_CONVERSION 1
 //#define BENCH_SPRINTF 1
 
-#define BENCH_SINGLE 1
+#define BENCH_SINGLE 0
 #define BENCH_DOUBLE 1
 #define BENCH_TO_DECIMAL 1
 
@@ -100,21 +100,21 @@ static JenkinsRandom random;
 
 struct D2S_Grisu2
 {
-    static char const* Name() { return "grisu2"; }
+    static char const* Name() { return "Grisu2"; }
     char* operator()(char* buf, int buflen, float f) const { return grisu2_Ftoa(buf, buflen, f); }
     char* operator()(char* buf, int buflen, double f) const { return grisu2_Dtoa(buf, buflen, f); }
 };
 
 struct D2S_Grisu3
 {
-    static char const* Name() { return "grisu3"; }
+    static char const* Name() { return "Grisu3 (Dragon4)"; }
     char* operator()(char* buf, int buflen, float f) const { return grisu3_Ftoa(buf, buflen, f); }
     char* operator()(char* buf, int buflen, double f) const { return grisu3_Dtoa(buf, buflen, f); }
 };
 
 struct D2S_Ryu
 {
-    static char const* Name() { return "ryu"; }
+    static char const* Name() { return "Ryu"; }
     char* operator()(char* buf, int buflen, float f) const { return ryu_Ftoa(buf, buflen, f); }
     char* operator()(char* buf, int buflen, double f) const { return ryu_Dtoa(buf, buflen, f); }
 };
@@ -212,28 +212,28 @@ static inline void BenchIt(benchmark::State& state, std::vector<Float> const& nu
 }
 #endif
 
+#if BENCH_GRISU2
+using D2S = D2S_Grisu2;
+#endif
+#if BENCH_GRISU3
+using D2S = D2S_Grisu3;
+#endif
+#if BENCH_RYU
+using D2S = D2S_Ryu;
+#endif
+#if BENCH_CHARCONV
+using D2S = D2S_Charconv;
+#endif
+#if BENCH_DOUBLE_CONVERSION
+using D2S = D2S_DoubleConversion;
+#endif
+#if BENCH_SPRINTF
+using D2S = D2S_SPrintf;
+#endif
+
 template <typename Float>
 static inline void RegisterBenchmarks(char const* name, std::vector<Float> const& numbers)
 {
-#if BENCH_GRISU2
-    using D2S = D2S_Grisu2;
-#endif
-#if BENCH_GRISU3
-    using D2S = D2S_Grisu3;
-#endif
-#if BENCH_RYU
-    using D2S = D2S_Ryu;
-#endif
-#if BENCH_CHARCONV
-    using D2S = D2S_Charconv;
-#endif
-#if BENCH_DOUBLE_CONVERSION
-    using D2S = D2S_DoubleConversion;
-#endif
-#if BENCH_SPRINTF
-    using D2S = D2S_SPrintf;
-#endif
-
     const char* float_name = sizeof(Float) == 4 ? "single" : "double";
     auto* bench = benchmark::RegisterBenchmark(StrPrintf("%s - %s   ", float_name, name), BenchIt<D2S, Float>, numbers);
 
@@ -306,16 +306,22 @@ static inline void Register_Digits_double(int digits)
         100000000000000,
         1000000000000000,
     };
-    const double scale = static_cast<double>(kPow10[digits - 1]);
+    //const double scale = static_cast<double>(kPow10[digits - 1]);
+    //const double scale = 1e8;
 
     std::vector<double> numbers(NumFloats);
 
     std::uniform_int_distribution<int64_t> gen(kPow10[digits - 1], kPow10[digits] - 1);
-    std::generate(numbers.begin(), numbers.end(), [&] {
+    std::uniform_int_distribution<int> gen_scale(0, digits);
+
+    std::generate(numbers.begin(), numbers.end(), [&]
+    {
+        const double scale = static_cast<double>( kPow10[gen_scale(random)] );
         return static_cast<double>(gen(random) | 1) / scale;
     });
 
-    RegisterBenchmarks(StrPrintf("1.%d-digits", digits - 1), numbers);
+//  RegisterBenchmarks(StrPrintf("1.%d-digits", digits - 1), numbers);
+    RegisterBenchmarks(StrPrintf("%d-digits", digits), numbers);
 }
 
 static inline void Register_Digits_single(int digits)
@@ -334,16 +340,21 @@ static inline void Register_Digits_single(int digits)
         100000000,
         1000000000,
     };
-    const float scale = static_cast<float>(kPow10[digits - 1]);
+    //const float scale = static_cast<float>(kPow10[digits - 1]);
+    //const float scale = 1e4f;
 
     std::vector<float> numbers(NumFloats);
 
     std::uniform_int_distribution<int32_t> gen(kPow10[digits - 1], kPow10[digits] - 1);
-    std::generate(numbers.begin(), numbers.end(), [&] {
+    std::uniform_int_distribution<int> gen_scale(0, digits);
+
+    std::generate(numbers.begin(), numbers.end(), [&] 
+    {
+        const float scale = static_cast<float>( kPow10[gen_scale(random)] );
         return static_cast<float>(gen(random) | 1) / scale;
     });
 
-    RegisterBenchmarks(StrPrintf("1.%d-digits", digits - 1), numbers);
+    RegisterBenchmarks(StrPrintf("%d-digits", digits), numbers);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -412,61 +423,16 @@ static inline void Register_Ints_single(int digits)
 //--------------------------------------------------------------------------------------------------
 //
 //--------------------------------------------------------------------------------------------------
-#if 0
-
-static void BM_RandomDigit32(benchmark::State& state, int digits, float scale)
-{
-    assert(digits >= 1);
-    assert(digits <= 7);
-
-    constexpr int const NumFloats = 1 << 12;
-
-    if (scale <= 0)
-        scale = static_cast<float>(kPow10[digits - 1]);
-
-    std::uniform_int_distribution<int32_t> gen(kPow10[digits - 1], kPow10[digits] - 1);
-    std::vector<float> numbers(NumFloats);
-    std::generate(numbers.begin(), numbers.end(), [&] {
-        return static_cast<float>(gen(random) | 1) / scale;
-    });
-
-    int index = 0;
-    for (auto _: state) {
-        char buffer[32];
-        benchmark::DoNotOptimize(Ftoa(buffer, 32, numbers[index]));
-        index = (index + 1) & (NumFloats - 1);
-    }
-}
-
-BENCHMARK_CAPTURE(BM_RandomDigit32, _1_1, 1, -1.0f);
-BENCHMARK_CAPTURE(BM_RandomDigit32, _1_2, 2, -1.0f);
-BENCHMARK_CAPTURE(BM_RandomDigit32, _1_3, 3, -1.0f);
-BENCHMARK_CAPTURE(BM_RandomDigit32, _1_4, 4, -1.0f);
-BENCHMARK_CAPTURE(BM_RandomDigit32, _1_5, 5, -1.0f);
-BENCHMARK_CAPTURE(BM_RandomDigit32, _1_6, 6, -1.0f);
-BENCHMARK_CAPTURE(BM_RandomDigit32, _1_7, 7, -1.0f);
-
-BENCHMARK_CAPTURE(BM_RandomDigit32, _1_over_10e4, 1, 1e4f);
-BENCHMARK_CAPTURE(BM_RandomDigit32, _2_over_10e4, 2, 1e4f);
-BENCHMARK_CAPTURE(BM_RandomDigit32, _3_over_10e4, 3, 1e4f);
-BENCHMARK_CAPTURE(BM_RandomDigit32, _4_over_10e4, 4, 1e4f);
-BENCHMARK_CAPTURE(BM_RandomDigit32, _5_over_10e4, 5, 1e4f);
-BENCHMARK_CAPTURE(BM_RandomDigit32, _6_over_10e4, 6, 1e4f);
-BENCHMARK_CAPTURE(BM_RandomDigit32, _7_over_10e4, 7, 1e4f);
-
-#endif
-
-//--------------------------------------------------------------------------------------------------
-//
-//--------------------------------------------------------------------------------------------------
 
 int main(int argc, char** argv)
 {
+    printf("Benchmarking %s\n", D2S::Name());
+
 #if BENCH_DOUBLE
     Register_RandomBits_double();
-
     Register_Uniform(0.0, 1.0);
     Register_Uniform(0.0, 1.0e+308);
+
     for (int e = 10; e < 20; ++e) {
         Register_Uniform(std::pow(10.0, e), std::pow(10.0, e+1));
     }
@@ -482,7 +448,6 @@ int main(int argc, char** argv)
 
 #if BENCH_SINGLE
     Register_RandomBits_single();
-
     Register_Uniform(0.0f, 1.0f);
     Register_Uniform(0.0f, 1.0e+38f);
 

@@ -109,6 +109,7 @@ def PrintGrisuPowersForExponentRange(alpha, gamma, q = 64, p = 53, exponent_bits
     # k_del = 1
     assert k_del >= 1
     k_min = CeilLog10Pow2(alpha - e_max - 1)
+    # k_min += 7
     k_max = CeilLog10Pow2(alpha - e_min - 1)
 
     num_cached = DivUp(k_max - k_min, k_del) + 1
@@ -186,6 +187,8 @@ def PrintGrisuPowersForExponentRange(alpha, gamma, q = 64, p = 53, exponent_bits
 # PrintGrisuPowersForExponentRange(-28, 0, q=64, p=53, exponent_bits=11)
 # PrintGrisuPowersForExponentRange(-53, -46, q=64, p=53, exponent_bits=11)
 PrintGrisuPowersForExponentRange(-50, -36, q=64, p=53, exponent_bits=11)
+# PrintGrisuPowersForExponentRange(-50, -41, q=64, p=53, exponent_bits=11)
+# PrintGrisuPowersForExponentRange(-50, -44, q=64, p=53, exponent_bits=11)
 # PrintGrisuPowersForExponentRange(-50, -47, q=64, p=53, exponent_bits=11)
 # PrintGrisuPowersForExponentRange(-50, -36, q=64, p=53, exponent_bits=11)
 # PrintGrisuPowersForExponentRange(-50, -41, q=64, p=53, exponent_bits=11)
