@@ -856,7 +856,7 @@ inline void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, const Uint64x2* m
     vm = MulShift(mm, mul, j);
 }
 
-/*inline*/inline int Pow5Factor(uint64_t value)
+inline int Pow5Factor(uint64_t value)
 {
     // For 64-bit integers: result <= 27
     // Since value here has at most 55-bits: result <= 23
@@ -875,7 +875,7 @@ inline void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, const Uint64x2* m
     }
 }
 
-/*inline*/inline bool MultipleOfPow5(uint64_t value, int p)
+inline bool MultipleOfPow5(uint64_t value, int p)
 {
     return Pow5Factor(value) >= p;
 }
@@ -1096,7 +1096,6 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
         while (vm / 10 < vp / 10)
         {
-
             vm_is_trailing_zeros &= (vm % 10 == 0);
             vr_prev_is_trailing_zeros &= (last_removed_digit == 0);
 
@@ -1140,7 +1139,6 @@ inline ToDecimalResult<double> ToDecimal(double value)
     {
         bool round_up = false;
 
-#if 1
         while (vm / 10000 < vp / 10000)
         {
             round_up = (vr % 10000 >= 10000 / 2);
@@ -1149,7 +1147,6 @@ inline ToDecimalResult<double> ToDecimal(double value)
             vp /= 10000;
             e10 += 4;
         }
-#endif
 
         while (vm / 10 < vp / 10)
         {
@@ -1185,9 +1182,7 @@ inline uint64_t ComputePow5Single(int k)
     // May use this if the double-precision table is available.
     // Works for all (required) decimal exponents.
     const auto p = ComputePow5Double(k);
-    return k < 0
-        ? p.hi + (p.lo != 0)
-        : p.hi;
+    return p.hi + (k < 0);
 #else
     // Let e = FloorLog2Pow5(k) + 1 - 64
     // For k >= 0, stores 5^k in the form: floor( 5^k / 2^e )
@@ -1300,22 +1295,24 @@ inline void MulShiftAll(uint32_t mv, uint32_t mp, uint32_t mm, uint64_t mul, int
     vm = MulShift(mm, mul, j);
 }
 
-/*inline*/inline int Pow5Factor(uint32_t value)
+inline int Pow5Factor(uint32_t value)
 {
     int factor = 0;
     for (;;) {
         RYU_ASSERT(value != 0);
         RYU_ASSERT(factor <= 13);
 
-        if (value % 5 != 0) {
+        const uint32_t q = value / 5;
+        const uint32_t r = value % 5;
+        if (r != 0) {
             return factor;
         }
-        value /= 5;
+        value = q;
         ++factor;
     }
 }
 
-/*inline*/inline bool MultipleOfPow5(uint32_t value, int p)
+inline bool MultipleOfPow5(uint32_t value, int p)
 {
     return Pow5Factor(value) >= p;
 }
@@ -1490,7 +1487,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
             if (accept_bounds)
             {
                 // mm = mv - 1 - mm_shift, so it has 1 trailing 0 bit iff mm_shift == 1.
-                vm_is_trailing_zeros = mm_shift == 1;
+                vm_is_trailing_zeros = (mm_shift == 1);
             }
             else
             {
@@ -1568,17 +1565,6 @@ inline ToDecimalResult<float> ToDecimal(float value)
     else
     {
         bool round_up = false;
-
-#if 0
-        while (vm / 100 < vp / 100)
-        {
-            round_up = (vr % 100 >= 100 / 2);
-            vm /= 100;
-            vr /= 100;
-            vp /= 100;
-            e10 += 2;
-        }
-#endif
 
         while (vm / 10 < vp / 10)
         {

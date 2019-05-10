@@ -131,9 +131,9 @@ inline /*__forceinline*/ uint64_t MultiplyHighRoundUp(uint64_t x, uint64_t y)
     //  f = round((x.f * y.f) / 2^q)
 
 #if defined(__SIZEOF_INT128__)
-    __extension__ using Uint128 = unsigned __int128;
+    __extension__ using uint128_t = unsigned __int128;
 
-    const Uint128 p = Uint128{x} * Uint128{y};
+    const uint128_t p = uint128_t{x} * y;
 
     uint64_t h = static_cast<uint64_t>(p >> 64);
     uint64_t l = static_cast<uint64_t>(p);

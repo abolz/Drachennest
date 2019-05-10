@@ -134,9 +134,9 @@ inline /*__forceinline*/ uint64_t MultiplyHighRoundUp(uint64_t x, uint64_t y)
     //  f = round((x.f * y.f) / 2^q)
 
 #if defined(__SIZEOF_INT128__)
-    __extension__ using Uint128 = unsigned __int128;
+    __extension__ using uint128_t = unsigned __int128;
 
-    const Uint128 p = Uint128{x} * Uint128{y};
+    const uint128_t p = uint128_t{x} * y;
 
     uint64_t h = static_cast<uint64_t>(p >> 64);
     uint64_t l = static_cast<uint64_t>(p);
@@ -283,250 +283,6 @@ struct CachedPower { // c = f * 2^e ~= 10^k
     int k; // decimal exponent
 };
 
-#if 0
-constexpr int kAlpha = -60;
-constexpr int kGamma = -32;
-// k_min = -307
-// k_max =  324
-
-constexpr int kCachedPowersSize       =   79;
-constexpr int kCachedPowersMinDecExp  = -300;
-constexpr int kCachedPowersMaxDecExp  =  324;
-constexpr int kCachedPowersDecExpStep =    8;
-
-// For a normalized DiyFp w = f * 2^e, this function returns a (normalized)
-// cached power-of-ten c = f_c * 2^e_c, such that the exponent of the product
-// w * c satisfies
-//
-//      kAlpha <= e_c + e + q <= kGamma.
-//
-inline CachedPower GetCachedPowerForBinaryExponent(int e)
-{
-    static constexpr uint64_t kSignificands[] = {
-        0xAB70FE17C79AC6CA, // e = -1060, k = -300
-        0xFF77B1FCBEBCDC4F, // e = -1034, k = -292
-        0xBE5691EF416BD60C, // e = -1007, k = -284
-        0x8DD01FAD907FFC3C, // e =  -980, k = -276
-        0xD3515C2831559A83, // e =  -954, k = -268
-        0x9D71AC8FADA6C9B5, // e =  -927, k = -260
-        0xEA9C227723EE8BCB, // e =  -901, k = -252
-        0xAECC49914078536D, // e =  -874, k = -244
-        0x823C12795DB6CE57, // e =  -847, k = -236
-        0xC21094364DFB5637, // e =  -821, k = -228
-        0x9096EA6F3848984F, // e =  -794, k = -220
-        0xD77485CB25823AC7, // e =  -768, k = -212
-        0xA086CFCD97BF97F4, // e =  -741, k = -204
-        0xEF340A98172AACE5, // e =  -715, k = -196
-        0xB23867FB2A35B28E, // e =  -688, k = -188
-        0x84C8D4DFD2C63F3B, // e =  -661, k = -180
-        0xC5DD44271AD3CDBA, // e =  -635, k = -172
-        0x936B9FCEBB25C996, // e =  -608, k = -164
-        0xDBAC6C247D62A584, // e =  -582, k = -156
-        0xA3AB66580D5FDAF6, // e =  -555, k = -148
-        0xF3E2F893DEC3F126, // e =  -529, k = -140
-        0xB5B5ADA8AAFF80B8, // e =  -502, k = -132
-        0x87625F056C7C4A8B, // e =  -475, k = -124
-        0xC9BCFF6034C13053, // e =  -449, k = -116
-        0x964E858C91BA2655, // e =  -422, k = -108
-        0xDFF9772470297EBD, // e =  -396, k = -100
-        0xA6DFBD9FB8E5B88F, // e =  -369, k =  -92
-        0xF8A95FCF88747D94, // e =  -343, k =  -84
-        0xB94470938FA89BCF, // e =  -316, k =  -76
-        0x8A08F0F8BF0F156B, // e =  -289, k =  -68
-        0xCDB02555653131B6, // e =  -263, k =  -60
-        0x993FE2C6D07B7FAC, // e =  -236, k =  -52
-        0xE45C10C42A2B3B06, // e =  -210, k =  -44
-        0xAA242499697392D3, // e =  -183, k =  -36
-        0xFD87B5F28300CA0E, // e =  -157, k =  -28
-        0xBCE5086492111AEB, // e =  -130, k =  -20
-        0x8CBCCC096F5088CC, // e =  -103, k =  -12
-        0xD1B71758E219652C, // e =   -77, k =   -4
-        0x9C40000000000000, // e =   -50, k =    4
-        0xE8D4A51000000000, // e =   -24, k =   12
-        0xAD78EBC5AC620000, // e =     3, k =   20
-        0x813F3978F8940984, // e =    30, k =   28
-        0xC097CE7BC90715B3, // e =    56, k =   36
-        0x8F7E32CE7BEA5C70, // e =    83, k =   44
-        0xD5D238A4ABE98068, // e =   109, k =   52
-        0x9F4F2726179A2245, // e =   136, k =   60
-        0xED63A231D4C4FB27, // e =   162, k =   68
-        0xB0DE65388CC8ADA8, // e =   189, k =   76
-        0x83C7088E1AAB65DB, // e =   216, k =   84
-        0xC45D1DF942711D9A, // e =   242, k =   92
-        0x924D692CA61BE758, // e =   269, k =  100
-        0xDA01EE641A708DEA, // e =   295, k =  108
-        0xA26DA3999AEF774A, // e =   322, k =  116
-        0xF209787BB47D6B85, // e =   348, k =  124
-        0xB454E4A179DD1877, // e =   375, k =  132
-        0x865B86925B9BC5C2, // e =   402, k =  140
-        0xC83553C5C8965D3D, // e =   428, k =  148
-        0x952AB45CFA97A0B3, // e =   455, k =  156
-        0xDE469FBD99A05FE3, // e =   481, k =  164
-        0xA59BC234DB398C25, // e =   508, k =  172
-        0xF6C69A72A3989F5C, // e =   534, k =  180
-        0xB7DCBF5354E9BECE, // e =   561, k =  188
-        0x88FCF317F22241E2, // e =   588, k =  196
-        0xCC20CE9BD35C78A5, // e =   614, k =  204
-        0x98165AF37B2153DF, // e =   641, k =  212
-        0xE2A0B5DC971F303A, // e =   667, k =  220
-        0xA8D9D1535CE3B396, // e =   694, k =  228
-        0xFB9B7CD9A4A7443C, // e =   720, k =  236
-        0xBB764C4CA7A44410, // e =   747, k =  244
-        0x8BAB8EEFB6409C1A, // e =   774, k =  252
-        0xD01FEF10A657842C, // e =   800, k =  260
-        0x9B10A4E5E9913129, // e =   827, k =  268
-        0xE7109BFBA19C0C9D, // e =   853, k =  276
-        0xAC2820D9623BF429, // e =   880, k =  284
-        0x80444B5E7AA7CF85, // e =   907, k =  292
-        0xBF21E44003ACDD2D, // e =   933, k =  300
-        0x8E679C2F5E44FF8F, // e =   960, k =  308
-        0xD433179D9C8CB841, // e =   986, k =  316
-        0x9E19DB92B4E31BA9, // e =  1013, k =  324
-    };
-
-    GRISU_ASSERT(e >= -1137);
-    GRISU_ASSERT(e <=   960);
-
-    const int k = CeilLog10Pow2(kAlpha - e - 1);
-    GRISU_ASSERT(k >= kCachedPowersMinDecExp - (kCachedPowersDecExpStep - 1));
-    GRISU_ASSERT(k <= kCachedPowersMaxDecExp);
-
-    const unsigned index = static_cast<unsigned>(k - (kCachedPowersMinDecExp - (kCachedPowersDecExpStep - 1))) / kCachedPowersDecExpStep;
-    GRISU_ASSERT(index < kCachedPowersSize);
-
-    const int k_cached = kCachedPowersMinDecExp + static_cast<int>(index) * kCachedPowersDecExpStep;
-    const int e_cached = FloorLog2Pow10(k_cached) + 1 - 64;
-
-    const CachedPower cached = {kSignificands[index], e_cached, k_cached};
-    GRISU_ASSERT(kAlpha <= cached.e + e + 64);
-    GRISU_ASSERT(kGamma >= cached.e + e + 64);
-
-    return cached;
-}
-#endif
-#if 0
-constexpr int kAlpha = -60;
-constexpr int kGamma = -32;
-// k_min = -307
-// k_max =  324
-
-constexpr int kCachedPowersSize       =   80;
-constexpr int kCachedPowersMinDecExp  = -307;
-constexpr int kCachedPowersMaxDecExp  =  325;
-constexpr int kCachedPowersDecExpStep =    8;
-
-// For a normalized DiyFp w = f * 2^e, this function returns a (normalized)
-// cached power-of-ten c = f_c * 2^e_c, such that the exponent of the product
-// w * c satisfies
-//
-//      kAlpha <= e_c + e + q <= kGamma.
-//
-inline CachedPower GetCachedPowerForBinaryExponent(int e)
-{
-    static constexpr uint64_t kSignificands[] = {
-        0x8FD0C16206306BAC, // e = -1083, k = -307
-        0xD64D3D9DB981787D, // e = -1057, k = -299
-        0x9FAACF3DF73609B1, // e = -1030, k = -291
-        0xEDEC366B11C6CB8F, // e = -1004, k = -283
-        0xB1442798F49FFB4B, // e =  -977, k = -275
-        0x8412D9991ED58092, // e =  -950, k = -267
-        0xC4CE17B399107C23, // e =  -924, k = -259
-        0x92A1958A7675175F, // e =  -897, k = -251
-        0xDA7F5BF590966849, // e =  -871, k = -243
-        0xA2CB1717B52481ED, // e =  -844, k = -235
-        0xF294B943E17A2BC4, // e =  -818, k = -227
-        0xB4BCA50B065ABE63, // e =  -791, k = -219
-        0x86A8D39EF77164BD, // e =  -764, k = -211
-        0xC8A883C0FDAF7DF0, // e =  -738, k = -203
-        0x9580869F0E7AAC0F, // e =  -711, k = -195
-        0xDEC681F9F4C31F31, // e =  -685, k = -187
-        0xA5FB0A17C777CF0A, // e =  -658, k = -179
-        0xF7549530E188C129, // e =  -632, k = -171
-        0xB84687C269EF3BFB, // e =  -605, k = -163
-        0x894BC396CE5DA772, // e =  -578, k = -155
-        0xCC963FEE10B7D1B3, // e =  -552, k = -147
-        0x986DDB5C6B3A76B8, // e =  -525, k = -139
-        0xE3231912D5BF60E6, // e =  -499, k = -131
-        0xA93AF6C6C79B5D2E, // e =  -472, k = -123
-        0xFC2C3F3841F17C68, // e =  -446, k = -115
-        0xBBE226EFB628AFEB, // e =  -419, k = -107
-        0x8BFBEA76C619EF36, // e =  -392, k =  -99
-        0xD097AD07A71F26B2, // e =  -366, k =  -91
-        0x9B69DBE1B548CE7D, // e =  -339, k =  -83
-        0xE7958CB87392C2C3, // e =  -313, k =  -75
-        0xAC8B2D36EED2DAC6, // e =  -286, k =  -67
-        0x808E17555F3EBF12, // e =  -259, k =  -59
-        0xBF8FDB78849A5F97, // e =  -233, k =  -51
-        0x8EB98A7A9A5B04E3, // e =  -206, k =  -43
-        0xD4AD2DBFC3D07788, // e =  -180, k =  -35
-        0x9E74D1B791E07E48, // e =  -153, k =  -27
-        0xEC1E4A7DB69561A5, // e =  -127, k =  -19
-        0xAFEBFF0BCB24AAFF, // e =  -100, k =  -11
-        0x83126E978D4FDF3B, // e =   -73, k =   -3
-        0xC350000000000000, // e =   -47, k =    5
-        0x9184E72A00000000, // e =   -20, k =   13
-        0xD8D726B7177A8000, // e =     6, k =   21
-        0xA18F07D736B90BE5, // e =    33, k =   29
-        0xF0BDC21ABB48DB20, // e =    59, k =   37
-        0xB35DBF821AE4F38C, // e =    86, k =   45
-        0x85A36366EB71F041, // e =   113, k =   53
-        0xC722F0EF9D80AAD6, // e =   139, k =   61
-        0x945E455F24FB1CF9, // e =   166, k =   69
-        0xDD15FE86AFFAD912, // e =   192, k =   77
-        0xA4B8CAB1A1563F52, // e =   219, k =   85
-        0xF5746577930D6501, // e =   245, k =   93
-        0xB6E0C377CFA2E12E, // e =   272, k =  101
-        0x884134FE908658B2, // e =   299, k =  109
-        0xCB090C8001AB551C, // e =   325, k =  117
-        0x9745EB4D50CE6333, // e =   352, k =  125
-        0xE16A1DC9D8545E95, // e =   378, k =  133
-        0xA7F26836F282B733, // e =   405, k =  141
-        0xFA42A8B73ABBF48D, // e =   431, k =  149
-        0xBA756174393D88E0, // e =   458, k =  157
-        0x8AEC23D680043BEE, // e =   485, k =  165
-        0xCF02B2C21207EF2F, // e =   511, k =  173
-        0x9A3C2087A63F6399, // e =   538, k =  181
-        0xE5D3EF282A242E82, // e =   564, k =  189
-        0xAB3C2FDDEEAAD25B, // e =   591, k =  197
-        0xFF290242C83396CE, // e =   617, k =  205
-        0xBE1BF1B059E9A8D6, // e =   644, k =  213
-        0x8DA471A9DE737E24, // e =   671, k =  221
-        0xD31045A8341CA07C, // e =   697, k =  229
-        0x9D412E0806E88AA6, // e =   724, k =  237
-        0xEA53DF5FD18D5514, // e =   750, k =  245
-        0xAE9672ABA3D0C321, // e =   777, k =  253
-        0x8213F56A67F6B29C, // e =   804, k =  261
-        0xC1D4CE1F63F57D73, // e =   830, k =  269
-        0x906A617D450187E2, // e =   857, k =  277
-        0xD732290FBACAF134, // e =   883, k =  285
-        0xA0555E361951C367, // e =   910, k =  293
-        0xEEEA5D5004981478, // e =   936, k =  301
-        0xB201833B35D63F73, // e =   963, k =  309
-        0x849FEEC281D7F329, // e =   990, k =  317
-        0xC5A05277621BE294, // e =  1016, k =  325
-    };
-
-    GRISU_ASSERT(e >= -1137);
-    GRISU_ASSERT(e <=   960);
-
-    const int k = CeilLog10Pow2(kAlpha - e - 1);
-    GRISU_ASSERT(k >= kCachedPowersMinDecExp - (kCachedPowersDecExpStep - 1));
-    GRISU_ASSERT(k <= kCachedPowersMaxDecExp);
-
-    const unsigned index = static_cast<unsigned>(k - (kCachedPowersMinDecExp - (kCachedPowersDecExpStep - 1))) / kCachedPowersDecExpStep;
-    GRISU_ASSERT(index < kCachedPowersSize);
-
-    const int k_cached = kCachedPowersMinDecExp + static_cast<int>(index) * kCachedPowersDecExpStep;
-    const int e_cached = FloorLog2Pow10(k_cached) + 1 - 64;
-
-    const CachedPower cached = {kSignificands[index], e_cached, k_cached};
-    GRISU_ASSERT(kAlpha <= cached.e + e + 64);
-    GRISU_ASSERT(kGamma >= cached.e + e + 64);
-
-    return cached;
-}
-#endif
-#if 1
 constexpr int kAlpha = -50;
 constexpr int kGamma = -36;
 // k_min = -304
@@ -726,7 +482,12 @@ inline /*__forceinline*/ CachedPower GetCachedPowerForBinaryExponent(int e)
 
     return cached;
 }
-#endif
+
+// inline constexpr uint64_t Pow2(int e) {
+//     GRISU_ASSERT(e >= 0);
+//     GRISU_ASSERT(e <= 63);
+//     return uint64_t{1} << e;
+// }
 
 template <typename Float>
 inline void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, Float value)
@@ -815,15 +576,31 @@ inline void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, Float value)
 
         const auto f2 = ieee_significand | Fp::HiddenBit;
         const auto e2 = static_cast<int>(ieee_exponent) - Fp::ExponentBias;
+        //GRISU_ASSERT(f2 >= Pow2(Fp::SignificandSize - 1));
 
         const auto fm = 4 * f2 - 2 + (lower_boundary_is_closer ? 1 : 0);
         const auto fp = 4 * f2 + 2;
+        //GRISU_ASSERT(fm >= (Pow2(Fp::SignificandSize - 1 + 2)) - 2);
+        //GRISU_ASSERT(fp >= (Pow2(Fp::SignificandSize - 1 + 2)) + 2);
 
         const auto shift = DiyFp::SignificandSize - Fp::SignificandSize - 2;
 
         shared_exponent = e2 - 2 - shift;
         m_minus = uint64_t{fm} << shift;
         m_plus  = uint64_t{fp} << shift;
+
+        //GRISU_ASSERT(m_minus >= Pow2(64 - 1) - Pow2(64 - Fp::SignificandSize - 1)); // m- is **NOT** necessarily normalized.
+        //GRISU_ASSERT(m_plus  >= Pow2(64 - 1)); // m+ and v are normalized.
+
+        // m+ - m- = (4*f + 2 - (4*f - 2)) * 2^s = 4 * 2^s = 2^(q-p)
+        // m+ - m- = (4*f + 2 - (4*f - 1)) * 2^s = 3 * 2^s = 2^(q-p-1) + 2^(q-p-2)
+        // Since s >= q-p-2:
+        //GRISU_ASSERT(m_plus - m_minus >= 3 * Pow2(64 - Fp::SignificandSize - 2));
+        //GRISU_ASSERT(m_plus - m_minus <= 4 * Pow2(64 - Fp::SignificandSize - 2));
+        // delta_m := m+ - m- >= 1536           (double precision)
+        //                    <= 2048
+        // delta_m := m+ - m- >= 824633720832   (single precision)
+        //                    <= 1099511627776
     }
     else
     {
@@ -834,10 +611,24 @@ inline void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, Float value)
         const auto fp = 4 * f2 + 2;
 
         const auto shift = CountLeadingZeros64(fp);
+        //GRISU_ASSERT(shift >= 64 - Fp::SignificandSize - 1);
+        //GRISU_ASSERT(shift <= 64 - 3); // fp has at least 3 bits
 
         shared_exponent = e2 - 2 - shift;
         m_minus = uint64_t{fm} << shift;
         m_plus  = uint64_t{fp} << shift;
+
+        //GRISU_ASSERT(m_minus >= Pow2(64 - 2)); // m- is **NOT** necessarily normalized.
+        //GRISU_ASSERT(m_plus  >= Pow2(64 - 1)); // m+ and v are normalized.
+
+        // m+ - m- = (4*f + 2 - (4*f - 2)) * 2^s = 4 * 2^s
+        // Since s >= q-p-1:
+        //GRISU_ASSERT(m_plus - m_minus >= 4 * Pow2(64 - Fp::SignificandSize - 1));
+        //GRISU_ASSERT(m_plus - m_minus <= 4 * Pow2(64 - 3));
+        // delta_m := m+ - m- >= 4096           (double precision)
+        //                    <= 9223372036854775808
+        // delta_m := m+ - m- >= 2199023255552  (single precision)
+        //                    <= 9223372036854775808
     }
 #endif // ^^^ not GRISU_ROUND ^^^
 
@@ -845,8 +636,6 @@ inline void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, Float value)
     // Step 1:
     // Compute rounding interval
     //
-
-    //GRISU_ASSERT(m_plus - m_minus >= 1536); // delta >= 2^(q-p-1) + 2^(q-p-2) = 1024 + 512
 
     //  --------+-----------------------+-----------------------+--------    (A)
     //          m-                      v                       m+
@@ -873,10 +662,8 @@ inline void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, Float value)
 
     // Note:
     // The result of Multiply() is **NOT** neccessarily normalized.
-    // But since m+ and c are normalized, w_plus.f >= 2^(q - 2).
+    // But since m+ and c are normalized, w+ >= 2^(q - 2).
     GRISU_ASSERT(w_plus >= (uint64_t{1} << (64 - 2)));
-
-    //GRISU_ASSERT(w_plus - w_minus >= 768); // delta >= 2^(q-p-2) + 2^(q-p-3) = 512 + 256
 
     //  ----(---+---)---------------(---+---)---------------(---+---)----
     //          w-                      w                       w+
@@ -901,8 +688,12 @@ inline void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, Float value)
     // Note that this does not mean that Grisu2 always generates the shortest
     // possible number in the interval (m-, m+).
 
+    //GRISU_ASSERT(w_plus - w_minus >= (3 * Pow2(64 - Fp::SignificandSize - 2)) / 2); // >= delta_m / 2
+    // w_plus - w_minus >= 768          (double precision)
+    // w_plus - w_minus >= 412316860416 (single precision)
     const uint64_t L = w_minus + 1;
     const uint64_t H = w_plus  - 1;
+    //GRISU_ASSERT(H - L >= (3 * Pow2(64 - Fp::SignificandSize - 2)) / 2 - 2);
 
     //
     // Step 2:
@@ -989,8 +780,6 @@ inline void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, Float value)
         // unit = 1
         // m = 0
 #if 0
-        static_assert(kAlpha >= -60, "internal error");
-
         for (;;)
         {
             GRISU_ASSERT(digits <= ToDecimalResult<Float>::MaxDigits);
@@ -1053,8 +842,6 @@ inline void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, Float value)
             }
         }
 #else
-        static_assert(kAlpha >= -50, "internal error");
-
         for (;;)
         {
             GRISU_ASSERT(digits <= ToDecimalResult<Float>::MaxDigits);

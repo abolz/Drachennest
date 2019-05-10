@@ -68,7 +68,7 @@ inline char* Utoa_8Digits(char* buf, uint32_t digits)
     return buf + 8;
 }
 
-#if 1 // Use intrinsics for DecimalLength
+#if 0 // Use intrinsics for DecimalLength
 
 // Returns the number of leading 0-bits in x, starting at the most significant bit position.
 // If x is 0, the result is undefined.
