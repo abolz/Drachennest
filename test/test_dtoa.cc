@@ -2,6 +2,7 @@
 #include "grisu2.h"
 #include "grisu3.h"
 #include "ryu.h"
+// #include "milo.h"
 // #include "swift.h"
 // #include "floaxie.h"
 
@@ -54,6 +55,14 @@ struct D2S_Ryu
     char* operator()(char* buf, int buflen, float f) { return ryu_Ftoa(buf, buflen, f); }
     char* operator()(char* buf, int buflen, double f) { return ryu_Dtoa(buf, buflen, f); }
 };
+
+// struct D2S_Milo
+// {
+//     static const bool optimal = false;
+//     static const char* Name() { return "milo"; }
+//     char* operator()(char* buf, int buflen, float f) = delete;
+//     char* operator()(char* buf, int buflen, double f) { return milo_Dtoa(buf, buflen, f); }
+// };
 
 // struct D2S_Swift
 // {
@@ -299,6 +308,7 @@ static void CheckDouble(double f)
     CheckDouble(D2S_Grisu2{}, f);
     CheckDouble(D2S_Grisu3{}, f);
     CheckDouble(D2S_Ryu{}, f);
+    // CheckDouble(D2S_Milo{}, f);
     // CheckDouble(D2S_Swift{}, f);
     // CheckDouble(D2S_Floaxie{}, f);
 }
