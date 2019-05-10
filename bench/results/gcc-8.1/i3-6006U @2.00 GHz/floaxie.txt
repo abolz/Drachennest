@@ -1,0 +1,74 @@
+Benchmarking Floaxie
+05/10/19 09:42:02
+Run on (4 X 1992 MHz CPU s)
+CPU Caches:
+  L1 Data 32K (x2)
+  L1 Instruction 32K (x2)
+  L2 Unified 262K (x2)
+  L3 Unified 3145K (x1)
+-----------------------------------------------------------------------------------
+Benchmark                                            Time           CPU Iterations
+-----------------------------------------------------------------------------------
+double - Random-bits   /repeats:3_min              188 ns        188 ns    3733333
+double - Uniform 0/1   /repeats:3_min              183 ns        176 ns    3733333
+double - Uniform 0/1e+308   /repeats:3_min         184 ns        180 ns    3733333
+double - 1.0-digits   /repeats:3_min                53 ns         53 ns   10000000
+double - 1.1-digits   /repeats:3_min                57 ns         57 ns   11200000
+double - 1.2-digits   /repeats:3_min                65 ns         66 ns   11200000
+double - 1.3-digits   /repeats:3_min                75 ns         73 ns    8960000
+double - 1.4-digits   /repeats:3_min                88 ns         88 ns    7466667
+double - 1.5-digits   /repeats:3_min               102 ns        100 ns    6400000
+double - 1.6-digits   /repeats:3_min               116 ns        117 ns    6400000
+double - 1.7-digits   /repeats:3_min               131 ns        128 ns    5600000
+double - 1.8-digits   /repeats:3_min               139 ns        138 ns    4977778
+double - 1.9-digits   /repeats:3_min               149 ns        146 ns    4480000
+double - 1.10-digits   /repeats:3_min              159 ns        157 ns    4480000
+double - 1.11-digits   /repeats:3_min              167 ns        164 ns    4480000
+double - 1.12-digits   /repeats:3_min              169 ns        165 ns    4072727
+double - 1.13-digits   /repeats:3_min              176 ns        176 ns    3733333
+double - 1.14-digits   /repeats:3_min              180 ns        176 ns    3733333
+double - 0.1-digits   /repeats:3_min                54 ns         53 ns   10000000
+double - 1.1-digits   /repeats:3_min                57 ns         56 ns   11200000
+double - 2.1-digits   /repeats:3_min                65 ns         66 ns   11200000
+double - 3.1-digits   /repeats:3_min                74 ns         73 ns    8960000
+double - 4.1-digits   /repeats:3_min                86 ns         86 ns    7466667
+double - 5.1-digits   /repeats:3_min               100 ns         98 ns    6400000
+double - 6.1-digits   /repeats:3_min               113 ns        112 ns    6400000
+double - 7.1-digits   /repeats:3_min               127 ns        126 ns    5600000
+double - 8.1-digits   /repeats:3_min               139 ns        135 ns    4977778
+double - 9.1-digits   /repeats:3_min               146 ns        143 ns    4480000
+double - 10.1-digits   /repeats:3_min              154 ns        153 ns    4480000
+double - 11.1-digits   /repeats:3_min              163 ns        160 ns    4480000
+double - 12.1-digits   /repeats:3_min              166 ns        164 ns    4480000
+double - 13.1-digits   /repeats:3_min              169 ns        169 ns    4072727
+double - 14.1-digits   /repeats:3_min              174 ns        173 ns    4072727
+double - 1-digits / 10^22   /repeats:3_min          47 ns         45 ns   14933333
+double - 2-digits / 10^22   /repeats:3_min          56 ns         54 ns   11200000
+double - 3-digits / 10^22   /repeats:3_min          65 ns         66 ns   11200000
+double - 4-digits / 10^22   /repeats:3_min          74 ns         74 ns   11200000
+double - 5-digits / 10^22   /repeats:3_min          87 ns         87 ns    8960000
+double - 6-digits / 10^22   /repeats:3_min         101 ns        100 ns    6400000
+double - 7-digits / 10^22   /repeats:3_min         115 ns        115 ns    6400000
+double - 8-digits / 10^22   /repeats:3_min         129 ns        128 ns    5600000
+double - 9-digits / 10^22   /repeats:3_min         139 ns        141 ns    4977778
+double - 10-digits / 10^22   /repeats:3_min        149 ns        148 ns    4977778
+double - 11-digits / 10^22   /repeats:3_min        154 ns        153 ns    4480000
+double - 12-digits / 10^22   /repeats:3_min        163 ns        161 ns    4072727
+double - 13-digits / 10^22   /repeats:3_min        169 ns        165 ns    4072727
+double - 14-digits / 10^22   /repeats:3_min        174 ns        172 ns    3733333
+double - 15-digits / 10^22   /repeats:3_min        178 ns        176 ns    3733333
+double - 1-digits * 10^22   /repeats:3_min          71 ns         70 ns    8960000
+double - 2-digits * 10^22   /repeats:3_min          58 ns         57 ns   11200000
+double - 3-digits * 10^22   /repeats:3_min          65 ns         66 ns   11200000
+double - 4-digits * 10^22   /repeats:3_min          75 ns         73 ns    8960000
+double - 5-digits * 10^22   /repeats:3_min          88 ns         89 ns    8960000
+double - 6-digits * 10^22   /repeats:3_min         101 ns        100 ns    6400000
+double - 7-digits * 10^22   /repeats:3_min         116 ns        115 ns    6400000
+double - 8-digits * 10^22   /repeats:3_min         129 ns        128 ns    5600000
+double - 9-digits * 10^22   /repeats:3_min         139 ns        138 ns    4977778
+double - 10-digits * 10^22   /repeats:3_min        149 ns        146 ns    4480000
+double - 11-digits * 10^22   /repeats:3_min        153 ns        150 ns    4480000
+double - 12-digits * 10^22   /repeats:3_min        163 ns        161 ns    4072727
+double - 13-digits * 10^22   /repeats:3_min        168 ns        165 ns    4072727
+double - 14-digits * 10^22   /repeats:3_min        174 ns        167 ns    3733333
+double - 15-digits * 10^22   /repeats:3_min        181 ns        180 ns    4072727
