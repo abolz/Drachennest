@@ -1157,7 +1157,7 @@ inline uint64_t ComputePow5_Single(int k)
 #if 0
     // May use this if the double-precision table is available.
     // Works for all (required) decimal exponents.
-    const auto p = ComputePow5Double(k);
+    const auto p = ComputePow5_Double(k);
     return p.hi + (k < 0);
 #else
     // Let e = FloorLog2Pow5(k) + 1 - 64
