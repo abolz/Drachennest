@@ -858,37 +858,31 @@ inline void MulPow5DivPow2_Double(uint64_t mv, uint64_t mp, uint64_t mm, int e5,
     vm = MulShift(mm, &pow5, j);
 }
 
-inline int Pow5Factor(uint64_t value)
+// Returns whether value is divisible by 5^e5
+inline bool MultipleOfPow5(uint64_t value, int e5)
 {
-    // For 64-bit integers: result <= 27
-    // Since value here has at most 55-bits: result <= 23
-
-    int factor = 0;
-    for (;;) {
-        RYU_ASSERT(value != 0);
-        RYU_ASSERT(factor <= 23);
-
+    while (e5 > 0)
+    {
         const uint64_t q = value / 5;
         const uint64_t r = value % 5;
         if (r != 0)
-            return factor;
+            return false;
         value = q;
-        ++factor;
+        e5--;
     }
+
+    return true;
 }
 
-inline bool MultipleOfPow5(uint64_t value, int p)
+// Returns whether value is divisible by 2^e2
+inline bool MultipleOfPow2(uint64_t value, int e2)
 {
-    return Pow5Factor(value) >= p;
-}
+    // value has at most 55 bits.
+    RYU_ASSERT(e2 >= 0);
+    RYU_ASSERT(e2 <= 55);
 
-inline bool MultipleOfPow2(uint64_t value, int p)
-{
-    RYU_ASSERT(p >= 0);
-    RYU_ASSERT(p <= 63);
-
-    //return (value << (64 - p)) == 0;
-    return (value & ((uint64_t{1} << p) - 1)) == 0;
+    //return (value << (64 - e2)) == 0;
+    return (value & ((uint64_t{1} << e2) - 1)) == 0;
 }
 
 } // namespace impl
@@ -1282,35 +1276,31 @@ inline void MulPow5DivPow2_Single(uint32_t mv, uint32_t mp, uint32_t mm, int e5,
     vm = MulShift(mm, pow5, j);
 }
 
-inline int Pow5Factor(uint32_t value)
+// Returns whether value is divisible by 5^e5
+inline bool MultipleOfPow5(uint32_t value, int e5)
 {
-    int factor = 0;
-    for (;;) {
-        RYU_ASSERT(value != 0);
-        RYU_ASSERT(factor <= 13);
-
+    while (e5 > 0)
+    {
         const uint32_t q = value / 5;
         const uint32_t r = value % 5;
-        if (r != 0) {
-            return factor;
-        }
+        if (r != 0)
+            return false;
         value = q;
-        ++factor;
+        e5--;
     }
+
+    return true;
 }
 
-inline bool MultipleOfPow5(uint32_t value, int p)
+// Returns whether value is divisible by 2^e2
+inline bool MultipleOfPow2(uint32_t value, int e2)
 {
-    return Pow5Factor(value) >= p;
-}
+    // value has at most 26 bits.
+    RYU_ASSERT(e2 >= 0);
+    RYU_ASSERT(e2 <= 26);
 
-inline bool MultipleOfPow2(uint32_t value, int p)
-{
-    RYU_ASSERT(p >= 0);
-    RYU_ASSERT(p <= 31);
-
-//  return (value << (32 - p)) == 0;
-    return (value & ((uint32_t{1} << p) - 1)) == 0;
+//  return (value << (32 - e2)) == 0;
+    return (value & ((uint32_t{1} << e2) - 1)) == 0;
 }
 
 } // namespace impl
