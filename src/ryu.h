@@ -108,12 +108,16 @@ inline uint64_t Load64(uint32_t lo, uint32_t hi)
     return lo | uint64_t{hi} << 32;
 }
 
+} // namespace impl
+
 //==================================================================================================
 // ToDecimal
 //
 // Double-precision implementation
 //==================================================================================================
 // Constant data = 9872 bytes
+
+namespace impl {
 
 struct Uint64x2 {
     uint64_t hi;
