@@ -120,7 +120,7 @@ struct Uint64x2 {
     uint64_t lo;
 };
 
-inline Uint64x2 ComputePow5Double(int k)
+inline Uint64x2 ComputePow5_Double(int k)
 {
     // Let e = FloorLog2Pow5(k) + 1 - 128
     // For k >= 0, stores 5^k in the form: floor( 5^k / 2^e )
@@ -806,8 +806,6 @@ inline uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int n)
 
 inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 {
-    RYU_ASSERT((m >> 55) == 0); // m is maximum 55 bits
-
 #if defined(__SIZEOF_INT128__)
     __extension__ using uint128_t = unsigned __int128;
 
@@ -849,11 +847,22 @@ inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 #endif
 }
 
-inline void MulShiftAll(uint64_t mv, uint64_t mp, uint64_t mm, const Uint64x2* mul, int j, uint64_t& vr, uint64_t& vp, uint64_t& vm)
+inline void MulPow5DivPow2_Double(uint64_t mv, uint64_t mp, uint64_t mm, int e5, int e2, uint64_t& vr, uint64_t& vp, uint64_t& vm)
 {
-    vr = MulShift(mv, mul, j);
-    vp = MulShift(mp, mul, j);
-    vm = MulShift(mm, mul, j);
+    // j >= 121 and m has at most 53 + 2 = 55 bits.
+    // The product along with the subsequent shift therefore requires
+    // 55 + 128 - 121 = 62 bits.
+
+    const auto k = FloorLog2Pow5(e5) + 1 - 128;
+    const auto j = e2 - k;
+    RYU_ASSERT(j >= 121); // 121 - 64 = 57
+    RYU_ASSERT(j <= 127); // 127 - 64 = 63
+
+    const auto pow5 = ComputePow5_Double(e5);
+
+    vr = MulShift(mv, &pow5, j);
+    vp = MulShift(mp, &pow5, j);
+    vm = MulShift(mm, &pow5, j);
 }
 
 inline int Pow5Factor(uint64_t value)
@@ -947,10 +956,10 @@ inline ToDecimalResult<double> ToDecimal(double value)
     int e2;
     if (ieee_exponent == 0) {
         m2 = ieee_mantissa;
-        e2 = 1;
+        e2 = 1 - Double::ExponentBias;
     } else {
         m2 = Double::HiddenBit | ieee_mantissa;
-        e2 = static_cast<int>(ieee_exponent);
+        e2 = static_cast<int>(ieee_exponent) - Double::ExponentBias;
     }
 
     const bool is_even = (m2 & 1) == 0;
@@ -961,12 +970,12 @@ inline ToDecimalResult<double> ToDecimal(double value)
     // Determine the interval of legal decimal representations.
     //
 
-    // We subtract 2 so that the bounds computation has 2 additional bits.
-    e2 -= Double::ExponentBias + 2;
+    const uint32_t mm_shift = (ieee_mantissa != 0 || ieee_exponent <= 1) ? 1 : 0;
 
+    // We subtract 2 so that the bounds computation has 2 additional bits.
+    e2 -= 2;
     const uint64_t mv = 4 * m2;
     const uint64_t mp = mv + 2;
-    const uint32_t mm_shift = (ieee_mantissa != 0 || ieee_exponent <= 1) ? 1 : 0;
     const uint64_t mm = mv - 1 - mm_shift;
 
     //
@@ -976,32 +985,16 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
     int e10;
 
-    uint64_t vm;
-    uint64_t vr;
-    uint64_t vp;
-
-    bool vm_is_trailing_zeros = false;
-    bool vr_is_trailing_zeros = false;
-//  bool vp_is_trailing_zeros = false;
+    bool vm_has_trailing_zeros = false;
+    bool vr_has_trailing_zeros = false;
+    bool vp_has_trailing_zeros = false;
 
     if (e2 >= 0)
     {
-        // TODO:
-        // Do the math and simplify!?
-
-        // I tried special-casing q == 0, but there was no effect on performance.
         // q = max(0, log_10(2^e2) - 1)
         const int q = FloorLog10Pow2(e2) - (e2 > 3); // exponent <= 0
         RYU_ASSERT(q >= 0);
-        const int k = FloorLog2Pow5(-q) + 1 - 128;
-        const int j = -e2 + q - k; // shift
-        RYU_ASSERT(j >= 115);
-
         e10 = q;
-
-        // mul = ceil(2^-k / 5^q)
-        const auto mul = ComputePow5Double(-q);
-        MulShiftAll(mv, mp, mm, &mul, j, vr, vp, vm);
 
         // 22 = floor(log_5(2^53))
         // 23 = floor(log_5(2^(53+2)))
@@ -1012,59 +1005,44 @@ inline ToDecimalResult<double> ToDecimal(double value)
             // Only one of mp, mv, and mm can be a multiple of 5, if any.
             if (mv % 5 == 0)
             {
-                vr_is_trailing_zeros = MultipleOfPow5(mv, q);
+                vr_has_trailing_zeros = MultipleOfPow5(mv, q);
             }
             else if (accept_bounds)
             {
                 // Same as min(e2 + (~mm & 1), Pow5Factor(mm)) >= q
                 // <=> e2 + (~mm & 1) >= q && Pow5Factor(mm) >= q
                 // <=> true && Pow5Factor(mm) >= q, since e2 >= q.
-                vm_is_trailing_zeros = MultipleOfPow5(mm, q);
+                vm_has_trailing_zeros = MultipleOfPow5(mm, q);
             }
             else
             {
                 // Same as min(e2 + 1, Pow5Factor(mp)) >= q.
-//              vp_is_trailing_zeros = MultipleOfPow5(mp, q);
-                vp -= MultipleOfPow5(mp, q);
+                vp_has_trailing_zeros = MultipleOfPow5(mp, q);
             }
         }
     }
     else
     {
-        // TODO:
-        // Do the math and simplify!?
-
         // q = max(0, log_10(5^-e2) - 1)
         const int q = FloorLog10Pow5(-e2) - (-e2 > 1);
         RYU_ASSERT(q >= 0);
-        const int i = -e2 - q; // -exponent > 0
-        RYU_ASSERT(i > 0);
-        const int k = FloorLog2Pow5(i) + 1 - 128;
-        const int j = q - k; // shift
-        RYU_ASSERT(j >= 114);
-
-        e10 = -i;
-
-        // mul = floor(5^i / 2^-k)
-        const auto mul = ComputePow5Double(i);
-        MulShiftAll(mv, mp, mm, &mul, j, vr, vp, vm);
+        e10 = q + e2;
 
         if (q <= 1)
         {
             // {vr,vp,vm} is trailing zeros if {mv,mp,mm} has at least q trailing 0 bits.
             // mv = 4 * m2, so it always has at least two trailing 0 bits.
-            vr_is_trailing_zeros = true;
+            vr_has_trailing_zeros = true;
 
             if (accept_bounds)
             {
                 // mm = mv - 1 - mm_shift, so it has 1 trailing 0 bit iff mm_shift == 1.
-                vm_is_trailing_zeros = (mm_shift == 1);
+                vm_has_trailing_zeros = (mm_shift == 1);
             }
             else
             {
                 // mp = mv + 2, so it always has at least one trailing 0 bit.
-//              vp_is_trailing_zeros = true;
-                --vp;
+                vp_has_trailing_zeros = true;
             }
         }
         else if (q <= Double::SignificandSize + 2)
@@ -1076,28 +1054,37 @@ inline ToDecimalResult<double> ToDecimal(double value)
             // <=> ntz(mv) >= q-1
             // <=> mv & ((1 << (q-1)) - 1) == 0
             // We also need to make sure that the left shift does not overflow.
-            vr_is_trailing_zeros = MultipleOfPow2(mv, q - 1);
+            vr_has_trailing_zeros = MultipleOfPow2(mv, q - 1);
+
+            // XXX:
+            // vr_prev_has_trailing_zeros
         }
     }
+
+    // (vr, vp, vm) = (mv, mp, mm) * 2^e2 * 10^(-e10) = (mv, mp, mm) * 5^(-e10) / 2^(e10 - e2)
+    uint64_t vm;
+    uint64_t vr;
+    uint64_t vp;
+    MulPow5DivPow2_Double(mv, mp, mm, -e10, e10 - e2, vr, vp, vm);
 
     //
     // Step 4:
     // Find the shortest decimal representation in the interval of legal representations.
     //
 
-//  vp -= vp_is_trailing_zeros;
+	vp -= vp_has_trailing_zeros;
 
     uint64_t output;
-    if (vm_is_trailing_zeros || vr_is_trailing_zeros)
+    if (vm_has_trailing_zeros || vr_has_trailing_zeros)
     {
         uint32_t last_removed_digit = 0;
 
-        bool vr_prev_is_trailing_zeros = vr_is_trailing_zeros;
+        bool vr_prev_has_trailing_zeros = vr_has_trailing_zeros;
 
         while (vm / 10 < vp / 10)
         {
-            vm_is_trailing_zeros &= (vm % 10 == 0);
-            vr_prev_is_trailing_zeros &= (last_removed_digit == 0);
+            vm_has_trailing_zeros &= (vm % 10 == 0);
+            vr_prev_has_trailing_zeros &= (last_removed_digit == 0);
 
             last_removed_digit = static_cast<uint32_t>(vr % 10);
 
@@ -1107,11 +1094,11 @@ inline ToDecimalResult<double> ToDecimal(double value)
             ++e10;
         }
 
-        if (vm_is_trailing_zeros)
+        if (vm_has_trailing_zeros)
         {
             while (vm % 10 == 0)
             {
-                vr_prev_is_trailing_zeros &= (last_removed_digit == 0);
+                vr_prev_has_trailing_zeros &= (last_removed_digit == 0);
 
                 last_removed_digit = static_cast<uint32_t>(vr % 10);
 
@@ -1123,7 +1110,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
         }
 
         bool round_up = (last_removed_digit >= 5);
-        if (last_removed_digit == 5 && vr_prev_is_trailing_zeros)
+        if (last_removed_digit == 5 && vr_prev_has_trailing_zeros)
         {
             // Halfway case: The number ends in ...500...00.
             round_up = (static_cast<uint32_t>(vr) % 2 != 0);
@@ -1131,7 +1118,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
         // We need to take vr+1 if vr is outside bounds...
         // or we need to round up.
-        const bool inc = (vr == vm && !(accept_bounds && vm_is_trailing_zeros)) || round_up;
+        const bool inc = (vr == vm && !(accept_bounds && vm_has_trailing_zeros)) || round_up;
 
         output = vr + (inc ? 1 : 0);
     }
@@ -1176,7 +1163,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
 namespace impl {
 
-inline uint64_t ComputePow5Single(int k)
+inline uint64_t ComputePow5_Single(int k)
 {
 #if 0
     // May use this if the double-precision table is available.
@@ -1277,22 +1264,29 @@ inline uint64_t ComputePow5Single(int k)
 
 inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
 {
-    RYU_ASSERT(j >= 57);
-    RYU_ASSERT(j <= 63);
-
     const uint64_t bits0 = uint64_t{m} * Lo32(mul);
     const uint64_t bits1 = uint64_t{m} * Hi32(mul);
-
     const uint64_t sum = bits1 + Hi32(bits0);
     const uint64_t shifted_sum = sum >> (j - 32);
     return shifted_sum;
 }
 
-inline void MulShiftAll(uint32_t mv, uint32_t mp, uint32_t mm, uint64_t mul, int j, uint64_t& vr, uint64_t& vp, uint64_t& vm)
+inline void MulPow5DivPow2_Single(uint32_t mv, uint32_t mp, uint32_t mm, int e5, int e2, uint64_t& vr, uint64_t& vp, uint64_t& vm)
 {
-    vr = MulShift(mv, mul, j);
-    vp = MulShift(mp, mul, j);
-    vm = MulShift(mm, mul, j);
+    // j >= 57 and m has at most 24 + 2 = 26 bits.
+    // The product along with the subsequent shift therefore requires
+    // 26 + 64 - 57 = 33 bits.
+
+    const auto k = FloorLog2Pow5(e5) + 1 - 64;
+    const auto j = e2 - k;
+    RYU_ASSERT(j >= 57);
+    RYU_ASSERT(j <= 63);
+
+    const auto pow5 = ComputePow5_Single(e5);
+
+    vr = MulShift(mv, pow5, j);
+    vp = MulShift(mp, pow5, j);
+    vm = MulShift(mm, pow5, j);
 }
 
 inline int Pow5Factor(uint32_t value)
@@ -1384,10 +1378,10 @@ inline ToDecimalResult<float> ToDecimal(float value)
     int e2;
     if (ieee_exponent == 0) {
         m2 = ieee_mantissa;
-        e2 = 1;
+        e2 = 1 - Single::ExponentBias;
     } else {
         m2 = Single::HiddenBit | ieee_mantissa;
-        e2 = static_cast<int>(ieee_exponent);
+        e2 = static_cast<int>(ieee_exponent) - Single::ExponentBias;
     }
 
     const bool is_even = (m2 & 1) == 0;
@@ -1398,12 +1392,12 @@ inline ToDecimalResult<float> ToDecimal(float value)
     // Determine the interval of legal decimal representations.
     //
 
-    // We subtract 2 so that the bounds computation has 2 additional bits.
-    e2 -= Single::ExponentBias + 2;
+    const uint32_t mm_shift = (ieee_mantissa != 0 || ieee_exponent <= 1) ? 1 : 0;
 
+    // We subtract 2 so that the bounds computation has 2 additional bits.
+    e2 -= 2;
     const uint32_t mv = 4 * m2;
     const uint32_t mp = mv + 2;
-    const uint32_t mm_shift = (ieee_mantissa != 0 || ieee_exponent <= 1) ? 1 : 0;
     const uint32_t mm = mv - 1 - mm_shift;
 
     //
@@ -1413,28 +1407,16 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
     int e10;
 
-    uint64_t vm;
-    uint64_t vr;
-    uint64_t vp;
-
-    bool vm_is_trailing_zeros = false;
-    bool vr_is_trailing_zeros = false;
-//  bool vp_is_trailing_zeros = false;
+    bool vm_has_trailing_zeros = false;
+    bool vr_has_trailing_zeros = false;
+    bool vp_has_trailing_zeros = false;
 
     if (e2 >= 0)
     {
-        // TODO:
-        // Do the math and simplify!?
-
+        // q = max(0, log_10(2^e2) - 1)
         const int q = FloorLog10Pow2(e2) - (e2 > 3);
         RYU_ASSERT(q >= 0);
-        const int k = FloorLog2Pow5(-q) + 1 - 64;
-        const int j = -e2 + q - k; // shift
-
         e10 = q;
-
-        const uint64_t mul = ComputePow5Single(-q);
-        MulShiftAll(mv, mp, mm, mul, j, vr, vp, vm);
 
         // 10 = floor(log_5(2^24))
         // 11 = floor(log_5(2^(24+2)))
@@ -1444,56 +1426,44 @@ inline ToDecimalResult<float> ToDecimal(float value)
             // Only one of mp, mv, and mm can be a multiple of 5, if any.
             if (mv % 5 == 0)
             {
-                vr_is_trailing_zeros = MultipleOfPow5(mv, q);
+                vr_has_trailing_zeros = MultipleOfPow5(mv, q);
             }
             else if (accept_bounds)
             {
                 // Same as min(e2 + (~mm & 1), Pow5Factor(mm)) >= q
                 // <=> e2 + (~mm & 1) >= q && Pow5Factor(mm) >= q
                 // <=> true && Pow5Factor(mm) >= q, since e2 >= q.
-                vm_is_trailing_zeros = MultipleOfPow5(mm, q);
+                vm_has_trailing_zeros = MultipleOfPow5(mm, q);
             }
             else
             {
                 // Same as min(e2 + 1, Pow5Factor(mp)) >= q.
-//              vp_is_trailing_zeros = MultipleOfPow5(mp, q);
-                vp -= MultipleOfPow5(mp, q);
+                vp_has_trailing_zeros = MultipleOfPow5(mp, q);
             }
         }
     }
     else
     {
-        // TODO:
-        // Do the math and simplify!?
-
+        // q = max(0, log_10(5^-e2) - 1)
         const int q = FloorLog10Pow5(-e2) - (-e2 > 1);
         RYU_ASSERT(q >= 0);
-        const int i = -e2 - q;
-        RYU_ASSERT(i >= 0);
-        const int k = FloorLog2Pow5(i) + 1 - 64;
-        const int j = q - k; // shift
-
         e10 = q + e2;
-
-        const uint64_t mul = ComputePow5Single(i);
-        MulShiftAll(mv, mp, mm, mul, j, vr, vp, vm);
 
         if (q <= 1)
         {
             // {vr,vp,vm} is trailing zeros if {mv,mp,mm} has at least q trailing 0 bits.
             // mv = 4 * m2, so it always has at least two trailing 0 bits.
-            vr_is_trailing_zeros = true;
+            vr_has_trailing_zeros = true;
 
             if (accept_bounds)
             {
                 // mm = mv - 1 - mm_shift, so it has 1 trailing 0 bit iff mm_shift == 1.
-                vm_is_trailing_zeros = (mm_shift == 1);
+                vm_has_trailing_zeros = (mm_shift == 1);
             }
             else
             {
                 // mp = mv + 2, so it always has at least one trailing 0 bit.
-//              vp_is_trailing_zeros = true;
-                vp--;
+                vp_has_trailing_zeros = true;
             }
         }
         else if (q <= Single::SignificandSize + 2)
@@ -1503,28 +1473,37 @@ inline ToDecimalResult<float> ToDecimal(float value)
             // <=> ntz(mv) >= q-1
             // <=> mv & ((1 << (q-1)) - 1) == 0
             // We also need to make sure that the left shift does not overflow.
-            vr_is_trailing_zeros = MultipleOfPow2(mv, q - 1);
+            vr_has_trailing_zeros = MultipleOfPow2(mv, q - 1);
+
+            // XXX:
+            // vr_prev_has_trailing_zeros
         }
     }
+
+    // (vr, vp, vm) = (mv, mp, mm) * 2^e2 * 10^(-e10) = (mv, mp, mm) * 5^(-e10) / 2^(e10 - e2)
+    uint64_t vr;
+    uint64_t vp;
+    uint64_t vm;
+    MulPow5DivPow2_Single(mv, mp, mm, -e10, e10 - e2, vr, vp, vm);
 
     //
     // Step 4:
     // Find the shortest decimal representation in the interval of legal representations.
     //
 
-//  vp -= vp_is_trailing_zeros;
+    vp -= vp_has_trailing_zeros;
 
     uint64_t output;
-    if (vm_is_trailing_zeros || vr_is_trailing_zeros)
+    if (vm_has_trailing_zeros || vr_has_trailing_zeros)
     {
         uint32_t last_removed_digit = 0;
 
-        bool vr_prev_is_trailing_zeros = vr_is_trailing_zeros;
+        bool vr_prev_has_trailing_zeros = vr_has_trailing_zeros;
 
         while (vm / 10 < vp / 10)
         {
-            vm_is_trailing_zeros &= (vm % 10 == 0);
-            vr_prev_is_trailing_zeros &= (last_removed_digit == 0);
+            vm_has_trailing_zeros &= (vm % 10 == 0);
+            vr_prev_has_trailing_zeros &= (last_removed_digit == 0);
 
             last_removed_digit = vr % 10;
 
@@ -1534,11 +1513,11 @@ inline ToDecimalResult<float> ToDecimal(float value)
             ++e10;
         }
 
-        if (vm_is_trailing_zeros)
+        if (vm_has_trailing_zeros)
         {
             while (vm % 10 == 0)
             {
-                vr_prev_is_trailing_zeros &= (last_removed_digit == 0);
+                vr_prev_has_trailing_zeros &= (last_removed_digit == 0);
 
                 last_removed_digit = vr % 10;
 
@@ -1550,7 +1529,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
         }
 
         bool round_up = (last_removed_digit >= 5);
-        if (last_removed_digit == 5 && vr_prev_is_trailing_zeros)
+        if (last_removed_digit == 5 && vr_prev_has_trailing_zeros)
         {
             // Halfway case: The number ends in ...500...00.
             round_up = (static_cast<uint32_t>(vr) % 2 != 0);
@@ -1558,7 +1537,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
         // We need to take vr+1 if vr is outside bounds...
         // or we need to round up.
-        const bool inc = (vr == vm && !(accept_bounds && vm_is_trailing_zeros)) || round_up;
+        const bool inc = (vr == vm && !(accept_bounds && vm_has_trailing_zeros)) || round_up;
 
         output = vr + (inc ? 1 : 0);
     }
