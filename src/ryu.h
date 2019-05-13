@@ -751,62 +751,10 @@ inline Uint64x2 ComputePow5_Double(int k)
     return Pow5[static_cast<unsigned>(k - MinDecExp)];
 }
 
-inline Uint64x2 Mul128(uint64_t a, uint64_t b)
-{
 #if defined(__SIZEOF_INT128__)
-    __extension__ using uint128_t = unsigned __int128;
-
-    const uint128_t product = uint128_t{a} * b;
-
-    const uint64_t lo = static_cast<uint64_t>(product);
-    const uint64_t hi = static_cast<uint64_t>(product >> 64);
-    return {hi, lo};
-#elif defined(_MSC_VER) && defined(_M_X64)
-    uint64_t hi;
-    uint64_t lo = _umul128(a, b, &hi);
-    return {hi, lo};
-#else
-    const uint64_t b00 = uint64_t{Lo32(a)} * Lo32(b);
-    const uint64_t b01 = uint64_t{Lo32(a)} * Hi32(b);
-    const uint64_t b10 = uint64_t{Hi32(a)} * Lo32(b);
-    const uint64_t b11 = uint64_t{Hi32(a)} * Hi32(b);
-
-    const uint64_t mid1 = b10 + Hi32(b00);
-    const uint64_t mid2 = b01 + Lo32(mid1);
-
-    const uint64_t hi = b11 + Hi32(mid1) + Hi32(mid2);
-    const uint64_t lo = Load64(Lo32(b00), Lo32(mid2));
-    return {hi, lo};
-#endif
-}
-
-inline uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int n)
-{
-    // For the __shiftright128 intrinsic, the shift value is always modulo 64.
-    // In the current implementation of the double-precision version of Ryu, the
-    // shift value is always < 64.
-    // Check this here in case a future change requires larger shift values. In
-    // this case this function needs to be adjusted.
-    RYU_ASSERT(n >= 57);
-    RYU_ASSERT(n <= 63);
-
-#if defined(__SIZEOF_INT128__)
-    __extension__ using uint128_t = unsigned __int128;
-
-    const int shift = n & 63;
-    return static_cast<uint64_t>(((uint128_t{hi} << 64) | lo) >> shift);
-#elif defined(_MSC_VER) && defined(_M_X64)
-    return __shiftright128(lo, hi, static_cast<unsigned char>(n));
-#else
-    const int lshift = -n & 63;
-    const int rshift =  n & 63;
-    return (hi << lshift) | (lo >> rshift);
-#endif
-}
 
 inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 {
-#if defined(__SIZEOF_INT128__)
     __extension__ using uint128_t = unsigned __int128;
 
     const uint128_t b0 = uint128_t{m} * mul->lo;
@@ -818,7 +766,12 @@ inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
     // a simple funnel shift.
     const int shift = j & 63;
     return static_cast<uint64_t>((b2 + (b0 >> 64)) >> shift);
+}
+
 #elif defined(_MSC_VER) && defined(_M_X64)
+
+inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
+{
     uint64_t b0_hi;
     uint64_t b0_lo = _umul128(m, mul->lo, &b0_hi);
     uint64_t b2_hi;
@@ -834,7 +787,42 @@ inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
     // For the __shiftright128 intrinsic, the shift value is always modulo 64.
     // Since (j - 64) % 64 = j, we can simply use j here.
     return __shiftright128(b2_lo, b2_hi, static_cast<unsigned char>(j));
+}
+
 #else
+
+inline Uint64x2 Mul128(uint64_t a, uint64_t b)
+{
+    const uint64_t b00 = uint64_t{Lo32(a)} * Lo32(b);
+    const uint64_t b01 = uint64_t{Lo32(a)} * Hi32(b);
+    const uint64_t b10 = uint64_t{Hi32(a)} * Lo32(b);
+    const uint64_t b11 = uint64_t{Hi32(a)} * Hi32(b);
+
+    const uint64_t mid1 = b10 + Hi32(b00);
+    const uint64_t mid2 = b01 + Lo32(mid1);
+
+    const uint64_t hi = b11 + Hi32(mid1) + Hi32(mid2);
+    const uint64_t lo = Load64(Lo32(b00), Lo32(mid2));
+    return {hi, lo};
+}
+
+inline uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int n)
+{
+    // For the __shiftright128 intrinsic, the shift value is always modulo 64.
+    // In the current implementation of the double-precision version of Ryu, the
+    // shift value is always < 64.
+    // Check this here in case a future change requires larger shift values. In
+    // this case this function needs to be adjusted.
+    RYU_ASSERT(n >= 57);
+    RYU_ASSERT(n <= 63);
+
+    const int lshift = -n & 63;
+    const int rshift =  n & 63;
+    return (hi << lshift) | (lo >> rshift);
+}
+
+inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
+{
     auto b0 = Mul128(m, mul->lo);
     auto b2 = Mul128(m, mul->hi);
 
@@ -844,8 +832,9 @@ inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 
     const int shift = j & 63;
     return ShiftRight128(b2.lo, b2.hi, shift);
-#endif
 }
+
+#endif
 
 inline void MulPow5DivPow2_Double(uint64_t mv, uint64_t mp, uint64_t mm, int e5, int e2, uint64_t& vr, uint64_t& vp, uint64_t& vm)
 {
