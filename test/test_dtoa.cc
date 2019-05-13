@@ -372,6 +372,9 @@ TEST_CASE("Single - Boundaries")
         CheckSingle(MakeSingle(0, e,   0x00000000));
         CheckSingle(MakeSingle(0, e,   0x00000001));
         CheckSingle(MakeSingle(0, e,   0x00000002));
+        CheckSingle(MakeSingle(0, e,   0x002AAAAA));
+        CheckSingle(MakeSingle(0, e,   0x00555555));
+        CheckSingle(MakeSingle(0, e,   0x00400000));
     }
 }
 
@@ -413,6 +416,39 @@ TEST_CASE("Single - Paxson, Kahan")
 TEST_CASE("Single - Regression")
 {
     CheckSingle(7.0385307e-26f);
+
+    CheckSingle(ReinterpretBits<float>(0x4C000009)); // 33554468.0f
+    CheckSingle(ReinterpretBits<float>(0x4C800009)); // 67108936.0f
+    CheckSingle(ReinterpretBits<float>(0x4D00001D)); // 134218190.0f
+    CheckSingle(ReinterpretBits<float>(0x4D80001D)); // 268436380.0f
+    CheckSingle(ReinterpretBits<float>(0x4E00001D)); // 536872770.0f
+    CheckSingle(ReinterpretBits<float>(0x4E80004F)); // 1073751900.0f
+    CheckSingle(ReinterpretBits<float>(0x4F00004F)); // 2147503900.0f
+    CheckSingle(ReinterpretBits<float>(0x4F80004F)); // 4295007700.0f
+    CheckSingle(ReinterpretBits<float>(0x50000437)); // 8591039000.0f
+    CheckSingle(ReinterpretBits<float>(0x50800437)); // 17182079000.0f
+    CheckSingle(ReinterpretBits<float>(0x51000437)); // 34364158000.0f
+    CheckSingle(ReinterpretBits<float>(0x51800437)); // 68728316000.0f
+    CheckSingle(ReinterpretBits<float>(0x52000DFB)); // 137497590000.0f
+    CheckSingle(ReinterpretBits<float>(0x52800DFB)); // 274995180000.0f
+    CheckSingle(ReinterpretBits<float>(0x53000DFB)); // 549990370000.0f
+    CheckSingle(ReinterpretBits<float>(0x53802665)); // 1100799900000.0f
+    CheckSingle(ReinterpretBits<float>(0x54002665)); // 2201599900000.0f
+    CheckSingle(ReinterpretBits<float>(0x54802665)); // 4403199700000.0f
+    CheckSingle(ReinterpretBits<float>(0x55002665)); // 8806399000000.0f
+    CheckSingle(ReinterpretBits<float>(0x55802665)); // 17612799000000.0f
+    CheckSingle(ReinterpretBits<float>(0x56002665)); // 35225598000000.0f
+    CheckSingle(ReinterpretBits<float>(0x56802665)); // 70451196000000.0f
+    CheckSingle(ReinterpretBits<float>(0x57002665)); // 140902390000000.0f
+    CheckSingle(ReinterpretBits<float>(0x57802665)); // 281804780000000.0f
+    CheckSingle(ReinterpretBits<float>(0x58002665)); // 563609570000000.0f
+    CheckSingle(ReinterpretBits<float>(0x58A3E9AB)); // 1441791900000000.0f
+    CheckSingle(ReinterpretBits<float>(0x5923E9AB)); // 2883583900000000.0f
+    CheckSingle(ReinterpretBits<float>(0x59A3E9AB)); // 5767167700000000.0f
+    CheckSingle(ReinterpretBits<float>(0x5A5F8475)); // 15728639000000000.0f
+    CheckSingle(ReinterpretBits<float>(0x5ADF8475)); // 31457279000000000.0f
+    CheckSingle(ReinterpretBits<float>(0x5B5F8475)); // 62914558000000000.0f
+    CheckSingle(ReinterpretBits<float>(0x5BDF8475)); // 125829116000000000.0f
 }
 
 TEST_CASE("Double")
@@ -443,6 +479,10 @@ TEST_CASE("Double - Boundaries")
         CheckDouble(MakeDouble(0, e,   0x0000000000000000));
         CheckDouble(MakeDouble(0, e,   0x0000000000000001));
         CheckDouble(MakeDouble(0, e,   0x0000000000000002));
+        CheckDouble(MakeDouble(0, e,   0x0005555555555555));
+        CheckDouble(MakeDouble(0, e,   0x000AAAAAAAAAAAAA));
+        CheckDouble(MakeDouble(0, e,   0x0008000000000000));
+        CheckDouble(MakeDouble(0, e,   0x000878678326EAC9));
     }
 }
 
@@ -553,4 +593,17 @@ TEST_CASE("Double - Integers")
     CheckDoubleString(1000000000000000.0, "1000000000000000");
     CheckDoubleString(9007199254740000.0, "9007199254740000");
     CheckDoubleString(9007199254740992.0, "9007199254740992");
+}
+
+TEST_CASE("Double - Looks like pow5")
+{
+    // From
+    // https://github.com/ulfjack/ryu/blob/master/ryu/tests/d2s_test.cc
+
+    // These numbers have a mantissa that is a multiple of the largest power of 5 that fits,
+    // and an exponent that causes the computation for q to result in 22, which is a corner
+    // case for Ryu.
+    CheckDouble(ReinterpretBits<double>(0x4830F0CF064DD592));
+    CheckDouble(ReinterpretBits<double>(0x4840F0CF064DD592));
+    CheckDouble(ReinterpretBits<double>(0x4850F0CF064DD592));
 }
