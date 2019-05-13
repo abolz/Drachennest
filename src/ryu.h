@@ -877,9 +877,8 @@ inline bool MultipleOfPow5(uint64_t value, int e5)
 // Returns whether value is divisible by 2^e2
 inline bool MultipleOfPow2(uint64_t value, int e2)
 {
-    // value has at most 55 bits.
     RYU_ASSERT(e2 >= 0);
-    RYU_ASSERT(e2 <= 55);
+    RYU_ASSERT(e2 <= 63);
 
     //return (value << (64 - e2)) == 0;
     return (value & ((uint64_t{1} << e2) - 1)) == 0;
@@ -1295,9 +1294,8 @@ inline bool MultipleOfPow5(uint32_t value, int e5)
 // Returns whether value is divisible by 2^e2
 inline bool MultipleOfPow2(uint32_t value, int e2)
 {
-    // value has at most 26 bits.
     RYU_ASSERT(e2 >= 0);
-    RYU_ASSERT(e2 <= 26);
+    RYU_ASSERT(e2 <= 31);
 
 //  return (value << (32 - e2)) == 0;
     return (value & ((uint32_t{1} << e2) - 1)) == 0;
