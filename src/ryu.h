@@ -912,8 +912,8 @@ inline ToDecimalResult<double> ToDecimal(double value)
         // x = m * 2^e is a normalized floating-point number.
         uint64_t m = ieee_mantissa | Double::HiddenBit;
         int      e = static_cast<int>(ieee_exponent) - Double::ExponentBias;
-        DTOA_ASSERT(-e >= 0);
-        DTOA_ASSERT(-e < Double::SignificandSize);
+        RYU_ASSERT(-e >= 0);
+        RYU_ASSERT(-e < Double::SignificandSize);
 
         // Test whether the lower -e bits are 0, i.e.
         // whether the fractional part of value is 0.
@@ -1330,8 +1330,8 @@ inline ToDecimalResult<float> ToDecimal(float value)
         // x = m * 2^e is a normalized floating-point number.
         uint32_t m = ieee_mantissa | Single::HiddenBit;
         int      e = static_cast<int>(ieee_exponent) - Single::ExponentBias;
-        DTOA_ASSERT(-e >= 0);
-        DTOA_ASSERT(-e < Single::SignificandSize);
+        RYU_ASSERT(-e >= 0);
+        RYU_ASSERT(-e < Single::SignificandSize);
 
         // Test whether the lower -e bits are 0, i.e.
         // whether the fractional part of value is 0.
