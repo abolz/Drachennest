@@ -482,6 +482,7 @@ TEST_CASE("Double - Boundaries")
         CheckDouble(MakeDouble(0, e,   0x0005555555555555));
         CheckDouble(MakeDouble(0, e,   0x000AAAAAAAAAAAAA));
         CheckDouble(MakeDouble(0, e,   0x0008000000000000));
+        CheckDouble(MakeDouble(0, e,   0x000878678326EAC9));
     }
 }
 
@@ -592,4 +593,17 @@ TEST_CASE("Double - Integers")
     CheckDoubleString(1000000000000000.0, "1000000000000000");
     CheckDoubleString(9007199254740000.0, "9007199254740000");
     CheckDoubleString(9007199254740992.0, "9007199254740992");
+}
+
+TEST_CASE("Double - Looks like pow5")
+{
+    // From
+    // https://github.com/ulfjack/ryu/blob/master/ryu/tests/d2s_test.cc
+
+    // These numbers have a mantissa that is a multiple of the largest power of 5 that fits,
+    // and an exponent that causes the computation for q to result in 22, which is a corner
+    // case for Ryu.
+    CheckDouble(ReinterpretBits<double>(0x4830F0CF064DD592));
+    CheckDouble(ReinterpretBits<double>(0x4840F0CF064DD592));
+    CheckDouble(ReinterpretBits<double>(0x4850F0CF064DD592));
 }
