@@ -466,8 +466,8 @@ inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent
     // NB:
     // These are the values used by JavaScript's ToString applied to Number
     // type. Printf uses the values -4 and max_digits10 resp. (sort of).
-    constexpr int MinExp = -6;
-    constexpr int MaxExp = 21;
+    constexpr int MinExp = -6; // -4;
+    constexpr int MaxExp = 21; //  6;
 
     const bool use_fixed = MinExp < decimal_point && decimal_point <= MaxExp;
 

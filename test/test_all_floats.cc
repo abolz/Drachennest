@@ -5,9 +5,9 @@
 
 #include "double-conversion/double-conversion.h"
 
-#include "../src/grisu2.h"
+// #include "../src/grisu2.h"
 // #include "../src/grisu3.h"
-// #include "../src/ryu.h"
+#include "../src/ryu.h"
 // #include "../lib/floaxie.h"
 
 #include "scan_number.h"
@@ -30,8 +30,11 @@ int main()
 {
     constexpr int P = 24;
     constexpr uint32_t MaxF = (1u << (P - 1)) - 1;
-    constexpr int MinExp = 0;
-    constexpr int MaxExp = 255 - 1;
+    //constexpr int ExpBias     = std::numeric_limits<float>::max_exponent - 1 + (P - 1);
+    //constexpr int MaxExponent = std::numeric_limits<float>::max_exponent - 1 - (P - 1);
+    //constexpr int MinExponent = std::numeric_limits<float>::min_exponent - 1 - (P - 1);
+    constexpr int MinExp = 0;       // -40 + 2 + ExpBias;
+    constexpr int MaxExp = 255 - 1; //  -5 + 2 + ExpBias;
 
     uint32_t num_checked = 0;
     uint32_t num_optimal = 0;
@@ -55,9 +58,9 @@ int main()
             const float value = FloatFromBits(bits);
 
             char buf[256];
-            char* end = grisu2::ToChars(buf, value);
+            // char* end = grisu2::ToChars(buf, value);
             // char* end = grisu3::ToChars(buf, value);
-            // char* end = ryu::ToChars(buf, value);
+            char* end = ryu::ToChars(buf, value);
             // char* end = jkj_Ftoa(buf, 256, value);
             // char* end = floaxie_Ftoa(buf, 256, value);
             end[0] = '\0';
@@ -106,6 +109,11 @@ int main()
                 {
                     ++curr_num_optimal;
                 }
+                //else
+                //{
+                //    printf("\nNOT optimal: 0x%08X [actual = %s] [expected = %s]\n", bits, buf, tmp);
+                //    break;
+                //}
             }
         }
 

@@ -3,9 +3,9 @@
 #include <assert.h>
 #include <random>
 
-#include "../src/grisu2.h"
+// #include "../src/grisu2.h"
 // #include "../src/grisu3.h"
-// #include "../src/ryu.h"
+#include "../src/ryu.h"
 // #include "../lib/floaxie.h"
 // #include "../lib/fmt.h"
 
@@ -61,9 +61,9 @@ int main()
             const double value = FloatFromBits(bits);
 
             char buf[32];
-            char* end = grisu2::ToChars(buf, value);
+            // char* end = grisu2::ToChars(buf, value);
             // char* end = grisu3::ToChars(buf, value);
-            // char* end = ryu::ToChars(buf, value);
+            char* end = ryu::ToChars(buf, value);
             // char* end = floaxie_Dtoa(buf, 32, value);
             // char* end = fmt_Dtoa(buf, 32, value);
             end[0] = '\0';
@@ -111,6 +111,11 @@ int main()
                 {
                     ++curr_num_optimal;
                 }
+                //else
+                //{
+                //    printf("\nNOT optimal: 0x%016llX [actual = %s] [expected = %s]\n", bits, buf, tmp);
+                //    continue;
+                //}
             }
         }
 
