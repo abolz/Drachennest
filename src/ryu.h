@@ -840,7 +840,7 @@ inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 
 #endif
 
-inline void MulPow5DivPow2_Double(uint64_t mv, uint64_t mp, uint64_t mm, int e5, int e2, uint64_t& vr, uint64_t& vp, uint64_t& vm)
+inline void MulPow5DivPow2_Double(uint64_t mm, uint64_t mr, uint64_t mp, int e5, int e2, uint64_t& vm, uint64_t& vr, uint64_t& vp)
 {
     // j >= 121 and m has at most 53 + 2 = 55 bits.
     // The product along with the subsequent shift therefore requires
@@ -853,9 +853,9 @@ inline void MulPow5DivPow2_Double(uint64_t mv, uint64_t mp, uint64_t mm, int e5,
 
     const auto pow5 = ComputePow5_Double(e5);
 
-    vr = MulShift(mv, &pow5, j);
-    vp = MulShift(mp, &pow5, j);
     vm = MulShift(mm, &pow5, j);
+    vr = MulShift(mr, &pow5, j);
+    vp = MulShift(mp, &pow5, j);
 }
 
 // Returns whether value is divisible by 5^e5
@@ -960,9 +960,9 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
     // We subtract 2 so that the bounds computation has 2 additional bits.
     e2 -= 2;
-    const uint64_t mv = 4 * m2;
-    const uint64_t mp = mv + 2;
-    const uint64_t mm = mv - 1 - mm_shift;
+    const uint64_t mm = 4 * m2 - 1 - mm_shift;
+    const uint64_t mr = 4 * m2;
+    const uint64_t mp = 4 * m2 + 2;
 
     //
     // Step 3:
@@ -986,12 +986,13 @@ inline ToDecimalResult<double> ToDecimal(double value)
         // 23 = floor(log_5(2^(53+2)))
         if (q <= 22)
         {
-            // This should use q <= 22, but I think 21 is also safe. Smaller values
-            // may still be safe, but it's more difficult to reason about them.
-            // Only one of mp, mv, and mm can be a multiple of 5, if any.
-            if (mv % 5 == 0)
+            // NB:
+            // q <= 22 implies e2 <= 79.
+
+            // Only one of mm, mr, and mp can be a multiple of 5, if any.
+            if (mr % 5 == 0)
             {
-                vr_has_trailing_zeros = MultipleOfPow5(mv, q);
+                vr_has_trailing_zeros = MultipleOfPow5(mr, q);
             }
             else if (accept_bounds)
             {
@@ -1016,49 +1017,51 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
         if (q <= 1)
         {
-            // {vr,vp,vm} is trailing zeros if {mv,mp,mm} has at least q trailing 0 bits.
-            // mv = 4 * m2, so it always has at least two trailing 0 bits.
+            // NB:
+            // q <= 1 implies -4 <= e2 <= -1.
+
+            // {vm,vr,vp} is trailing zeros if {mm,mr,mp} has at least q trailing 0 bits.
+            // mr = 4 * m2, so it always has at least two trailing 0 bits.
             vr_has_trailing_zeros = true;
 
             if (accept_bounds)
             {
-                // mm = mv - 1 - mm_shift, so it has 1 trailing 0 bit iff mm_shift == 1.
+                // mm = mr - 1 - mm_shift, so it has 1 trailing 0 bit iff mm_shift == 1.
                 vm_has_trailing_zeros = (mm_shift == 1);
             }
             else
             {
-                // mp = mv + 2, so it always has at least one trailing 0 bit.
+                // mp = mr + 2, so it always has at least one trailing 0 bit.
                 vp_has_trailing_zeros = true;
             }
         }
         else if (q <= Double::SignificandSize + 2)
         {
-            // TODO(ulfjack): Use a tighter bound here.
+            // NB:
+            // 2 <= q <= 55 implies -81 <= e2 <= -5
 
-            // We need to compute min(ntz(mv), Pow5Factor(mv) - e2) >= q-1
-            // <=> ntz(mv) >= q-1  &&  Pow5Factor(mv) - e2 >= q-1
-            // <=> ntz(mv) >= q-1
-            // <=> mv & ((1 << (q-1)) - 1) == 0
-            // We also need to make sure that the left shift does not overflow.
-            vr_has_trailing_zeros = MultipleOfPow2(mv, q - 1);
+            // We need to compute min(ntz(mr), Pow5Factor(mr) - e2) >= q-1
+            // <=> ntz(mr) >= q-1  &&  Pow5Factor(mr) - e2 >= q-1
+            // <=> ntz(mr) >= q-1
+            vr_has_trailing_zeros = MultipleOfPow2(mr, q - 1);
 
             // XXX:
             // vr_prev_has_trailing_zeros
         }
     }
 
-    // (vr, vp, vm) = (mv, mp, mm) * 2^e2 * 10^(-e10) = (mv, mp, mm) * 5^(-e10) / 2^(e10 - e2)
+    // (vm, vr, vp) = (mm, mr, mp) * 2^e2 * 10^(-e10) = (mm, mr, mp) * 5^(-e10) / 2^(e10 - e2)
     uint64_t vm;
     uint64_t vr;
     uint64_t vp;
-    MulPow5DivPow2_Double(mv, mp, mm, -e10, e10 - e2, vr, vp, vm);
+    MulPow5DivPow2_Double(mm, mr, mp, -e10, e10 - e2, vm, vr, vp);
 
     //
     // Step 4:
     // Find the shortest decimal representation in the interval of legal representations.
     //
 
-	vp -= vp_has_trailing_zeros;
+    vp -= vp_has_trailing_zeros;
 
     uint64_t output;
     if (vm_has_trailing_zeros || vr_has_trailing_zeros)
@@ -1257,7 +1260,7 @@ inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
     return shifted_sum;
 }
 
-inline void MulPow5DivPow2_Single(uint32_t mv, uint32_t mp, uint32_t mm, int e5, int e2, uint64_t& vr, uint64_t& vp, uint64_t& vm)
+inline void MulPow5DivPow2_Single(uint32_t mm, uint32_t mr, uint32_t mp, int e5, int e2, uint64_t& vm, uint64_t& vr, uint64_t& vp)
 {
     // j >= 57 and m has at most 24 + 2 = 26 bits.
     // The product along with the subsequent shift therefore requires
@@ -1270,9 +1273,9 @@ inline void MulPow5DivPow2_Single(uint32_t mv, uint32_t mp, uint32_t mm, int e5,
 
     const auto pow5 = ComputePow5_Single(e5);
 
-    vr = MulShift(mv, pow5, j);
-    vp = MulShift(mp, pow5, j);
     vm = MulShift(mm, pow5, j);
+    vr = MulShift(mr, pow5, j);
+    vp = MulShift(mp, pow5, j);
 }
 
 // Returns whether value is divisible by 5^e5
@@ -1377,9 +1380,9 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
     // We subtract 2 so that the bounds computation has 2 additional bits.
     e2 -= 2;
-    const uint32_t mv = 4 * m2;
-    const uint32_t mp = mv + 2;
-    const uint32_t mm = mv - 1 - mm_shift;
+    const uint32_t mm = 4 * m2 - 1 - mm_shift;
+    const uint32_t mr = 4 * m2;
+    const uint32_t mp = 4 * m2 + 2;
 
     //
     // Step 3:
@@ -1403,11 +1406,13 @@ inline ToDecimalResult<float> ToDecimal(float value)
         // 11 = floor(log_5(2^(24+2)))
         if (q <= 10)
         {
-            // The largest power of 5 that fits in 24 bits is 5^10, but q <= 9 seems to be safe as well.
-            // Only one of mp, mv, and mm can be a multiple of 5, if any.
-            if (mv % 5 == 0)
+            // NB:
+            // q <= 10 implies e2 <= 39.
+
+            // Only one of mm, mr, and mp can be a multiple of 5, if any.
+            if (mr % 5 == 0)
             {
-                vr_has_trailing_zeros = MultipleOfPow5(mv, q);
+                vr_has_trailing_zeros = MultipleOfPow5(mr, q);
             }
             else if (accept_bounds)
             {
@@ -1432,40 +1437,44 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
         if (q <= 1)
         {
-            // {vr,vp,vm} is trailing zeros if {mv,mp,mm} has at least q trailing 0 bits.
-            // mv = 4 * m2, so it always has at least two trailing 0 bits.
+            // NB:
+            // q <= 1 implies -4 <= e2 <= -1.
+
+            // {vm,vr,vp} is trailing zeros if {mm,mr,mp} has at least q trailing 0 bits.
+            // mr = 4 * m2, so it always has at least two trailing 0 bits.
             vr_has_trailing_zeros = true;
 
             if (accept_bounds)
             {
-                // mm = mv - 1 - mm_shift, so it has 1 trailing 0 bit iff mm_shift == 1.
+                // mm = mr - 1 - mm_shift, so it has 1 trailing 0 bit iff mm_shift == 1.
                 vm_has_trailing_zeros = (mm_shift == 1);
             }
             else
             {
-                // mp = mv + 2, so it always has at least one trailing 0 bit.
+                // mp = mr + 2, so it always has at least one trailing 0 bit.
                 vp_has_trailing_zeros = true;
             }
         }
         else if (q <= Single::SignificandSize + 2)
         {
-            // We need to compute min(ntz(mv), Pow5Factor(mv) - e2) >= q-1
-            // <=> ntz(mv) >= q-1  &&  Pow5Factor(mv) - e2 >= q-1
-            // <=> ntz(mv) >= q-1
-            // <=> mv & ((1 << (q-1)) - 1) == 0
-            // We also need to make sure that the left shift does not overflow.
-            vr_has_trailing_zeros = MultipleOfPow2(mv, q - 1);
+            // NB:
+            // 2 <= q <= 26 implies -40 <= e2 <= -5.
+
+            // We need to compute min(ntz(mr), Pow5Factor(mr) - e2) >= q-1
+            // <=> ntz(mr) >= q-1  &&  Pow5Factor(mr) - e2 >= q-1
+            // <=> ntz(mr) >= q-1
+            vr_has_trailing_zeros = MultipleOfPow2(mr, q - 1);
 
             // XXX:
             // vr_prev_has_trailing_zeros
         }
     }
 
-    // (vr, vp, vm) = (mv, mp, mm) * 2^e2 * 10^(-e10) = (mv, mp, mm) * 5^(-e10) / 2^(e10 - e2)
+    // (vm, vr, vp) = (mm, mr, mp) * 2^e2 * 10^(-e10) = (mm, mr, mp) * 5^(-e10) / 2^(e10 - e2)
+    uint64_t vm;
     uint64_t vr;
     uint64_t vp;
-    uint64_t vm;
-    MulPow5DivPow2_Single(mv, mp, mm, -e10, e10 - e2, vr, vp, vm);
+    MulPow5DivPow2_Single(mm, mr, mp, -e10, e10 - e2, vm, vr, vp);
 
     //
     // Step 4:
