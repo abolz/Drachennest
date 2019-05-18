@@ -27,12 +27,23 @@ static inline uint64_t BitsFromFloat(double f)
     return u;
 }
 
+//static inline uint64_t next_permutation(uint64_t v)
+//{
+//    assert(v != 0);
+//    uint64_t t = (v | (v - 1)) + 1;
+//    return t | ((((t & -t) / (v & -v)) >> 1) - 1);
+//}
+
 int main()
 {
     constexpr int P = 53;
     constexpr uint64_t MaxF = (1ull << (P - 1)) - 1;
-    constexpr int MinExp = 0;
-    constexpr int MaxExp = 2047 - 1;
+    //constexpr int ExpBias     = std::numeric_limits<double>::max_exponent - 1 + (P - 1);
+    //constexpr int MaxExponent = std::numeric_limits<double>::max_exponent - 1 - (P - 1);
+    //constexpr int MinExponent = std::numeric_limits<double>::min_exponent - 1 - (P - 1);
+    constexpr int MinExp = 0; // 65; // -81 + ExpBias + 2; // -81 + ExpBias + 2; // 0;
+    constexpr int MaxExp = 2048 - 1; // 79; // -5 + ExpBias + 2; // 2047 - 1;
+
     constexpr int NumSignificandsPerExponent = 1 << 15;
 
     std::mt19937 random;
@@ -49,6 +60,7 @@ int main()
 
         printf("e = %4d ... ", e);
 
+        //uint64_t bits = 0x01;
         bool fail = false;
         for (int i = 0; i < NumSignificandsPerExponent; ++i)
         {
@@ -57,6 +69,7 @@ int main()
             std::uniform_int_distribution<uint64_t> gen(0, MaxF);
             const uint64_t f = gen(random);
 
+            //bits = next_permutation(bits);
             const uint64_t bits = (static_cast<uint64_t>(e) << (P - 1)) | f;
             const double value = FloatFromBits(bits);
 
@@ -81,6 +94,7 @@ int main()
                 conv.ToShortest(value, &builder);
                 builder.Finalize();
                 printf("\nFAIL: 0x%016llX [actual = %s] [expected = %s]\n", bits, buf, tmp);
+                //printf("\nCheckDoubleBits(0x%016llX, \"%s\");", bits, tmp);
                 fail = true;
                 break;
                 // return -1;
@@ -104,26 +118,31 @@ int main()
                 }
                 else
                 {
-                    // printf("\nnum1 = %17s * 10^%d\n", num1.digits.c_str(), num1.exponent);
-                    // printf("\nnum2 = %17s * 10^%d\n", num2.digits.c_str(), num2.exponent);
+                    //printf("\nNOT short: 0x%016llX [actual = %s] [expected = %s]\n", bits, buf, tmp);
+                    //printf("\nCheckDoubleBits(0x%016llX, \"%s\");", bits, tmp);
+                    //break;
                 }
                 if (num1.digits == num2.digits)
                 {
                     ++curr_num_optimal;
                 }
-                //else
-                //{
-                //    printf("\nNOT optimal: 0x%016llX [actual = %s] [expected = %s]\n", bits, buf, tmp);
-                //    continue;
-                //}
+                else
+                {
+                   //printf("\nNOT optimal: 0x%016llX [actual = %s] [expected = %s]\n", bits, buf, tmp);
+                   //printf("\nCheckDoubleBits(0x%016llX, \"%s\");", bits, tmp);
+                   //break;
+                }
             }
         }
 
         if (!fail)
         {
             const uint32_t curr_not_short = curr_num_checked - curr_num_short;
-            printf("optimal: %7.2f%%, not short: %7.2f%% (%u)\n",
-                100.0 * (double)curr_num_optimal / (double)curr_num_checked,
+            const uint32_t curr_not_optimal = curr_num_checked - curr_num_optimal;
+
+            printf("not optimal: %7.2f%% (%10u), not short: %7.2f%% (%10u)\n",
+                100.0 * (double)curr_not_optimal / (double)curr_num_checked,
+                curr_not_optimal,
                 100.0 * (double)curr_not_short / (double)curr_num_checked,
                 curr_not_short);
         }

@@ -120,8 +120,11 @@ int main()
         if (!fail)
         {
             const uint32_t curr_not_short = curr_num_checked - curr_num_short;
-            printf("optimal: %7.2f%%, not short: %7.2f%% (%u)\n",
-                100.0 * (double)curr_num_optimal / (double)curr_num_checked,
+            const uint32_t curr_not_optimal = curr_num_checked - curr_num_optimal;
+
+            printf("not optimal: %7.2f%% (%10u), not short: %7.2f%% (%10u)\n",
+                100.0 * (double)curr_not_optimal / (double)curr_num_checked,
+                curr_not_optimal,
                 100.0 * (double)curr_not_short / (double)curr_num_checked,
                 curr_not_short);
         }
