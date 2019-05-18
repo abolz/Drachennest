@@ -840,7 +840,7 @@ inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 
 #endif
 
-inline void MulPow5DivPow2_Double(uint64_t mm, uint64_t mr, uint64_t mp, int e5, int e2, uint64_t& vm, uint64_t& vr, uint64_t& vp)
+inline void MulPow5DivPow2_Double(uint64_t u, uint64_t v, uint64_t w, int e5, int e2, uint64_t& a, uint64_t& b, uint64_t& c)
 {
     // j >= 121 and m has at most 53 + 2 = 55 bits.
     // The product along with the subsequent shift therefore requires
@@ -853,9 +853,9 @@ inline void MulPow5DivPow2_Double(uint64_t mm, uint64_t mr, uint64_t mp, int e5,
 
     const auto pow5 = ComputePow5_Double(e5);
 
-    vm = MulShift(mm, &pow5, j);
-    vr = MulShift(mr, &pow5, j);
-    vp = MulShift(mp, &pow5, j);
+    a = MulShift(u, &pow5, j);
+    b = MulShift(v, &pow5, j);
+    c = MulShift(w, &pow5, j);
 }
 
 // Returns whether value is divisible by 5^e5
@@ -949,198 +949,324 @@ inline ToDecimalResult<double> ToDecimal(double value)
     }
 
     const bool is_even = (m2 & 1) == 0;
-    const bool accept_bounds = is_even;
+    const bool accept_bounds = is_even; // == accept_lower == accept_upper
 
     //
     // Step 2:
-    // Determine the interval of legal decimal representations.
+    // Determine the interval of valid decimal representations.
     //
 
-    const uint32_t mm_shift = (ieee_mantissa != 0 || ieee_exponent <= 1) ? 1 : 0;
+    const uint32_t lower_boundary_is_closer = (ieee_mantissa == 0 && ieee_exponent > 1);
 
     // We subtract 2 so that the bounds computation has 2 additional bits.
     e2 -= 2;
-    const uint64_t mm = 4 * m2 - 1 - mm_shift;
-    const uint64_t mr = 4 * m2;
-    const uint64_t mp = 4 * m2 + 2;
+    const uint64_t u = 4 * m2 - 2 + lower_boundary_is_closer;
+    const uint64_t v = 4 * m2;
+    const uint64_t w = 4 * m2 + 2;
 
     //
     // Step 3:
-    // Convert to a decimal power base using 128-bit arithmetic.
+    // Convert to a decimal power base.
     //
 
     int e10;
 
-    bool vm_has_trailing_zeros = false;
-    bool vr_has_trailing_zeros = false;
-    bool vp_has_trailing_zeros = false;
+    bool za = false; // a[0, ..., i-1] == 0
+    bool zb = false; // b[0, ..., i-1] == 0
+    bool zc = false; // c[0, ..., i-1] == 0
+    // We only need to know za iff accept_lower == true.
+    // We only need to know zc iff accept_upper == false.
+    // Since accept_lower == accept_upper == accept_bounds, we only need to know
+    // one or the other.
 
     if (e2 >= 0)
     {
-        // q = max(0, log_10(2^e2) - 1)
-        const int q = FloorLog10Pow2(e2) - (e2 > 3); // exponent <= 0
+        // We need
+        //  (a,b,c) = (u,v,w) * 2^e2
+        // and we need to remove at least q' = log_10(2^e2) digits from the
+        // scaled values a,b,c, i.e. we want to compute
+        //  (a,b,c) = (u,v,w) * 2^e2 / 10^(q')
+        //          = (u,v,w) * 2^e2 / 10^(e10)
+        //          = (u,v,w) * 5^(-e10) / 2^(e10 - e2)
+        //
+        // However, to correctly round the result we need to know the value of
+        // the last removed digit. We therefore remove only q = q' - 1 digits in
+        // the first step and make sure that we execute the loop below at least
+        // once and determine the correct value of the last removed digit.
+
+        const int q_prime = FloorLog10Pow2(e2);
+        const int q = q_prime - (e2 > 3); // == max(0, q' - 1)
         RYU_ASSERT(q >= 0);
+
         e10 = q;
+        RYU_ASSERT(e10 >= 0);
+        RYU_ASSERT(e10 - e2 <= 0);
 
-        // 22 = floor(log_5(2^53))
-        // 23 = floor(log_5(2^(53+2)))
-        if (q <= 22)
+        // Determine whether all the removed digits are 0.
+        //
+        // Z(x,e2,q) = (x * 2^e2) % 10^q == 0
+        //           = p10(x * 2^e2) >= q
+        //           = min(p2(x) + p2(e2), p5(x)) >= q
+        //           = p2(x) + e2 >= q and p5(x) >= q
+        //           = p5(x) >= q
+        //           = x % 5^q == 0
+#if 0
+        zb = MultipleOfPow5(v, q);
+        if (accept_bounds)
+            za = MultipleOfPow5(u, q);
+        else
+            zc = MultipleOfPow5(w, q);
+#else
+        if (q <= 22) // 22 = floor(log_5(2^53))
         {
-            // NB:
-            // q <= 22 implies e2 <= 79.
+            // NB: q <= 22 implies e2 <= 79.
+            // NB: Since w - u <= 4, only one of u, v, and w can be a multiple of 5, if any.
 
-            // Only one of mm, mr, and mp can be a multiple of 5, if any.
-            if (mr % 5 == 0)
+            if (v % 5 == 0)
             {
-                vr_has_trailing_zeros = MultipleOfPow5(mr, q);
+                zb = MultipleOfPow5(v, q);
             }
             else if (accept_bounds)
             {
-                // Same as min(e2 + (~mm & 1), Pow5Factor(mm)) >= q
-                // <=> e2 + (~mm & 1) >= q && Pow5Factor(mm) >= q
-                // <=> true && Pow5Factor(mm) >= q, since e2 >= q.
-                vm_has_trailing_zeros = MultipleOfPow5(mm, q);
+                za = MultipleOfPow5(u, q);
             }
             else
             {
-                // Same as min(e2 + 1, Pow5Factor(mp)) >= q.
-                vp_has_trailing_zeros = MultipleOfPow5(mp, q);
+                zc = MultipleOfPow5(w, q);
             }
         }
+#endif
     }
     else
     {
-        // q = max(0, log_10(5^-e2) - 1)
-        const int q = FloorLog10Pow5(-e2) - (-e2 > 1);
-        RYU_ASSERT(q >= 0);
-        e10 = q + e2;
+        // We need
+        //  (a,b,c) = (u,v,w) * 2^e2 / 10^e2
+        // and we need to remove at least q' = log_10(5^-e2) digits from the
+        // scaled values a,b,c, i.e. we want to compute
+        //  (a,b,c) = (u,v,w) * 2^e2 / 10^(e2 + q')
+        //          = (u,v,w) * 2^e2 / 10^(e10),
+        //          = (u,v,w) * 5^(-e10) / 2^(e10 - e2),
 
+        const int q_prime = FloorLog10Pow5(-e2);
+        const int q = q_prime - (-e2 > 1); // == max(0, q' - 1)
+        RYU_ASSERT(q >= 0);
+
+        e10 = e2 + q;
+        RYU_ASSERT(e10 < 0);
+        RYU_ASSERT(e10 - e2 >= 0);
+
+        // Determine whether all the removed digits are 0.
+        //
+        // Z(x,e2,q) = (x * 5^-e2) % 10^q == 0
+        //           = min(p2(x), p5(x) - e2) >= q
+        //           = p2(x) >= q and p5(x) - e2 >= q
+        //           = p2(x) >= q
+        //           = u % 2^q == 0
+#if 0
+        zb = MultipleOfPow2(v, q);
+        if (accept_bounds)
+            za = MultipleOfPow2(u, q);
+        else
+            zc = MultipleOfPow2(w, q);
+#else
         if (q <= 1)
         {
-            // NB:
-            // q <= 1 implies -4 <= e2 <= -1.
+            // NB: q <= 1 implies -4 <= e2 <= -1
 
-            // {vm,vr,vp} is trailing zeros if {mm,mr,mp} has at least q trailing 0 bits.
-            // mr = 4 * m2, so it always has at least two trailing 0 bits.
-            vr_has_trailing_zeros = true;
-
+            // v = 4 * m2 = 2^2 * m2 ==> p2(v) >= 2 >= q
+            zb = true;
             if (accept_bounds)
             {
-                // mm = mr - 1 - mm_shift, so it has 1 trailing 0 bit iff mm_shift == 1.
-                vm_has_trailing_zeros = (mm_shift == 1);
+                // if lower_boundary_is_closer == false:
+                //  u = 4 * m2 - 2 = 2 * (2*m2 - 1) ==> p2(u) = 1 >= q
+                // else:
+                //  u = 4 * m2 - 1 = 2^2 * m2 - 1 ==> p2(u) = 0 >= q iff q == 0
+                za = !lower_boundary_is_closer || q == 0;
             }
             else
             {
-                // mp = mr + 2, so it always has at least one trailing 0 bit.
-                vp_has_trailing_zeros = true;
+                // w = 4 * m2 + 2 = 2 * (2*m2 + 1) ==> p2(w) == 1 >= q
+                zc = true;
             }
         }
         else if (q <= Double::SignificandSize + 2)
         {
-            // NB:
-            // 2 <= q <= 55 implies -81 <= e2 <= -5
+            // NB: 2 <= q <= 55 implies -81 <= e2 <= -5
 
-            // We need to compute min(ntz(mr), Pow5Factor(mr) - e2) >= q-1
-            // <=> ntz(mr) >= q-1  &&  Pow5Factor(mr) - e2 >= q-1
-            // <=> ntz(mr) >= q-1
-            vr_has_trailing_zeros = MultipleOfPow2(mr, q - 1);
-
-            // XXX:
-            // vr_prev_has_trailing_zeros
+            zb = MultipleOfPow2(v, q);
+            // p2(u) <= 1 < q ==> za == false
+            // p2(w) == 1 < q ==> zc == false
         }
+#endif
     }
 
-    // (vm, vr, vp) = (mm, mr, mp) * 2^e2 * 10^(-e10) = (mm, mr, mp) * 5^(-e10) / 2^(e10 - e2)
-    uint64_t vm;
-    uint64_t vr;
-    uint64_t vp;
-    MulPow5DivPow2_Double(mm, mr, mp, -e10, e10 - e2, vm, vr, vp);
+    uint64_t a;
+    uint64_t b;
+    uint64_t c;
+    MulPow5DivPow2_Double(u, v, w, -e10, e10 - e2, a, b, c);
 
     //
     // Step 4:
-    // Find the shortest decimal representation in the interval of legal representations.
+    // Find the shortest decimal representation in the interval of valid
+    // representations.
     //
 
-    vp -= vp_has_trailing_zeros;
+    // if (!accept_bounds && zc)
+    //     --c;
+    // Since we only assign to zc iff accept_bounds == false and zc is
+    // initialized to false, we can simplify the test here.
+    c -= zc;
 
-    uint64_t output;
-    if (vm_has_trailing_zeros || vr_has_trailing_zeros)
+    if (za || zb)
     {
-        uint32_t last_removed_digit = 0;
+        // zb determines whether the last i trailing digits of b are 0:
+        // b[0, 1, ..., i-1] == 0. To properly round the result we need to know
+        // the last removed digit b[i-1] and whether b[0, 1, ..., i-2] are all
+        // 0's.
+        // We have removed q = q' - 1 digits. If q' == 0, we neccessarily have
+        // b[i-1] == 0. Otherwise we will remove at least one more digit, i.e.
+        // execute the loop at least once, and therefore determine the correct
+        // values of b[i-1] and zb_prev.
+//      RYU_ASSERT(q_prime == 0 || (a / 10 < c / 10));
+        RYU_ASSERT((e2 >= 0 ? FloorLog10Pow2(e2) : FloorLog10Pow5(-e2)) == 0 || (a / 10 < c / 10));
 
-        bool vr_prev_has_trailing_zeros = vr_has_trailing_zeros;
+#if 1
+        // The last removed digit, b[i-1]
+        uint32_t bi = 0;
+        // zb_prev determines whether the last i-1 trailing digits of b are 0:
+        // b[0, 1, ..., i-2] == 0.
+        // We'll use the value of zb_prev if and only if bi == 5 after the loops
+        // below, which can only happen if the loops are run at least once, in
+        // which case zb_prev has been initialized.
+        bool zb_prev; // = true;
 
-        while (vm / 10 < vp / 10)
+        while (a / 10 < c / 10)
         {
-            vm_has_trailing_zeros &= (vm % 10 == 0);
-            vr_prev_has_trailing_zeros &= (last_removed_digit == 0);
+            za = za && (a % 10 == 0);
 
-            last_removed_digit = static_cast<uint32_t>(vr % 10);
+            bi = static_cast<uint32_t>(b % 10);
+            zb_prev = zb;
+            zb = zb && (bi == 0);
 
-            vm /= 10;
-            vr /= 10;
-            vp /= 10;
+            a /= 10;
+            b /= 10;
+            c /= 10;
             ++e10;
         }
-
-        if (vm_has_trailing_zeros)
+//      if (accept_bounds && za)
+        if (za)
         {
-            while (vm % 10 == 0)
+            while (a % 10 == 0)
             {
-                vr_prev_has_trailing_zeros &= (last_removed_digit == 0);
+                bi = static_cast<uint32_t>(b % 10);
+                zb_prev = zb;
+                zb = zb && (bi == 0);
 
-                last_removed_digit = static_cast<uint32_t>(vr % 10);
-
-                vm /= 10;
-                vr /= 10;
-                //vp /= 10;
+                a /= 10;
+                b /= 10;
+//#ifndef NDEBUG
+                c /= 10;
+//#endif
                 ++e10;
             }
         }
 
-        bool round_up = (last_removed_digit >= 5);
-        if (last_removed_digit == 5 && vr_prev_has_trailing_zeros)
+        const bool round_down = bi < 5 || (bi == 5 && zb_prev && b % 2 == 0);
+#else
+        bool round_down = true;
+
+        while (a / 10 < c / 10)
         {
-            // Halfway case: The number ends in ...500...00.
-            round_up = (static_cast<uint32_t>(vr) % 2 != 0);
+            const uint32_t ai = static_cast<uint32_t>(a % 10);
+            const uint32_t bi = static_cast<uint32_t>(b % 10);
+            a /= 10;
+            b /= 10;
+            c /= 10;
+            ++e10;
+            round_down = bi < 5 || (bi == 5 && zb && b % 2 == 0);
+            za = za && (ai == 0);
+            zb = zb && (bi == 0);
         }
+//      if (accept_bounds && za)
+        if (za)
+        {
+            while (a % 10 == 0)
+            {
+                const uint32_t bi = static_cast<uint32_t>(b % 10);
+                a /= 10;
+                b /= 10;
+//#ifndef NDEBUG
+                c /= 10;
+//#endif
+                ++e10;
+                round_down = bi < 5 || (bi == 5 && zb && b % 2 == 0);
+                zb = zb && (bi == 0);
+            }
+        }
+#endif
 
-        // We need to take vr+1 if vr is outside bounds...
-        // or we need to round up.
-        const bool inc = (vr == vm && !(accept_bounds && vm_has_trailing_zeros)) || round_up;
+        // A return value of b is valid if and only if a != b or za == true.
+        // A return value of b + 1 is valid if and only if b + 1 <= c.
 
-        output = vr + (inc ? 1 : 0);
+//      if (a == b && !(accept_bounds && za))
+//      {
+//          RYU_ASSERT(b < c);
+//          ++b;
+//      }
+//      else if (!round_down && b < c)
+//      {
+//          ++b;
+//      }
+//      if ((a == b && !(accept_bounds && za)) || (!round_down && b < c))
+        if ((a == b && !(accept_bounds && za)) || !round_down)
+        {
+            RYU_ASSERT(b < c);
+            ++b;
+        }
     }
     else
     {
-        bool round_up = false;
+        // If the loop is never executed, bi == 0, i.e. we need to round down.
+        // Otherwise we will compute a correct value of round_down in the loop
+        // body.
+        bool round_down = true;
 
-        while (vm / 10000 < vp / 10000)
+        while (a / 10000 < c / 10000)
         {
-            round_up = (vr % 10000 >= 10000 / 2);
-            vm /= 10000;
-            vr /= 10000;
-            vp /= 10000;
+            round_down = (b % 10000 < 5000);
+            a /= 10000;
+            b /= 10000;
+            c /= 10000;
             e10 += 4;
         }
 
-        while (vm / 10 < vp / 10)
+        while (a / 10 < c / 10)
         {
-            round_up = (vr % 10 >= 10 / 2);
-            vm /= 10;
-            vr /= 10;
-            vp /= 10;
+            round_down = (b % 10 < 5);
+            a /= 10;
+            b /= 10;
+            c /= 10;
             ++e10;
         }
 
-        // We need to take vr+1 if vr is outside bounds...
-        // or we need to round up.
-        const bool inc = vr == vm || round_up;
-
-        output = vr + (inc ? 1 : 0);
+//      if (a == b)
+//      {
+//          RYU_ASSERT(b < c);
+//          ++b;
+//      }
+//      else if (!round_down && b < c)
+//      {
+//          ++b;
+//      }
+//      if (a == b || (!round_down && b < c))
+        if (a == b || !round_down)
+        {
+            RYU_ASSERT(b < c);
+            ++b;
+        }
     }
 
-    return {output, e10};
+    return {b, e10};
 }
 
 //==================================================================================================
@@ -1160,9 +1286,6 @@ inline uint64_t ComputePow5_Single(int k)
     const auto p = ComputePow5_Double(k);
     return p.hi + (k < 0);
 #else
-    // Let e = FloorLog2Pow5(k) + 1 - 64
-    // For k >= 0, stores 5^k in the form: floor( 5^k / 2^e )
-    // For k <= 0, stores 5^k in the form:  ceil(2^-e / 5^-k)
     static constexpr int MinDecExp = -29;
     static constexpr int MaxDecExp =  47;
     static constexpr uint64_t Pow5[MaxDecExp - MinDecExp + 1] = {
@@ -1253,14 +1376,26 @@ inline uint64_t ComputePow5_Single(int k)
 
 inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
 {
+//#if defined(__SIZEOF_INT128__)
+//    __extension__ using uint128_t = unsigned __int128;
+//
+//    const uint128_t p = uint128_t{mul} * m;
+//    const int shift = j & 63;
+//    return static_cast<uint64_t>(p >> shift);
+//#elif defined(_MSC_VER) && defined(_M_X64)
+//    uint64_t hi;
+//    uint64_t lo = _umul128(m, mul, &hi);
+//    return __shiftright128(lo, hi, j);
+//#else
     const uint64_t bits0 = uint64_t{m} * Lo32(mul);
     const uint64_t bits1 = uint64_t{m} * Hi32(mul);
     const uint64_t sum = bits1 + Hi32(bits0);
     const uint64_t shifted_sum = sum >> (j - 32);
     return shifted_sum;
+//#endif
 }
 
-inline void MulPow5DivPow2_Single(uint32_t mm, uint32_t mr, uint32_t mp, int e5, int e2, uint64_t& vm, uint64_t& vr, uint64_t& vp)
+inline void MulPow5DivPow2_Single(uint32_t u, uint32_t v, uint32_t w, int e5, int e2, uint64_t& a, uint64_t& b, uint64_t& c)
 {
     // j >= 57 and m has at most 24 + 2 = 26 bits.
     // The product along with the subsequent shift therefore requires
@@ -1273,12 +1408,11 @@ inline void MulPow5DivPow2_Single(uint32_t mm, uint32_t mr, uint32_t mp, int e5,
 
     const auto pow5 = ComputePow5_Single(e5);
 
-    vm = MulShift(mm, pow5, j);
-    vr = MulShift(mr, pow5, j);
-    vp = MulShift(mp, pow5, j);
+    a = MulShift(u, pow5, j);
+    b = MulShift(v, pow5, j);
+    c = MulShift(w, pow5, j);
 }
 
-// Returns whether value is divisible by 5^e5
 inline bool MultipleOfPow5(uint32_t value, int e5)
 {
     while (e5 > 0)
@@ -1294,13 +1428,11 @@ inline bool MultipleOfPow5(uint32_t value, int e5)
     return true;
 }
 
-// Returns whether value is divisible by 2^e2
 inline bool MultipleOfPow2(uint32_t value, int e2)
 {
     RYU_ASSERT(e2 >= 0);
     RYU_ASSERT(e2 <= 31);
 
-//  return (value << (32 - e2)) == 0;
     return (value & ((uint32_t{1} << e2) - 1)) == 0;
 }
 
@@ -1321,27 +1453,22 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
     const Single ieee_value(value);
 
-    // Decode bits into mantissa, and exponent.
     const uint32_t ieee_mantissa = ieee_value.PhysicalSignificand();
     const uint32_t ieee_exponent = ieee_value.PhysicalExponent();
 
 #if RYU_SMALL_INTEGER_OPTIMIZATION
     if (0x3F800000u <= ieee_value.bits && ieee_value.bits < 0x4B800000u) // 1 <= x < 2^24
     {
-        // x = m * 2^e is a normalized floating-point number.
         uint32_t m = ieee_mantissa | Single::HiddenBit;
         int      e = static_cast<int>(ieee_exponent) - Single::ExponentBias;
         RYU_ASSERT(-e >= 0);
         RYU_ASSERT(-e < Single::SignificandSize);
 
-        // Test whether the lower -e bits are 0, i.e.
-        // whether the fractional part of value is 0.
         const uint32_t mask = (uint32_t{1} << -e) - 1;
         if ((m & mask) == 0)
         {
             m >>= -e;
 
-            // Move trailing zeros into the exponent.
             int k = 0;
             for (;;)
             {
@@ -1373,186 +1500,142 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
     //
     // Step 2:
-    // Determine the interval of legal decimal representations.
+    // Determine the interval of valid decimal representations.
     //
 
-    const uint32_t mm_shift = (ieee_mantissa != 0 || ieee_exponent <= 1) ? 1 : 0;
+    const uint32_t lower_boundary_is_closer = (ieee_mantissa == 0 && ieee_exponent > 1);
 
-    // We subtract 2 so that the bounds computation has 2 additional bits.
     e2 -= 2;
-    const uint32_t mm = 4 * m2 - 1 - mm_shift;
-    const uint32_t mr = 4 * m2;
-    const uint32_t mp = 4 * m2 + 2;
+    const uint32_t u = 4 * m2 - 2 + lower_boundary_is_closer;
+    const uint32_t v = 4 * m2;
+    const uint32_t w = 4 * m2 + 2;
 
     //
     // Step 3:
-    // Convert to a decimal power base using 128-bit arithmetic.
+    // Convert to a decimal power base.
     //
 
     int e10;
 
-    bool vm_has_trailing_zeros = false;
-    bool vr_has_trailing_zeros = false;
-    bool vp_has_trailing_zeros = false;
+    bool za = false;
+    bool zb = false;
+    bool zc = false;
 
     if (e2 >= 0)
     {
-        // q = max(0, log_10(2^e2) - 1)
         const int q = FloorLog10Pow2(e2) - (e2 > 3);
         RYU_ASSERT(q >= 0);
         e10 = q;
 
-        // 10 = floor(log_5(2^24))
-        // 11 = floor(log_5(2^(24+2)))
-        if (q <= 10)
+        if (q <= 10) // 10 = floor(log_5(2^24))
         {
-            // NB:
-            // q <= 10 implies e2 <= 39.
-
-            // Only one of mm, mr, and mp can be a multiple of 5, if any.
-            if (mr % 5 == 0)
-            {
-                vr_has_trailing_zeros = MultipleOfPow5(mr, q);
-            }
+            if (v % 5 == 0)
+                zb = MultipleOfPow5(v, q);
             else if (accept_bounds)
-            {
-                // Same as min(e2 + (~mm & 1), Pow5Factor(mm)) >= q
-                // <=> e2 + (~mm & 1) >= q && Pow5Factor(mm) >= q
-                // <=> true && Pow5Factor(mm) >= q, since e2 >= q.
-                vm_has_trailing_zeros = MultipleOfPow5(mm, q);
-            }
+                za = MultipleOfPow5(u, q);
             else
-            {
-                // Same as min(e2 + 1, Pow5Factor(mp)) >= q.
-                vp_has_trailing_zeros = MultipleOfPow5(mp, q);
-            }
+                zc = MultipleOfPow5(w, q);
         }
     }
     else
     {
-        // q = max(0, log_10(5^-e2) - 1)
         const int q = FloorLog10Pow5(-e2) - (-e2 > 1);
         RYU_ASSERT(q >= 0);
         e10 = q + e2;
 
         if (q <= 1)
         {
-            // NB:
-            // q <= 1 implies -4 <= e2 <= -1.
-
-            // {vm,vr,vp} is trailing zeros if {mm,mr,mp} has at least q trailing 0 bits.
-            // mr = 4 * m2, so it always has at least two trailing 0 bits.
-            vr_has_trailing_zeros = true;
-
+            zb = true;
             if (accept_bounds)
-            {
-                // mm = mr - 1 - mm_shift, so it has 1 trailing 0 bit iff mm_shift == 1.
-                vm_has_trailing_zeros = (mm_shift == 1);
-            }
+                za = !lower_boundary_is_closer || q == 0;
             else
-            {
-                // mp = mr + 2, so it always has at least one trailing 0 bit.
-                vp_has_trailing_zeros = true;
-            }
+                zc = true;
         }
         else if (q <= Single::SignificandSize + 2)
         {
-            // NB:
-            // 2 <= q <= 26 implies -40 <= e2 <= -5.
-
-            // We need to compute min(ntz(mr), Pow5Factor(mr) - e2) >= q-1
-            // <=> ntz(mr) >= q-1  &&  Pow5Factor(mr) - e2 >= q-1
-            // <=> ntz(mr) >= q-1
-            vr_has_trailing_zeros = MultipleOfPow2(mr, q - 1);
-
-            // XXX:
-            // vr_prev_has_trailing_zeros
+            zb = MultipleOfPow2(v, q);
         }
     }
 
-    // (vm, vr, vp) = (mm, mr, mp) * 2^e2 * 10^(-e10) = (mm, mr, mp) * 5^(-e10) / 2^(e10 - e2)
-    uint64_t vm;
-    uint64_t vr;
-    uint64_t vp;
-    MulPow5DivPow2_Single(mm, mr, mp, -e10, e10 - e2, vm, vr, vp);
+    uint64_t a;
+    uint64_t b;
+    uint64_t c;
+    MulPow5DivPow2_Single(u, v, w, -e10, e10 - e2, a, b, c);
 
     //
     // Step 4:
     // Find the shortest decimal representation in the interval of legal representations.
     //
 
-    vp -= vp_has_trailing_zeros;
+    c -= zc;
 
-    uint64_t output;
-    if (vm_has_trailing_zeros || vr_has_trailing_zeros)
+    if (za || zb)
     {
-        uint32_t last_removed_digit = 0;
+        RYU_ASSERT((e2 >= 0 ? FloorLog10Pow2(e2) : FloorLog10Pow5(-e2)) == 0 || (a / 10 < c / 10));
 
-        bool vr_prev_has_trailing_zeros = vr_has_trailing_zeros;
+        uint32_t bi = 0;
+        bool zb_prev; // = true;
 
-        while (vm / 10 < vp / 10)
+        while (a / 10 < c / 10)
         {
-            vm_has_trailing_zeros &= (vm % 10 == 0);
-            vr_prev_has_trailing_zeros &= (last_removed_digit == 0);
+            za = za && (a % 10 == 0);
 
-            last_removed_digit = vr % 10;
+            bi = b % 10;
+            zb_prev = zb;
+            zb = zb && (bi == 0);
 
-            vm /= 10;
-            vr /= 10;
-            vp /= 10;
+            a /= 10;
+            b /= 10;
+            c /= 10;
             ++e10;
         }
-
-        if (vm_has_trailing_zeros)
+        if (za)
         {
-            while (vm % 10 == 0)
+            while (a % 10 == 0)
             {
-                vr_prev_has_trailing_zeros &= (last_removed_digit == 0);
+                bi = b % 10;
+                zb_prev = zb;
+                zb = zb && (bi == 0);
 
-                last_removed_digit = vr % 10;
-
-                vm /= 10;
-                vr /= 10;
-                //vp /= 10;
+                a /= 10;
+                b /= 10;
+//#ifndef NDEBUG
+                c /= 10;
+//#endif
                 ++e10;
             }
         }
 
-        bool round_up = (last_removed_digit >= 5);
-        if (last_removed_digit == 5 && vr_prev_has_trailing_zeros)
+        const bool round_down = bi < 5 || (bi == 5 && zb_prev && b % 2 == 0);
+
+        if ((a == b && !(accept_bounds && za)) || !round_down)
         {
-            // Halfway case: The number ends in ...500...00.
-            round_up = (static_cast<uint32_t>(vr) % 2 != 0);
+            RYU_ASSERT(b < c);
+            ++b;
         }
-
-        // We need to take vr+1 if vr is outside bounds...
-        // or we need to round up.
-        const bool inc = (vr == vm && !(accept_bounds && vm_has_trailing_zeros)) || round_up;
-
-        output = vr + (inc ? 1 : 0);
     }
     else
     {
-        bool round_up = false;
+        bool round_down = true;
 
-        while (vm / 10 < vp / 10)
+        while (a / 10 < c / 10)
         {
-            round_up = (vr % 10 >= 10 / 2);
-            vm /= 10;
-            vr /= 10;
-            vp /= 10;
+            round_down = (b % 10 < 5);
+            a /= 10;
+            b /= 10;
+            c /= 10;
             ++e10;
         }
 
-        // We need to take vr+1 if vr is outside bounds...
-        // or we need to round up.
-        const bool inc = (vr == vm || round_up);
-
-        output = vr + (inc ? 1 : 0);
+        if (a == b || !round_down)
+        {
+            RYU_ASSERT(b < c);
+            ++b;
+        }
     }
 
-    RYU_ASSERT(output <= UINT32_MAX);
-    return {static_cast<uint32_t>(output), e10};
+    RYU_ASSERT(b <= UINT32_MAX);
+    return {static_cast<uint32_t>(b), e10};
 }
 
 //==================================================================================================
