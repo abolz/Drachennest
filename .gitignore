@@ -4,4 +4,7 @@
 /build/
 /doc/
 /scratch/
+/scripts/dtoa/*.pyc
+/scripts/grisu/*.pyc
+/scripts/ryu/*.pyc
 /vs/
