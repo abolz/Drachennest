@@ -31,10 +31,6 @@
 #define RYU_ASSERT(X) assert(X)
 #endif
 
-#ifndef RYU_SMALL_INTEGER_OPTIMIZATION
-#define RYU_SMALL_INTEGER_OPTIMIZATION 1
-#endif
-
 namespace ryu {
 
 //==================================================================================================
@@ -905,47 +901,43 @@ inline ToDecimalResult<double> ToDecimal(double value)
     const uint64_t ieee_mantissa = ieee_value.PhysicalSignificand();
     const uint64_t ieee_exponent = ieee_value.PhysicalExponent();
 
-#if RYU_SMALL_INTEGER_OPTIMIZATION
-    if (0x3FF0000000000000ull <= ieee_value.bits && ieee_value.bits < 0x4340000000000000ull) // 1 <= x < 2^53
-    {
-        // x = m * 2^e is a normalized floating-point number.
-        uint64_t m = ieee_mantissa | Double::HiddenBit;
-        int      e = static_cast<int>(ieee_exponent) - Double::ExponentBias;
-        RYU_ASSERT(-e >= 0);
-        RYU_ASSERT(-e < Double::SignificandSize);
-
-        // Test whether the lower -e bits are 0, i.e.
-        // whether the fractional part of value is 0.
-        const uint64_t mask = (uint64_t{1} << -e) - 1;
-        if ((m & mask) == 0)
-        {
-            m >>= -e;
-
-            // Move trailing zeros into the exponent.
-            int k = 0;
-            for (;;)
-            {
-                const uint64_t q = m / 10;
-                const uint64_t r = m % 10;
-                if (r != 0)
-                    break;
-                m = q;
-                k++;
-            }
-
-            return {m, k};
-        }
-    }
-#endif
-
     uint64_t m2;
     int e2;
-    if (ieee_exponent == 0) {
+    if (ieee_exponent == 0)
+    {
         m2 = ieee_mantissa;
         e2 = 1 - Double::ExponentBias;
-    } else {
+    }
+    else
+    {
         m2 = Double::HiddenBit | ieee_mantissa;
         e2 = static_cast<int>(ieee_exponent) - Double::ExponentBias;
+
+        // Fast path for integers which are exactly representable.
+        if (0x3FF0000000000000ull <= ieee_value.bits && ieee_value.bits < 0x4340000000000000ull) // 1 <= x < 2^53
+        {
+            RYU_ASSERT(-e2 >= 0);
+            RYU_ASSERT(-e2 < Double::SignificandSize);
+
+            if (MultipleOfPow2(m2, -e2)) // value = m2 * 2^e2 = m2 / 2^-e2 is an integer
+            {
+                m2 >>= -e2;
+
+                // Move trailing zeros into the decimal exponent.
+                int k = 0;
+                for (;;)
+                {
+                    const uint64_t q = m2 / 10;
+                    const uint64_t r = m2 % 10;
+                    if (r != 0)
+                        break;
+                    m2 = q;
+                    k++;
+                }
+
+                return {m2, k};
+            }
+        }
     }
 
     const bool is_even = (m2 & 1) == 0;
@@ -1164,9 +1156,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
                 a /= 10;
                 b /= 10;
-//#ifndef NDEBUG
                 c /= 10;
-//#endif
                 ++e10;
             }
         }
@@ -1195,9 +1185,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
                 const uint32_t bi = static_cast<uint32_t>(b % 10);
                 a /= 10;
                 b /= 10;
-//#ifndef NDEBUG
                 c /= 10;
-//#endif
                 ++e10;
                 round_down = bi < 5 || (bi == 5 && zb && b % 2 == 0);
                 zb = zb && (bi == 0);
@@ -1208,15 +1196,6 @@ inline ToDecimalResult<double> ToDecimal(double value)
         // A return value of b is valid if and only if a != b or za == true.
         // A return value of b + 1 is valid if and only if b + 1 <= c.
 
-//      if (a == b && !(accept_bounds && za))
-//      {
-//          RYU_ASSERT(b < c);
-//          ++b;
-//      }
-//      else if (!round_down && b < c)
-//      {
-//          ++b;
-//      }
 //      if ((a == b && !(accept_bounds && za)) || (!round_down && b < c))
         if ((a == b && !(accept_bounds && za)) || !round_down)
         {
@@ -1249,15 +1228,6 @@ inline ToDecimalResult<double> ToDecimal(double value)
             ++e10;
         }
 
-//      if (a == b)
-//      {
-//          RYU_ASSERT(b < c);
-//          ++b;
-//      }
-//      else if (!round_down && b < c)
-//      {
-//          ++b;
-//      }
 //      if (a == b || (!round_down && b < c))
         if (a == b || !round_down)
         {
@@ -1376,23 +1346,20 @@ inline uint64_t ComputePow5_Single(int k)
 
 inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
 {
-//#if defined(__SIZEOF_INT128__)
-//    __extension__ using uint128_t = unsigned __int128;
-//
-//    const uint128_t p = uint128_t{mul} * m;
-//    const int shift = j & 63;
-//    return static_cast<uint64_t>(p >> shift);
-//#elif defined(_MSC_VER) && defined(_M_X64)
-//    uint64_t hi;
-//    uint64_t lo = _umul128(m, mul, &hi);
-//    return __shiftright128(lo, hi, j);
-//#else
+#if defined(__SIZEOF_INT128__)
+    __extension__ using uint128_t = unsigned __int128;
+    return static_cast<uint64_t>((uint128_t{mul} * m) >> (j & 63));
+#elif defined(_MSC_VER) && defined(_M_X64)
+    uint64_t hi;
+    uint64_t lo = _umul128(m, mul, &hi);
+    return __shiftright128(lo, hi, j);
+#else
     const uint64_t bits0 = uint64_t{m} * Lo32(mul);
     const uint64_t bits1 = uint64_t{m} * Hi32(mul);
     const uint64_t sum = bits1 + Hi32(bits0);
     const uint64_t shifted_sum = sum >> (j - 32);
     return shifted_sum;
-//#endif
+#endif
 }
 
 inline void MulPow5DivPow2_Single(uint32_t u, uint32_t v, uint32_t w, int e5, int e2, uint64_t& a, uint64_t& b, uint64_t& c)
@@ -1456,43 +1423,41 @@ inline ToDecimalResult<float> ToDecimal(float value)
     const uint32_t ieee_mantissa = ieee_value.PhysicalSignificand();
     const uint32_t ieee_exponent = ieee_value.PhysicalExponent();
 
-#if RYU_SMALL_INTEGER_OPTIMIZATION
-    if (0x3F800000u <= ieee_value.bits && ieee_value.bits < 0x4B800000u) // 1 <= x < 2^24
-    {
-        uint32_t m = ieee_mantissa | Single::HiddenBit;
-        int      e = static_cast<int>(ieee_exponent) - Single::ExponentBias;
-        RYU_ASSERT(-e >= 0);
-        RYU_ASSERT(-e < Single::SignificandSize);
-
-        const uint32_t mask = (uint32_t{1} << -e) - 1;
-        if ((m & mask) == 0)
-        {
-            m >>= -e;
-
-            int k = 0;
-            for (;;)
-            {
-                const uint32_t q = m / 10;
-                const uint32_t r = m % 10;
-                if (r != 0)
-                    break;
-                m = q;
-                k++;
-            }
-
-            return {m, k};
-        }
-    }
-#endif
-
     uint32_t m2;
     int e2;
-    if (ieee_exponent == 0) {
+    if (ieee_exponent == 0)
+    {
         m2 = ieee_mantissa;
         e2 = 1 - Single::ExponentBias;
-    } else {
+    }
+    else
+    {
         m2 = Single::HiddenBit | ieee_mantissa;
         e2 = static_cast<int>(ieee_exponent) - Single::ExponentBias;
+
+        if (0x3F800000u <= ieee_value.bits && ieee_value.bits < 0x4B800000u) // 1 <= value < 2^24
+        {
+            RYU_ASSERT(-e2 >= 0);
+            RYU_ASSERT(-e2 < Single::SignificandSize);
+
+            if (MultipleOfPow2(m2, -e2))
+            {
+                m2 >>= -e2;
+
+                int k = 0;
+                for (;;)
+                {
+                    const uint32_t q = m2 / 10;
+                    const uint32_t r = m2 % 10;
+                    if (r != 0)
+                        break;
+                    m2 = q;
+                    k++;
+                }
+
+                return {m2, k};
+            }
+        }
     }
 
     const bool is_even = (m2 & 1) == 0;
@@ -1599,9 +1564,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
                 a /= 10;
                 b /= 10;
-//#ifndef NDEBUG
                 c /= 10;
-//#endif
                 ++e10;
             }
         }
