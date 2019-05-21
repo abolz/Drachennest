@@ -857,6 +857,43 @@ inline void MulPow5DivPow2_Double(uint64_t u, uint64_t v, uint64_t w, int e5, in
 // Returns whether value is divisible by 5^e5
 inline bool MultipleOfPow5(uint64_t value, int e5)
 {
+    RYU_ASSERT(e5 >= 0);
+    RYU_ASSERT(e5 <= 22);
+
+#if 1
+    struct MulCmp {
+        uint64_t mul;
+        uint64_t cmp;
+    };
+
+    static constexpr MulCmp Mod5[] = { // 368 bytes
+        {0x0000000000000001u, 0xFFFFFFFFFFFFFFFFu},
+        {0xCCCCCCCCCCCCCCCDu, 0x3333333333333333u},
+        {0x8F5C28F5C28F5C29u, 0x0A3D70A3D70A3D70u},
+        {0x1CAC083126E978D5u, 0x020C49BA5E353F7Cu},
+        {0xD288CE703AFB7E91u, 0x0068DB8BAC710CB2u},
+        {0x5D4E8FB00BCBE61Du, 0x0014F8B588E368F0u},
+        {0x790FB65668C26139u, 0x000431BDE82D7B63u},
+        {0xE5032477AE8D46A5u, 0x0000D6BF94D5E57Au},
+        {0xC767074B22E90E21u, 0x00002AF31DC46118u},
+        {0x8E47CE423A2E9C6Du, 0x0000089705F4136Bu},
+        {0x4FA7F60D3ED61F49u, 0x000001B7CDFD9D7Bu},
+        {0x0FEE64690C913975u, 0x00000057F5FF85E5u},
+        {0x3662E0E1CF503EB1u, 0x000000119799812Du},
+        {0xA47A2CF9F6433FBDu, 0x0000000384B84D09u},
+        {0x54186F653140A659u, 0x00000000B424DC35u},
+        {0x7738164770402145u, 0x0000000024075F3Du},
+        {0xE4A4D1417CD9A041u, 0x000000000734ACA5u},
+        {0xC75429D9E5C5200Du, 0x000000000170EF54u},
+        {0xC1773B91FAC10669u, 0x000000000049C977u},
+        {0x26B172506559CE15u, 0x00000000000EC1E4u},
+        {0xD489E3A9ADDEC2D1u, 0x000000000002F394u},
+        {0x90E860BB892C8D5Du, 0x000000000000971Du},
+        {0x502E79BF1B6F4F79u, 0x0000000000001E39u},
+    };
+
+    return value * Mod5[e5].mul <= Mod5[e5].cmp;
+#else
     while (e5 > 0)
     {
         const uint64_t q = value / 5;
@@ -868,6 +905,7 @@ inline bool MultipleOfPow5(uint64_t value, int e5)
     }
 
     return true;
+#endif
 }
 
 // Returns whether value is divisible by 2^e2
@@ -1014,18 +1052,11 @@ inline ToDecimalResult<double> ToDecimal(double value)
             // NB: q <= 22 implies e2 <= 79.
             // NB: Since w - u <= 4, only one of u, v, and w can be a multiple of 5, if any.
 
-            if (v % 5 == 0)
-            {
-                zb = MultipleOfPow5(v, q);
-            }
-            else if (accept_bounds)
-            {
+            zb = MultipleOfPow5(v, q);
+            if (accept_bounds)
                 za = MultipleOfPow5(u, q);
-            }
             else
-            {
                 zc = MultipleOfPow5(w, q);
-            }
         }
 #endif
     }
@@ -1382,6 +1413,31 @@ inline void MulPow5DivPow2_Single(uint32_t u, uint32_t v, uint32_t w, int e5, in
 
 inline bool MultipleOfPow5(uint32_t value, int e5)
 {
+    RYU_ASSERT(e5 >= 0);
+    RYU_ASSERT(e5 <= 10);
+
+#if 1
+    struct MulCmp {
+        uint32_t mul;
+        uint32_t cmp;
+    };
+
+    static constexpr MulCmp Mod5[] = { // 88 bytes
+        {0x00000001u, 0xFFFFFFFFu},
+        {0xCCCCCCCDu, 0x33333333u},
+        {0xC28F5C29u, 0x0A3D70A3u},
+        {0x26E978D5u, 0x020C49BAu},
+        {0x3AFB7E91u, 0x0068DB8Bu},
+        {0x0BCBE61Du, 0x0014F8B5u},
+        {0x68C26139u, 0x000431BDu},
+        {0xAE8D46A5u, 0x0000D6BFu},
+        {0x22E90E21u, 0x00002AF3u},
+        {0x3A2E9C6Du, 0x00000897u},
+        {0x3ED61F49u, 0x000001B7u},
+    };
+
+    return value * Mod5[e5].mul <= Mod5[e5].cmp;
+#else
     while (e5 > 0)
     {
         const uint32_t q = value / 5;
@@ -1393,6 +1449,7 @@ inline bool MultipleOfPow5(uint32_t value, int e5)
     }
 
     return true;
+#endif
 }
 
 inline bool MultipleOfPow2(uint32_t value, int e2)
@@ -1494,9 +1551,8 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
         if (q <= 10) // 10 = floor(log_5(2^24))
         {
-            if (v % 5 == 0)
-                zb = MultipleOfPow5(v, q);
-            else if (accept_bounds)
+            zb = MultipleOfPow5(v, q);
+            if (accept_bounds)
                 za = MultipleOfPow5(u, q);
             else
                 zc = MultipleOfPow5(w, q);
