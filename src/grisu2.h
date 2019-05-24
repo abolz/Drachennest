@@ -700,7 +700,7 @@ inline void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, Float value)
     // Generate digits
     //
 
-//  static_assert(kAlpha >= -50, "internal error");
+    static_assert(kAlpha >= -50, "internal error");
     static_assert(kGamma <= -32, "internal error");
 
     // Generates the digits (and the exponent) of a decimal floating-point
@@ -779,69 +779,6 @@ inline void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, Float value)
 
         // unit = 1
         // m = 0
-#if 0
-        for (;;)
-        {
-            GRISU_ASSERT(digits <= ToDecimalResult<Float>::MaxDigits);
-
-            //
-            //      H = digits * 10^-m + 10^-m * (d[-m-1] / 10 + d[-m-2] / 10^2 + ...) * 2^e
-            //        = digits * 10^-m + 10^-m * (p2                                 ) * 2^e
-            //        = digits * 10^-m + 10^-m * (1/10 * (10 * p2)                   ) * 2^e
-            //        = digits * 10^-m + 10^-m * (1/10 * ((10*p2 div 2^-e) * 2^-e + (10*p2 mod 2^-e)) * 2^e
-            //
-            GRISU_ASSERT(p2 <= 0xFFFFFFFFFFFFFFFFull / 10);
-            p2 *= 10;
-            const uint32_t d = static_cast<uint32_t>(p2 >> -one.e); // d = (10 * p2) div 2^-e
-            const uint64_t r = p2 & (one.f - 1);                    // r = (10 * p2) mod 2^-e
-            GRISU_ASSERT(d <= 9);
-            //
-            //      H = digits * 10^-m + 10^-m * (1/10 * (d * 2^-e + r) * 2^e
-            //        = digits * 10^-m + 10^-m * (1/10 * (d + r * 2^e))
-            //        = (digits * 10 + d) * 10^(-m-1) + 10^(-m-1) * r * 2^e
-            //
-            digits = digits * 10 + d; // digits := digits * 10 + d
-            //
-            //      H = digits * 10^(-m-1) + 10^(-m-1) * r * 2^e
-            //
-            p2 = r;
-            exponent--; // m += 1
-            //
-            //      H = digits * 10^-m + 10^-m * p2 * 2^e
-            //
-
-            // Keep the units in sync. (unit *= 10)
-            delta    *= 10;
-#if GRISU_ROUND
-            distance *= 10;
-#endif // ^^^ GRISU_ROUND ^^^
-
-            // Check if enough digits have been generated.
-            //
-            //      10^-m * p2 * 2^e <= delta * 2^e
-            //              p2 * 2^e <= 10^m * delta * 2^e
-            //                    p2 <= 10^m * delta
-            if (p2 <= delta)
-            {
-                // V = digits * 10^-m, with L <= V < H.
-                // exponent = -m
-
-#if GRISU_ROUND
-                rest = p2;
-
-                // 1 ulp in the decimal representation is now 10^-m.
-                // Since delta and distance are now scaled by 10^m, we need to do
-                // the same with ulp in order to keep the units in sync.
-                //
-                //      10^m * 10^-m = 1 = 2^-e * 2^e = ten_m * 2^e
-                //
-                ten_kappa = one.f; // one.f == 2^-e
-#endif // ^^^ GRISU_ROUND ^^^
-
-                break;
-            }
-        }
-#else
         for (;;)
         {
             GRISU_ASSERT(digits <= ToDecimalResult<Float>::MaxDigits);
@@ -934,7 +871,6 @@ inline void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, Float value)
             distance *= 10000;
 #endif // ^^^ GRISU_ROUND ^^^
         }
-#endif
     }
     else // p2 <= delta
     {
