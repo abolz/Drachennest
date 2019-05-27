@@ -1122,7 +1122,6 @@ inline ToDecimalResult<double> ToDecimal(double value)
 //      RYU_ASSERT(q_prime == 0 || (a / 10 < c / 10));
         RYU_ASSERT((e2 >= 0 ? FloorLog10Pow2(e2) : FloorLog10Pow5(-e2)) == 0 || (a / 10 < c / 10));
 
-#if 1
         // The last removed digit, b[i-1]
         uint32_t bi = 0;
         // zb_prev determines whether the last i-1 trailing digits of b are 0:
@@ -1162,36 +1161,6 @@ inline ToDecimalResult<double> ToDecimal(double value)
         }
 
         const bool round_down = bi < 5 || (bi == 5 && zb_prev && b % 2 == 0);
-#else
-        bool round_down = true;
-
-        while (a / 10 < c / 10)
-        {
-            const uint32_t ai = static_cast<uint32_t>(a % 10);
-            const uint32_t bi = static_cast<uint32_t>(b % 10);
-            a /= 10;
-            b /= 10;
-            c /= 10;
-            ++e10;
-            round_down = bi < 5 || (bi == 5 && zb && b % 2 == 0);
-            za = za && (ai == 0);
-            zb = zb && (bi == 0);
-        }
-//      if (accept_bounds && za)
-        if (za)
-        {
-            while (a % 10 == 0)
-            {
-                const uint32_t bi = static_cast<uint32_t>(b % 10);
-                a /= 10;
-                b /= 10;
-                c /= 10;
-                ++e10;
-                round_down = bi < 5 || (bi == 5 && zb && b % 2 == 0);
-                zb = zb && (bi == 0);
-            }
-        }
-#endif
 
         // A return value of b is valid if and only if a != b or za == true.
         // A return value of b + 1 is valid if and only if b + 1 <= c.
