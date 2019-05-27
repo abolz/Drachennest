@@ -1040,13 +1040,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
         //           = p2(x) + e2 >= q and p5(x) >= q
         //           = p5(x) >= q
         //           = x % 5^q == 0
-#if 0
-        zb = MultipleOfPow5(v, q);
-        if (accept_bounds)
-            za = MultipleOfPow5(u, q);
-        else
-            zc = MultipleOfPow5(w, q);
-#else
+
         if (q <= 22) // 22 = floor(log_5(2^53))
         {
             // NB: q <= 22 implies e2 <= 79.
@@ -1058,7 +1052,6 @@ inline ToDecimalResult<double> ToDecimal(double value)
             else
                 zc = MultipleOfPow5(w, q);
         }
-#endif
     }
     else
     {
@@ -1085,42 +1078,18 @@ inline ToDecimalResult<double> ToDecimal(double value)
         //           = p2(x) >= q and p5(x) - e2 >= q
         //           = p2(x) >= q
         //           = u % 2^q == 0
-#if 0
-        zb = MultipleOfPow2(v, q);
-        if (accept_bounds)
-            za = MultipleOfPow2(u, q);
-        else
-            zc = MultipleOfPow2(w, q);
-#else
-        if (q <= 1)
+
+        if (q <= Double::SignificandSize + 2)
         {
             // NB: q <= 1 implies -4 <= e2 <= -1
-
-            // v = 4 * m2 = 2^2 * m2 ==> p2(v) >= 2 >= q
-            zb = true;
-            if (accept_bounds)
-            {
-                // if lower_boundary_is_closer == false:
-                //  u = 4 * m2 - 2 = 2 * (2*m2 - 1) ==> p2(u) = 1 >= q
-                // else:
-                //  u = 4 * m2 - 1 = 2^2 * m2 - 1 ==> p2(u) = 0 >= q iff q == 0
-                za = !lower_boundary_is_closer || q == 0;
-            }
-            else
-            {
-                // w = 4 * m2 + 2 = 2 * (2*m2 + 1) ==> p2(w) == 1 >= q
-                zc = true;
-            }
-        }
-        else if (q <= Double::SignificandSize + 2)
-        {
             // NB: 2 <= q <= 55 implies -81 <= e2 <= -5
 
             zb = MultipleOfPow2(v, q);
-            // p2(u) <= 1 < q ==> za == false
-            // p2(w) == 1 < q ==> zc == false
+            if (accept_bounds)
+                za = MultipleOfPow2(u, q);
+            else
+                zc = MultipleOfPow2(w, q);
         }
-#endif
     }
 
     uint64_t a;
@@ -1564,17 +1533,13 @@ inline ToDecimalResult<float> ToDecimal(float value)
         RYU_ASSERT(q >= 0);
         e10 = q + e2;
 
-        if (q <= 1)
-        {
-            zb = true;
-            if (accept_bounds)
-                za = !lower_boundary_is_closer || q == 0;
-            else
-                zc = true;
-        }
-        else if (q <= Single::SignificandSize + 2)
+        if (q <= Single::SignificandSize + 2)
         {
             zb = MultipleOfPow2(v, q);
+            if (accept_bounds)
+                za = MultipleOfPow2(u, q);
+            else
+                zc = MultipleOfPow2(w, q);
         }
     }
 
