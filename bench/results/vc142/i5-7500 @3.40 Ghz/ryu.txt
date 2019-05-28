@@ -1,0 +1,74 @@
+Benchmarking Ryu
+05/28/19 14:56:53
+Run on (4 X 3408 MHz CPU s)
+CPU Caches:
+  L1 Data 32K (x4)
+  L1 Instruction 32K (x4)
+  L2 Unified 262K (x4)
+  L3 Unified 6291K (x1)
+-----------------------------------------------------------------------------------
+Benchmark                                            Time           CPU Iterations
+-----------------------------------------------------------------------------------
+double - Random-bits   /repeats:3_min               49 ns         48 ns   10000000
+double - Uniform 0/1   /repeats:3_min               46 ns         46 ns   15448276
+double - Uniform 0/1e+308   /repeats:3_min          42 ns         42 ns   16592593
+double - 1.0-digits   /repeats:3_min                20 ns         20 ns   34461538
+double - 1.1-digits   /repeats:3_min                46 ns         46 ns   15448276
+double - 1.2-digits   /repeats:3_min                46 ns         46 ns   15448276
+double - 1.3-digits   /repeats:3_min                44 ns         43 ns   15448276
+double - 1.4-digits   /repeats:3_min                44 ns         44 ns   16000000
+double - 1.5-digits   /repeats:3_min                42 ns         41 ns   16592593
+double - 1.6-digits   /repeats:3_min                45 ns         45 ns   16000000
+double - 1.7-digits   /repeats:3_min                44 ns         43 ns   16000000
+double - 1.8-digits   /repeats:3_min                43 ns         43 ns   16000000
+double - 1.9-digits   /repeats:3_min                44 ns         44 ns   16000000
+double - 1.10-digits   /repeats:3_min               44 ns         43 ns   15448276
+double - 1.11-digits   /repeats:3_min               43 ns         43 ns   16000000
+double - 1.12-digits   /repeats:3_min               44 ns         43 ns   16000000
+double - 1.13-digits   /repeats:3_min               41 ns         40 ns   16592593
+double - 1.14-digits   /repeats:3_min               44 ns         44 ns   16000000
+double - 0.1-digits   /repeats:3_min                48 ns         47 ns   11200000
+double - 1.1-digits   /repeats:3_min                46 ns         46 ns   15448276
+double - 2.1-digits   /repeats:3_min                49 ns         48 ns   14451613
+double - 3.1-digits   /repeats:3_min                46 ns         47 ns   15448276
+double - 4.1-digits   /repeats:3_min                47 ns         46 ns   14933333
+double - 5.1-digits   /repeats:3_min                45 ns         46 ns   15448276
+double - 6.1-digits   /repeats:3_min                47 ns         46 ns   14451613
+double - 7.1-digits   /repeats:3_min                45 ns         43 ns   15448276
+double - 8.1-digits   /repeats:3_min                46 ns         46 ns   14933333
+double - 9.1-digits   /repeats:3_min                45 ns         45 ns   15448276
+double - 10.1-digits   /repeats:3_min               45 ns         45 ns   15448276
+double - 11.1-digits   /repeats:3_min               45 ns         45 ns   15448276
+double - 12.1-digits   /repeats:3_min               45 ns         45 ns   15448276
+double - 13.1-digits   /repeats:3_min               41 ns         41 ns   17230769
+double - 14.1-digits   /repeats:3_min               47 ns         47 ns   15448276
+double - 1-digits / 10^22   /repeats:3_min          43 ns         42 ns   16000000
+double - 2-digits / 10^22   /repeats:3_min          42 ns         41 ns   16000000
+double - 3-digits / 10^22   /repeats:3_min          43 ns         42 ns   16592593
+double - 4-digits / 10^22   /repeats:3_min          41 ns         40 ns   16592593
+double - 5-digits / 10^22   /repeats:3_min          43 ns         43 ns   16592593
+double - 6-digits / 10^22   /repeats:3_min          40 ns         40 ns   17920000
+double - 7-digits / 10^22   /repeats:3_min          43 ns         42 ns   16000000
+double - 8-digits / 10^22   /repeats:3_min          42 ns         42 ns   16592593
+double - 9-digits / 10^22   /repeats:3_min          42 ns         41 ns   16592593
+double - 10-digits / 10^22   /repeats:3_min         42 ns         41 ns   16592593
+double - 11-digits / 10^22   /repeats:3_min         41 ns         40 ns   16592593
+double - 12-digits / 10^22   /repeats:3_min         41 ns         40 ns   16592593
+double - 13-digits / 10^22   /repeats:3_min         41 ns         40 ns   16592593
+double - 14-digits / 10^22   /repeats:3_min         41 ns         40 ns   16592593
+double - 15-digits / 10^22   /repeats:3_min         44 ns         44 ns   16592593
+double - 1-digits * 10^22   /repeats:3_min          63 ns         63 ns   11200000
+double - 2-digits * 10^22   /repeats:3_min          47 ns         46 ns   14933333
+double - 3-digits * 10^22   /repeats:3_min          45 ns         45 ns   16000000
+double - 4-digits * 10^22   /repeats:3_min          43 ns         42 ns   16592593
+double - 5-digits * 10^22   /repeats:3_min          45 ns         45 ns   15448276
+double - 6-digits * 10^22   /repeats:3_min          42 ns         41 ns   16592593
+double - 7-digits * 10^22   /repeats:3_min          44 ns         44 ns   16000000
+double - 8-digits * 10^22   /repeats:3_min          44 ns         43 ns   16000000
+double - 9-digits * 10^22   /repeats:3_min          44 ns         43 ns   16000000
+double - 10-digits * 10^22   /repeats:3_min         44 ns         43 ns   15448276
+double - 11-digits * 10^22   /repeats:3_min         44 ns         43 ns   15448276
+double - 12-digits * 10^22   /repeats:3_min         43 ns         42 ns   16592593
+double - 13-digits * 10^22   /repeats:3_min         43 ns         42 ns   16592593
+double - 14-digits * 10^22   /repeats:3_min         42 ns         42 ns   16592593
+double - 15-digits * 10^22   /repeats:3_min         44 ns         44 ns   16000000
