@@ -174,6 +174,52 @@ inline int DecimalLength(uint64_t v)
     return y + (Table[y] < v);
 }
 
+#else
+
+inline int DecimalLength(uint32_t v)
+{
+    DTOA_ASSERT(v >= 1);
+    DTOA_ASSERT(v <= 999999999);
+
+    if (v >= 100000000) { return 9; }
+    if (v >= 10000000) { return 8; }
+    if (v >= 1000000) { return 7; }
+    if (v >= 100000) { return 6; }
+    if (v >= 10000) { return 5; }
+    if (v >= 1000) { return 4; }
+    if (v >= 100) { return 3; }
+    if (v >= 10) { return 2; }
+    return 1;
+}
+
+inline int DecimalLength(uint64_t v)
+{
+    DTOA_ASSERT(v >= 1);
+    DTOA_ASSERT(v <= 99999999999999999ull);
+
+    if (v >= 10000000000000000ull) { return 17; }
+    if (v >= 1000000000000000ull) { return 16; }
+    if (v >= 100000000000000ull) { return 15; }
+    if (v >= 10000000000000ull) { return 14; }
+    if (v >= 1000000000000ull) { return 13; }
+    if (v >= 100000000000ull) { return 12; }
+    if (v >= 10000000000ull) { return 11; }
+    if (v >= 1000000000ull) { return 10; }
+    if (v >= 100000000ull) { return 9; }
+    if (v >= 10000000ull) { return 8; }
+    if (v >= 1000000ull) { return 7; }
+    if (v >= 100000ull) { return 6; }
+    if (v >= 10000ull) { return 5; }
+    if (v >= 1000ull) { return 4; }
+    if (v >= 100ull) { return 3; }
+    if (v >= 10ull) { return 2; }
+    return 1;
+}
+
+#endif
+
+#if 0 // ---
+
 inline void PrintDecimalDigits(char* buf, uint32_t digits, int num_digits)
 {
     DTOA_ASSERT(digits >= 1);
@@ -318,46 +364,6 @@ inline void PrintDecimalDigits(char* buf, uint64_t digits, int num_digits)
 }
 
 #else
-
-inline int DecimalLength(uint32_t v)
-{
-    DTOA_ASSERT(v >= 1);
-    DTOA_ASSERT(v <= 999999999);
-
-    if (v >= 100000000) { return 9; }
-    if (v >= 10000000) { return 8; }
-    if (v >= 1000000) { return 7; }
-    if (v >= 100000) { return 6; }
-    if (v >= 10000) { return 5; }
-    if (v >= 1000) { return 4; }
-    if (v >= 100) { return 3; }
-    if (v >= 10) { return 2; }
-    return 1;
-}
-
-inline int DecimalLength(uint64_t v)
-{
-    DTOA_ASSERT(v >= 1);
-    DTOA_ASSERT(v <= 99999999999999999ull);
-
-    if (v >= 10000000000000000ull) { return 17; }
-    if (v >= 1000000000000000ull) { return 16; }
-    if (v >= 100000000000000ull) { return 15; }
-    if (v >= 10000000000000ull) { return 14; }
-    if (v >= 1000000000000ull) { return 13; }
-    if (v >= 100000000000ull) { return 12; }
-    if (v >= 10000000000ull) { return 11; }
-    if (v >= 1000000000ull) { return 10; }
-    if (v >= 100000000ull) { return 9; }
-    if (v >= 10000000ull) { return 8; }
-    if (v >= 1000000ull) { return 7; }
-    if (v >= 100000ull) { return 6; }
-    if (v >= 10000ull) { return 5; }
-    if (v >= 1000ull) { return 4; }
-    if (v >= 100ull) { return 3; }
-    if (v >= 10ull) { return 2; }
-    return 1;
-}
 
 inline void PrintDecimalDigits(char* buf, uint32_t output, int output_length)
 {

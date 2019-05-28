@@ -1024,8 +1024,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
         // the first step and make sure that we execute the loop below at least
         // once and determine the correct value of the last removed digit.
 
-        const int q_prime = FloorLog10Pow2(e2);
-        const int q = q_prime - (e2 > 3); // == max(0, q' - 1)
+        const int q = FloorLog10Pow2(e2) - (e2 > 3); // == max(0, q' - 1)
         RYU_ASSERT(q >= 0);
 
         e10 = q;
@@ -1063,8 +1062,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
         //          = (u,v,w) * 2^e2 / 10^(e10),
         //          = (u,v,w) * 5^(-e10) / 2^(e10 - e2),
 
-        const int q_prime = FloorLog10Pow5(-e2);
-        const int q = q_prime - (-e2 > 1); // == max(0, q' - 1)
+        const int q = FloorLog10Pow5(-e2) - (-e2 > 1); // == max(0, q' - 1)
         RYU_ASSERT(q >= 0);
 
         e10 = e2 + q;
@@ -1119,25 +1117,27 @@ inline ToDecimalResult<double> ToDecimal(double value)
         // b[i-1] == 0. Otherwise we will remove at least one more digit, i.e.
         // execute the loop at least once, and therefore determine the correct
         // values of b[i-1] and zb_prev.
+
 //      RYU_ASSERT(q_prime == 0 || (a / 10 < c / 10));
         RYU_ASSERT((e2 >= 0 ? FloorLog10Pow2(e2) : FloorLog10Pow5(-e2)) == 0 || (a / 10 < c / 10));
 
         // The last removed digit, b[i-1]
         uint32_t bi = 0;
+
         // zb_prev determines whether the last i-1 trailing digits of b are 0:
         // b[0, 1, ..., i-2] == 0.
         // We'll use the value of zb_prev if and only if bi == 5 after the loops
         // below, which can only happen if the loops are run at least once, in
         // which case zb_prev has been initialized.
+#if 0 // Reuse zb
         bool zb_prev; // = true;
+#endif
 
         while (a / 10 < c / 10)
         {
             za = za && (a % 10 == 0);
-
-            bi = static_cast<uint32_t>(b % 10);
-            zb_prev = zb;
             zb = zb && (bi == 0);
+            bi = static_cast<uint32_t>(b % 10);
 
             a /= 10;
             b /= 10;
@@ -1149,28 +1149,24 @@ inline ToDecimalResult<double> ToDecimal(double value)
         {
             while (a % 10 == 0)
             {
-                bi = static_cast<uint32_t>(b % 10);
-                zb_prev = zb;
                 zb = zb && (bi == 0);
+                bi = static_cast<uint32_t>(b % 10);
 
                 a /= 10;
                 b /= 10;
-                c /= 10;
+//                c /= 10;
                 ++e10;
             }
         }
 
-        const bool round_down = bi < 5 || (bi == 5 && zb_prev && b % 2 == 0);
+        const bool round_down = bi < 5 || (bi == 5 && zb && b % 2 == 0);
 
         // A return value of b is valid if and only if a != b or za == true.
         // A return value of b + 1 is valid if and only if b + 1 <= c.
+        const bool round_up = ((a == b && !(accept_bounds && za)) || !round_down);
+//        RYU_ASSERT(!round_up || b < c);
 
-//      if ((a == b && !(accept_bounds && za)) || (!round_down && b < c))
-        if ((a == b && !(accept_bounds && za)) || !round_down)
-        {
-            RYU_ASSERT(b < c);
-            ++b;
-        }
+        b += round_up ? 1 : 0;
     }
     else
     {
@@ -1188,21 +1184,30 @@ inline ToDecimalResult<double> ToDecimal(double value)
             e10 += 4;
         }
 
-        while (a / 10 < c / 10)
+        if (a / 100 < c / 100)
+        {
+            round_down = (b % 100 < 50);
+            a /= 100;
+            b /= 100;
+            c /= 100;
+            e10 += 2;
+        }
+
+        if (a / 10 < c / 10)
         {
             round_down = (b % 10 < 5);
             a /= 10;
             b /= 10;
-            c /= 10;
+//            c /= 10;
             ++e10;
         }
 
-//      if (a == b || (!round_down && b < c))
-        if (a == b || !round_down)
-        {
-            RYU_ASSERT(b < c);
-            ++b;
-        }
+        // A return value of b is valid if and only if a != b or za == true.
+        // A return value of b + 1 is valid if and only if b + 1 <= c.
+        const bool round_up = (a == b || !round_down);
+//        RYU_ASSERT(!round_up || b < c);
+
+        b += round_up ? 1 : 0;
     }
 
     return {b, e10};
@@ -1529,15 +1534,12 @@ inline ToDecimalResult<float> ToDecimal(float value)
         RYU_ASSERT((e2 >= 0 ? FloorLog10Pow2(e2) : FloorLog10Pow5(-e2)) == 0 || (a / 10 < c / 10));
 
         uint32_t bi = 0;
-        bool zb_prev; // = true;
 
         while (a / 10 < c / 10)
         {
             za = za && (a % 10 == 0);
-
-            bi = b % 10;
-            zb_prev = zb;
             zb = zb && (bi == 0);
+            bi = b % 10;
 
             a /= 10;
             b /= 10;
@@ -1548,43 +1550,53 @@ inline ToDecimalResult<float> ToDecimal(float value)
         {
             while (a % 10 == 0)
             {
-                bi = b % 10;
-                zb_prev = zb;
                 zb = zb && (bi == 0);
+                bi = b % 10;
 
                 a /= 10;
                 b /= 10;
-                c /= 10;
+//                c /= 10;
                 ++e10;
             }
         }
 
-        const bool round_down = bi < 5 || (bi == 5 && zb_prev && b % 2 == 0);
+        const bool round_down = bi < 5 || (bi == 5 && zb && b % 2 == 0);
 
-        if ((a == b && !(accept_bounds && za)) || !round_down)
-        {
-            RYU_ASSERT(b < c);
-            ++b;
-        }
+        // A return value of b is valid if and only if a != b or za == true.
+        // A return value of b + 1 is valid if and only if b + 1 <= c.
+        const bool round_up = ((a == b && !(accept_bounds && za)) || !round_down);
+//        RYU_ASSERT(!round_up || b < c);
+
+        b += round_up ? 1 : 0;
     }
     else
     {
         bool round_down = true;
 
-        while (a / 10 < c / 10)
+        while (a / 100 < c / 100)
+        {
+            round_down = (b % 100 < 50);
+            a /= 100;
+            b /= 100;
+            c /= 100;
+            e10 += 2;
+        }
+
+        if (a / 10 < c / 10)
         {
             round_down = (b % 10 < 5);
             a /= 10;
             b /= 10;
-            c /= 10;
+//            c /= 10;
             ++e10;
         }
 
-        if (a == b || !round_down)
-        {
-            RYU_ASSERT(b < c);
-            ++b;
-        }
+        // A return value of b is valid if and only if a != b or za == true.
+        // A return value of b + 1 is valid if and only if b + 1 <= c.
+        const bool round_up = (a == b || !round_down);
+//        RYU_ASSERT(!round_up || b < c);
+
+        b += round_up ? 1 : 0;
     }
 
     RYU_ASSERT(b <= UINT32_MAX);
