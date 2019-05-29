@@ -1093,14 +1093,28 @@ inline ToDecimalResult<double> ToDecimal(double value)
     uint64_t c;
     MulPow5DivPow2_Double(u, v, w, -e10, e10 - e2, a, b, c);
 
+    // TODO:
+    //
+    // For normal floating-point numbers:
+    // (4*f - 2) / 100    <= a <= c <= 100 * (4*f + 2)
+    // (4*2^52 - 2) / 100 <= a <= c <  100 * (4*2^53 + 2)
+    // (2^54 - 2) / 100   <= a <= c <  100 * (2^55 + 2)
+    // 180143985094819    <= a <= c <  3602879701896397000
+    //
+    // Would it be better to call a modified DecimalLength() right here in this
+    // case?
+    RYU_ASSERT(ieee_exponent == 0 || a >= 180143985094819);
+    RYU_ASSERT(ieee_exponent == 0 || c <= 3602879701896397000);
+
     //
     // Step 4:
     // Find the shortest decimal representation in the interval of valid
     // representations.
     //
 
-    // if (!accept_bounds && zc)
-    //     --c;
+    // We need:
+    //  if (!accept_bounds && zc)
+    //      --c;
     // Since we only assign to zc iff accept_bounds == false and zc is
     // initialized to false, we can simplify the test here.
     c -= zc;
@@ -1116,20 +1130,20 @@ inline ToDecimalResult<double> ToDecimal(double value)
         // execute the loop at least once, and therefore determine the correct
         // values of b[i-1] and zb_prev.
 
-//      RYU_ASSERT(q_prime == 0 || (a / 10 < c / 10));
+//      RYU_ASSERT(q' == 0 || (a / 10 < c / 10));
         RYU_ASSERT((e2 >= 0 ? FloorLog10Pow2(e2) : FloorLog10Pow5(-e2)) == 0 || (a / 10 < c / 10));
 
-        // The last removed digit, b[i-1]
-        uint32_t bi = 0;
+        uint32_t bi = 0; // The last removed digit, b[i-1]
 
         // zb_prev determines whether the last i-1 trailing digits of b are 0:
         // b[0, 1, ..., i-2] == 0.
+        //
         // We'll use the value of zb_prev if and only if bi == 5 after the loops
         // below, which can only happen if the loops are run at least once, in
         // which case zb_prev has been initialized.
-#if 0 // Reuse zb
-        bool zb_prev; // = true;
-#endif
+        //
+        // Small optimization: Reuse zb instead of introducing another variable.
+//      bool zb_prev;
 
         while (a / 10 < c / 10)
         {
@@ -1142,7 +1156,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
             c /= 10;
             ++e10;
         }
-//      if (accept_bounds && za)
+//      if (accept_smaller && za)
         if (za)
         {
             while (a % 10 == 0)
