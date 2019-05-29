@@ -951,30 +951,28 @@ inline ToDecimalResult<double> ToDecimal(double value)
         m2 = Double::HiddenBit | ieee_mantissa;
         e2 = static_cast<int>(ieee_exponent) - Double::ExponentBias;
 
-        // Fast path for integers which are exactly representable.
-        if (0x3FF0000000000000ull <= ieee_value.bits && ieee_value.bits < 0x4340000000000000ull) // 1 <= x < 2^53
+        if ((0 <= -e2 && -e2 < Double::SignificandSize) && MultipleOfPow2(m2, -e2))
         {
-            RYU_ASSERT(-e2 >= 0);
-            RYU_ASSERT(-e2 < Double::SignificandSize);
+            // Fast path for integers in the range [1, 2^53).
+            // Since 2^52 <= m2 < 2^53 and 0 <= -e2 <= 52:
+            //  1 <= value = m2 / 2^-e2 < 2^53.
+            // Since m2 is divisible by 2^-e2, value is an integer.
+            m2 >>= -e2;
 
-            if (MultipleOfPow2(m2, -e2)) // value = m2 * 2^e2 = m2 / 2^-e2 is an integer
+            // Move trailing zeros into the decimal exponent.
+            // NB: This is actually not required for fixed-point notation.
+            int k = 0;
+            for (;;)
             {
-                m2 >>= -e2;
-
-                // Move trailing zeros into the decimal exponent.
-                int k = 0;
-                for (;;)
-                {
-                    const uint64_t q = m2 / 10;
-                    const uint64_t r = m2 % 10;
-                    if (r != 0)
-                        break;
-                    m2 = q;
-                    k++;
-                }
-
-                return {m2, k};
+                const uint64_t q = m2 / 10;
+                const uint64_t r = m2 % 10;
+                if (r != 0)
+                    break;
+                m2 = q;
+                k++;
             }
+
+            return {m2, k};
         }
     }
 
@@ -1435,28 +1433,22 @@ inline ToDecimalResult<float> ToDecimal(float value)
         m2 = Single::HiddenBit | ieee_mantissa;
         e2 = static_cast<int>(ieee_exponent) - Single::ExponentBias;
 
-        if (0x3F800000u <= ieee_value.bits && ieee_value.bits < 0x4B800000u) // 1 <= value < 2^24
+        if ((0 <= -e2 && -e2 < Single::SignificandSize) && MultipleOfPow2(m2, -e2))
         {
-            RYU_ASSERT(-e2 >= 0);
-            RYU_ASSERT(-e2 < Single::SignificandSize);
+            m2 >>= -e2;
 
-            if (MultipleOfPow2(m2, -e2))
+            int k = 0;
+            for (;;)
             {
-                m2 >>= -e2;
-
-                int k = 0;
-                for (;;)
-                {
-                    const uint32_t q = m2 / 10;
-                    const uint32_t r = m2 % 10;
-                    if (r != 0)
-                        break;
-                    m2 = q;
-                    k++;
-                }
-
-                return {m2, k};
+                const uint32_t q = m2 / 10;
+                const uint32_t r = m2 % 10;
+                if (r != 0)
+                    break;
+                m2 = q;
+                k++;
             }
+
+            return {m2, k};
         }
     }
 
