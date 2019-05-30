@@ -25,6 +25,10 @@
 #define DTOA_ASSERT(X) assert(X)
 #endif
 
+#ifndef DTOA_2DIGIT_EXPONENT
+#define DTOA_2DIGIT_EXPONENT 0
+#endif
+
 namespace dtoa {
 namespace impl {
 
@@ -455,7 +459,9 @@ inline void PrintDecimalDigits(char* buf, uint64_t output, int output_length)
 } // namespace impl
 
 // Print digits * 10^decimal_exponent in a form similar to printf("%g").
-// PRE: sizeof(buffer) >= 32
+// PRE: sizeof(buffer) >= 24
+// PRE: DecimalLength(digits) <= 17
+// PRE: abs(decimal_exponent) <= 999
 template <typename UnsignedInt>
 inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent, bool force_trailing_dot_zero = false)
 {
@@ -472,22 +478,29 @@ inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent
     // NB:
     // These are the values used by JavaScript's ToString applied to Number
     // type. Printf uses the values -4 and max_digits10 resp. (sort of).
-    constexpr int MinExp = -6; // -4;
-    constexpr int MaxExp = 21; //  6;
+    constexpr int MinExp = -6; // -4; // -4; // -4;
+    constexpr int MaxExp = 21; // 15; // 17; //  6;
+
+    static_assert(MinExp >= -7, "internal error");
+    static_assert(MaxExp <= 24, "internal error");
+    static_assert(MinExp < MaxExp, "internal error");
 
     const bool use_fixed = MinExp < decimal_point && decimal_point <= MaxExp;
+
+    // Prepare the buffer.
+    // Avoid calling memset with variable arguments below...
+    std::memset(buffer, '0', 24);
 
     char* first = buffer;
     if (use_fixed)
     {
-        // Prepare the buffer.
-        // Avoid calling memset with variable arguments below...
-        // Need 21 '0's. Round up to a multiple of 8.
-//      std::memset(buffer, '0', 24);
-
         if (decimal_point <= 0)
         {
             first += 2 + (-decimal_point);
+        }
+        else if (num_digits > decimal_point)
+        {
+            first += 1;
         }
     }
     else
@@ -499,46 +512,7 @@ inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent
 
     if (use_fixed)
     {
-        if (num_digits <= decimal_point)
-        {
-            // digits[000]
-            // DTOA_ASSERT(buffer_capacity >= decimal_point + (force_trailing_dot_zero ? 2 : 0));
-
-            //
-            // TODO:
-            //
-            // decimal_point <= 21.
-            // Pre-filling buffer with 21 '0's would therefore be sufficient.
-            //
-
-            std::memset(buffer + num_digits, '0', static_cast<unsigned>(decimal_point - num_digits));
-            buffer += decimal_point;
-            if (force_trailing_dot_zero)
-            {
-                *buffer++ = '.';
-                *buffer++ = '0';
-            }
-        }
-        else if (0 < decimal_point)
-        {
-            // dig.its
-            // DTOA_ASSERT(buffer_capacity >= length + 1);
-
-            //
-            // TODO:
-            //
-            // 0 < decimal_point < num_digits
-            //  ==> 1 <= num_digits - decimal_point <= 17 - 1 = 16
-            // So we need to move at most 16 bytes one place to the right.
-            // If we always copy 16 bytes, the buffer would need to be at least
-            // 16 + 1 + 16 = 33 bytes large.
-            //
-
-            std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, static_cast<unsigned>(num_digits - decimal_point));
-            buffer[decimal_point] = '.';
-            buffer += num_digits + 1;
-        }
-        else // decimal_point <= 0
+        if (decimal_point <= 0)
         {
             // 0.[000]digits
             // DTOA_ASSERT(buffer_capacity >= 2 + (-decimal_point) + length);
@@ -546,14 +520,67 @@ inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent
             //
             // TODO:
             //
-            // -5 <= decimal_point <= 0
-            //  ==> 2 <= 2 + -decimal_point <= 7
-            // Pre-filling buffer with 7 '0's would therefore be sufficient.
+            // -6 <= decimal_point <= 0
+            //  ==> 2 <= 2 + -decimal_point <= 8
+            // Pre-filling buffer with 8 '0's is therefore be sufficient.
             //
+//          std::memset(buffer, '0', static_cast<unsigned>(2 + (-decimal_point)));
 
-            std::memset(buffer, '0', static_cast<unsigned>(2 + (-decimal_point)));
             buffer[1] = '.';
             buffer += (2 + (-decimal_point) + num_digits);
+        }
+        else if (num_digits > decimal_point)
+        {
+            // dig.its
+            // DTOA_ASSERT(buffer_capacity >= length + 1);
+
+            // 0 < decimal_point <= Min(17 - 1, MaxExp)
+            // So we need to move at most 16 bytes one place to the left.
+#if 0
+            std::memmove(buffer, buffer + 1, static_cast<unsigned>(decimal_point));
+#else
+            char* const src = buffer + 1;
+            char* const dst = buffer;
+
+            if ((/*constexpr*/ MaxExp >= 16) && (decimal_point & 16) != 0)
+            {
+                std::memmove(dst + 0, src + 0, 8);
+                std::memmove(dst + 8, src + 8, 8);
+            }
+            else
+            {
+                DTOA_ASSERT(decimal_point < 16);
+
+                intptr_t index = 0;
+                if (decimal_point & 1) { std::memmove(dst + index, src + index, 1); index += 1; }
+                if (decimal_point & 2) { std::memmove(dst + index, src + index, 2); index += 2; }
+                if (decimal_point & 4) { std::memmove(dst + index, src + index, 4); index += 4; }
+                if (decimal_point & 8) { std::memmove(dst + index, src + index, 8); index += 8; }
+            }
+#endif
+
+            buffer[decimal_point] = '.';
+            buffer += num_digits + 1;
+        }
+        else // 0 < num_digits <= decimal_point
+        {
+            // digits[000]
+            // DTOA_ASSERT(buffer_capacity >= decimal_point + (force_trailing_dot_zero ? 2 : 0));
+
+            //
+            // TODO:
+            //
+            // decimal_point <= 24.
+            // Pre-filling buffer with 24 '0's would therefore be sufficient.
+            //
+//          std::memset(buffer + num_digits, '0', static_cast<unsigned>(decimal_point - num_digits));
+
+            buffer += decimal_point;
+            if (force_trailing_dot_zero)
+            {
+                *buffer++ = '.';
+                *buffer++ = '0';
+            }
         }
     }
     else
@@ -596,6 +623,12 @@ inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent
         }
 
         const uint32_t k = static_cast<uint32_t>(scientific_exponent);
+#if DTOA_2DIGIT_EXPONENT
+        if (k < 100)
+        {
+            buffer = dtoa::impl::Utoa_2Digits(buffer, k);
+        }
+#else
         if (k < 10)
         {
             *buffer++ = static_cast<char>('0' + k);
@@ -604,6 +637,7 @@ inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent
         {
             buffer = dtoa::impl::Utoa_2Digits(buffer, k);
         }
+#endif
         else
         {
             const uint32_t r = k % 10;
@@ -617,3 +651,13 @@ inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent
 }
 
 } // namespace dtoa
+
+//char* FormatDigits(char* buffer, uint64_t digits, int decimal_exponent, bool force_trailing_dot_zero = false)
+//{
+//    return dtoa::FormatDigits(buffer, digits, decimal_exponent, force_trailing_dot_zero);
+//}
+
+//char* FormatDigits(char* buffer, uint32_t digits, int decimal_exponent, bool force_trailing_dot_zero = false)
+//{
+//    return dtoa::FormatDigits(buffer, digits, decimal_exponent, force_trailing_dot_zero);
+//}
