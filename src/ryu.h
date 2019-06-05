@@ -1042,11 +1042,9 @@ inline ToDecimalResult<double> ToDecimal(double value)
             // NB: q <= 22 implies e2 <= 79.
             // NB: Since w - u <= 4, only one of u, v, and w can be a multiple of 5, if any.
 
+            za = MultipleOfPow5(u, q);
             zb = MultipleOfPow5(v, q);
-            if (accept_bounds)
-                za = MultipleOfPow5(u, q);
-            else
-                zc = MultipleOfPow5(w, q);
+            zc = MultipleOfPow5(w, q);
         }
     }
     else
@@ -1079,11 +1077,9 @@ inline ToDecimalResult<double> ToDecimal(double value)
             // NB: q <= 1 implies -4 <= e2 <= -1
             // NB: 2 <= q <= 55 implies -81 <= e2 <= -5
 
+            za = MultipleOfPow2(u, q);
             zb = MultipleOfPow2(v, q);
-            if (accept_bounds)
-                za = MultipleOfPow2(u, q);
-            else
-                zc = MultipleOfPow2(w, q);
+            zc = MultipleOfPow2(w, q);
         }
     }
 
@@ -1111,13 +1107,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
     // representations.
     //
 
-    // We need:
-    //  if (!accept_bounds && zc)
-    //      --c;
-    // Since we only assign to zc iff accept_bounds == false and zc is
-    // initialized to false, we can simplify the test here.
-    RYU_ASSERT(!accept_bounds || zc == false);
-    c -= zc;
+    c -= !accept_bounds && zc;
 
     if (za || zb)
     {
@@ -1156,10 +1146,8 @@ inline ToDecimalResult<double> ToDecimal(double value)
             c /= 10;
             ++e10;
         }
-        if (/*accept_smaller &&*/ za && (a % 10 == 0))
+        if (accept_bounds && za && (a % 10 == 0))
         {
-            RYU_ASSERT(accept_bounds);
-
             bi = static_cast<uint32_t>(b % 10);
 
             while (a % 10 == 0) {
@@ -1506,11 +1494,9 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
         if (q <= 10) // 10 = floor(log_5(2^24))
         {
+            za = MultipleOfPow5(u, q);
             zb = MultipleOfPow5(v, q);
-            if (accept_bounds)
-                za = MultipleOfPow5(u, q);
-            else
-                zc = MultipleOfPow5(w, q);
+            zc = MultipleOfPow5(w, q);
         }
     }
     else
@@ -1521,11 +1507,9 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
         if (q <= Single::SignificandSize + 2)
         {
+            za = MultipleOfPow2(u, q);
             zb = MultipleOfPow2(v, q);
-            if (accept_bounds)
-                za = MultipleOfPow2(u, q);
-            else
-                zc = MultipleOfPow2(w, q);
+            zc = MultipleOfPow2(w, q);
         }
     }
 
@@ -1539,8 +1523,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
     // Find the shortest decimal representation in the interval of legal representations.
     //
 
-    RYU_ASSERT(!accept_bounds || zc == false);
-    c -= zc;
+    c -= !accept_bounds && zc;
 
     uint32_t bi = 0; // The last removed digit, b[i-1]
 
@@ -1586,10 +1569,8 @@ inline ToDecimalResult<float> ToDecimal(float value)
             c /= 10;
             ++e10;
         }
-        if (/*accept_smaller &&*/ za && (a % 10 == 0))
+        if (accept_bounds && za && (a % 10 == 0))
         {
-            RYU_ASSERT(accept_bounds);
-
             bi = b % 10;
 
             while (a % 10 == 0) {
