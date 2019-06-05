@@ -418,7 +418,6 @@ inline Uint64x2 ComputePow5_Double(int k)
         {0x83126E978D4FDF3B, 0x645A1CAC083126EA}, // e =  -134, k =   -3
         {0xA3D70A3D70A3D70A, 0x3D70A3D70A3D70A4}, // e =  -132, k =   -2
         {0xCCCCCCCCCCCCCCCC, 0xCCCCCCCCCCCCCCCD}, // e =  -130, k =   -1
-        // The following powers-of-5 are exact (up to k = 55).
         {0x8000000000000000, 0x0000000000000000}, // e =  -127, k =    0
         {0xA000000000000000, 0x0000000000000000}, // e =  -125, k =    1
         {0xC800000000000000, 0x0000000000000000}, // e =  -123, k =    2
@@ -475,9 +474,6 @@ inline Uint64x2 ComputePow5_Double(int k)
         {0x85A36366EB71F041, 0x47A6DA2B7F864750}, // e =    -4, k =   53
         {0xA70C3C40A64E6C51, 0x999090B65F67D924}, // e =    -2, k =   54
         {0xD0CF4B50CFE20765, 0xFFF4B4E3F741CF6D}, // e =     0, k =   55
-        // The following constants are 'floor'ed.
-        // I _think_ ceil would be ok, too.
-        // NB: In all the cases here: ceil = floor + 1.
         {0x82818F1281ED449F, 0xBFF8F10E7A8921A4}, // e =     3, k =   56
         {0xA321F2D7226895C7, 0xAFF72D52192B6A0D}, // e =     5, k =   57
         {0xCBEA6F8CEB02BB39, 0x9BF4F8A69F764490}, // e =     7, k =   58
@@ -1277,7 +1273,6 @@ inline uint64_t ComputePow5_Single(int k)
         0x83126E978D4FDF3C, // e =   -70, k =   -3
         0xA3D70A3D70A3D70B, // e =   -68, k =   -2
         0xCCCCCCCCCCCCCCCD, // e =   -66, k =   -1
-        // The following powers-of-5 are exact (up to k = 27).
         0x8000000000000000, // e =   -63, k =    0
         0xA000000000000000, // e =   -61, k =    1
         0xC800000000000000, // e =   -59, k =    2
@@ -1306,9 +1301,6 @@ inline uint64_t ComputePow5_Single(int k)
         0x84595161401484A0, // e =    -5, k =   25
         0xA56FA5B99019A5C8, // e =    -3, k =   26
         0xCECB8F27F4200F3A, // e =    -1, k =   27
-        // The following constants are 'floor'ed.
-        // I _think_ ceil would be ok, too.
-        // NB: In all the cases here: ceil = floor + 1.
         0x813F3978F8940984, // e =     2, k =   28
         0xA18F07D736B90BE5, // e =     4, k =   29
         0xC9F2C9CD04674EDE, // e =     6, k =   30
