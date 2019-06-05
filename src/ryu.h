@@ -918,7 +918,6 @@ inline bool MultipleOfPow2(uint64_t value, int e2)
     RYU_ASSERT(e2 >= 0);
     RYU_ASSERT(e2 <= 63);
 
-    //return (value << (64 - e2)) == 0;
     return (value & ((uint64_t{1} << e2) - 1)) == 0;
 }
 
@@ -1161,22 +1160,19 @@ inline ToDecimalResult<double> ToDecimal(double value)
             c /= 10;
             ++e10;
         }
-//      if (accept_smaller && za)
-        if (za)
+        if (/*accept_smaller &&*/ za && (a % 10 == 0))
         {
             RYU_ASSERT(accept_bounds);
 
-            while (a % 10 == 0)
-            {
-                bi = static_cast<uint32_t>(b % 10);
-                zb_prev = zb;
-                zb = zb && (bi == 0);
+            bi = static_cast<uint32_t>(b % 10);
 
+            while (a % 10 == 0) {
                 a /= 10;
-                b /= 10;
-//                c /= 10;
                 ++e10;
             }
+
+            b = a;
+//          c = a;
         }
 
         const bool round_down = bi < 5 || (bi == 5 && zb_prev && b % 2 == 0);
@@ -1184,7 +1180,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
         // A return value of b is valid if and only if a != b or za == true.
         // A return value of b + 1 is valid if and only if b + 1 <= c.
         const bool round_up = ((a == b && !(accept_bounds && za)) || !round_down);
-//        RYU_ASSERT(!round_up || b < c);
+//      RYU_ASSERT(!round_up || b < c);
 
         b += round_up ? 1 : 0;
     }
@@ -1218,12 +1214,12 @@ inline ToDecimalResult<double> ToDecimal(double value)
             round_down = (b % 10 < 5);
             a /= 10;
             b /= 10;
-//            c /= 10;
+//          c /= 10;
             ++e10;
         }
 
         const bool round_up = (a == b || !round_down);
-//        RYU_ASSERT(!round_up || b < c);
+//      RYU_ASSERT(!round_up || b < c);
 
         b += round_up ? 1 : 0;
     }
@@ -1598,27 +1594,25 @@ inline ToDecimalResult<float> ToDecimal(float value)
             c /= 10;
             ++e10;
         }
-        if (za)
+        if (/*accept_smaller &&*/ za && (a % 10 == 0))
         {
             RYU_ASSERT(accept_bounds);
 
-            while (a % 10 == 0)
-            {
-                bi = b % 10;
-                zb_prev = zb;
-                zb = zb && (bi == 0);
+            bi = b % 10;
 
+            while (a % 10 == 0) {
                 a /= 10;
-                b /= 10;
-//                c /= 10;
                 ++e10;
             }
+
+            b = a;
+//          c = a;
         }
 
         const bool round_down = bi < 5 || (bi == 5 && zb_prev && b % 2 == 0);
 
         const bool round_up = ((a == b && !(accept_bounds && za)) || !round_down);
-//        RYU_ASSERT(!round_up || b < c);
+//      RYU_ASSERT(!round_up || b < c);
 
         b += round_up ? 1 : 0;
     }
@@ -1640,12 +1634,12 @@ inline ToDecimalResult<float> ToDecimal(float value)
             round_down = (b % 10 < 5);
             a /= 10;
             b /= 10;
-//            c /= 10;
+//          c /= 10;
             ++e10;
         }
 
         const bool round_up = (a == b || !round_down);
-//        RYU_ASSERT(!round_up || b < c);
+//      RYU_ASSERT(!round_up || b < c);
 
         b += round_up ? 1 : 0;
     }
