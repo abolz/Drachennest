@@ -17,16 +17,9 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
-#if _MSC_VER
-#include <intrin.h>
-#endif
 
 #ifndef DTOA_ASSERT
 #define DTOA_ASSERT(X) assert(X)
-#endif
-
-#ifndef DTOA_2DIGIT_EXPONENT
-#define DTOA_2DIGIT_EXPONENT 0
 #endif
 
 namespace dtoa {
@@ -72,114 +65,6 @@ inline char* Utoa_8Digits(char* buf, uint32_t digits)
     return buf + 8;
 }
 
-#if 0 // Use intrinsics for DecimalLength
-
-// Returns the number of leading 0-bits in x, starting at the most significant bit position.
-// If x is 0, the result is undefined.
-inline int CountLeadingZeros32(uint32_t x)
-{
-    DTOA_ASSERT(x != 0);
-
-#if defined(__GNUC__)
-    return __builtin_clz(x);
-#elif defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64))
-    return static_cast<int>(_CountLeadingZeros(x));
-#elif defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
-    return static_cast<int>(__lzcnt(x));
-#else
-    int lz = 0;
-    while ((x >> 31) == 0) {
-        x <<= 1;
-        ++lz;
-    }
-    return lz;
-#endif
-}
-
-// Returns the number of leading 0-bits in x, starting at the most significant bit position.
-// If x is 0, the result is undefined.
-inline int CountLeadingZeros64(uint64_t x)
-{
-    DTOA_ASSERT(x != 0);
-
-#if defined(__GNUC__)
-    return __builtin_clzll(x);
-#elif defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64))
-    return static_cast<int>(_CountLeadingZeros64(x));
-#elif defined(_MSC_VER) && defined(_M_X64)
-    return static_cast<int>(__lzcnt64(x));
-#elif defined(_MSC_VER) && defined(_M_IX86)
-    int lz = static_cast<int>( __lzcnt(static_cast<uint32_t>(x >> 32)) );
-    if (lz == 32) {
-        lz += static_cast<int>( __lzcnt(static_cast<uint32_t>(x)) );
-    }
-    return lz;
-#else
-    int lz = 0;
-    while ((x >> 63) == 0) {
-        x <<= 1;
-        ++lz;
-    }
-    return lz;
-#endif
-}
-
-inline int DecimalLength(uint32_t v)
-{
-    DTOA_ASSERT(v >= 1);
-    DTOA_ASSERT(v <= 999999999);
-
-    static constexpr uint32_t Table[] = {
-        0,
-        9,
-        99,
-        999,
-        9999,
-        99999,
-        999999,
-        9999999,
-        99999999,
-        999999999,
-    };
-
-    constexpr int Bits = 32;
-    const int y = ((19 * (Bits - 1) + (1 << 6)) - 19 * CountLeadingZeros32(v)) >> 6;
-    return y + (Table[y] < v);
-}
-
-inline int DecimalLength(uint64_t v)
-{
-    DTOA_ASSERT(v >= 1);
-    DTOA_ASSERT(v <= 99999999999999999ull); // 10^17 = 0x0163'4578'5D8A'0000
-
-    static constexpr uint64_t Table[] = {
-        0,
-        9,
-        99,
-        999,
-        9999,
-        99999,
-        999999,
-        9999999,
-        99999999,
-        999999999,
-        9999999999,
-        99999999999,
-        999999999999,
-        9999999999999,
-        99999999999999,
-        999999999999999,
-        9999999999999999,
-        99999999999999999,
-    };
-
-    constexpr int Bits = 64;
-    const int y = ((19 * (Bits - 1) + (1 << 6)) - 19 * CountLeadingZeros64(v)) >> 6;
-    return y + (Table[y] < v);
-}
-
-#else
-
 inline int DecimalLength(uint32_t v)
 {
     DTOA_ASSERT(v >= 1);
@@ -219,155 +104,6 @@ inline int DecimalLength(uint64_t v)
     if (v >= 10ull) { return 2; }
     return 1;
 }
-
-#endif
-
-#if 0 // ---
-
-inline void PrintDecimalDigits(char* buf, uint32_t digits, int num_digits)
-{
-    DTOA_ASSERT(digits >= 1);
-    DTOA_ASSERT(digits <= 999999999);
-    DTOA_ASSERT(num_digits >= 1);
-    DTOA_ASSERT(num_digits <= 9);
-
-    uint32_t n = digits;
-    if (num_digits & 1)
-    {
-        const uint32_t q = n / 10;
-        const uint32_t r = n % 10;
-        n = q;
-        num_digits--;
-        buf[num_digits] = static_cast<char>('0' + r);
-    }
-
-    uint32_t q;
-    uint32_t r;
-    switch (num_digits)
-    {
-    case 8:
-        q = n / 100;
-        r = n % 100;
-        n = q;
-        num_digits -= 2;
-        Utoa_2Digits(buf + num_digits, r);
-        // fall through
-    case 6:
-        q = n / 100;
-        r = n % 100;
-        n = q;
-        num_digits -= 2;
-        Utoa_2Digits(buf + num_digits, r);
-        // fall through
-    case 4:
-        q = n / 100;
-        r = n % 100;
-        n = q;
-        num_digits -= 2;
-        Utoa_2Digits(buf + num_digits, r);
-        // fall through
-    case 2:
-        q = n / 100;
-        r = n % 100;
-//      n = q;
-        num_digits -= 2;
-        Utoa_2Digits(buf + num_digits, r);
-    case 0:
-        break;
-    default:
-#if __GNUC__
-        __builtin_unreachable();
-#elif _MSC_VER
-        __assume(0);
-#endif
-    }
-}
-
-inline void PrintDecimalDigits(char* buf, uint64_t digits, int num_digits)
-{
-    DTOA_ASSERT(digits >= 1);
-    DTOA_ASSERT(digits <= 99999999999999999ull);
-    DTOA_ASSERT(num_digits >= 1);
-    DTOA_ASSERT(num_digits <= 17);
-
-    // We prefer 32-bit operations, even on 64-bit platforms.
-    // We have at most 17 digits, and uint32_t can store 9 digits.
-    // If output doesn't fit into uint32_t, we cut off 8 digits,
-    // so the rest will fit into uint32_t.
-    if (static_cast<uint32_t>(digits >> 32) != 0)
-    {
-        DTOA_ASSERT(num_digits >= 8);
-        const uint64_t q = digits / 100000000;
-        const uint64_t r = digits % 100000000;
-        digits = q;
-        num_digits -= 8;
-        Utoa_8Digits(buf + num_digits, static_cast<uint32_t>(r));
-    }
-
-    DTOA_ASSERT(digits <= UINT32_MAX);
-    DTOA_ASSERT(num_digits <= 10);
-
-    uint32_t n = static_cast<uint32_t>(digits);
-    if (num_digits & 1)
-    {
-        const uint32_t q = n / 10;
-        const uint32_t r = n % 10;
-        n = q;
-        num_digits--;
-        buf[num_digits] = static_cast<char>('0' + r);
-    }
-
-    uint32_t q;
-    uint32_t r;
-    switch (num_digits)
-    {
-    case 10:
-        q = n / 100;
-        r = n % 100;
-        n = q;
-        num_digits -= 2;
-        Utoa_2Digits(buf + num_digits, r);
-        // fall through
-    case 8:
-        q = n / 100;
-        r = n % 100;
-        n = q;
-        num_digits -= 2;
-        Utoa_2Digits(buf + num_digits, r);
-        // fall through
-    case 6:
-        q = n / 100;
-        r = n % 100;
-        n = q;
-        num_digits -= 2;
-        Utoa_2Digits(buf + num_digits, r);
-        // fall through
-    case 4:
-        q = n / 100;
-        r = n % 100;
-        n = q;
-        num_digits -= 2;
-        Utoa_2Digits(buf + num_digits, r);
-        // fall through
-    case 2:
-        q = n / 100;
-        r = n % 100;
-        n = q;
-        num_digits -= 2;
-        Utoa_2Digits(buf + num_digits, r);
-        // fall through
-    case 0:
-        break;
-    default:
-#if __GNUC__
-        __builtin_unreachable();
-#elif _MSC_VER
-        __assume(0);
-#endif
-    }
-}
-
-#else
 
 inline void PrintDecimalDigits(char* buf, uint32_t output, int output_length)
 {
@@ -453,8 +189,6 @@ inline void PrintDecimalDigits(char* buf, uint64_t output, int output_length)
         buf[0] = static_cast<char>('0' + output2);
     }
 }
-
-#endif
 
 } // namespace impl
 
@@ -619,16 +353,10 @@ inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent
         }
         else
         {
-             *buffer++ = '+';
+            *buffer++ = '+';
         }
 
         const uint32_t k = static_cast<uint32_t>(scientific_exponent);
-#if DTOA_2DIGIT_EXPONENT
-        if (k < 100)
-        {
-            buffer = dtoa::impl::Utoa_2Digits(buffer, k);
-        }
-#else
         if (k < 10)
         {
             *buffer++ = static_cast<char>('0' + k);
@@ -637,7 +365,6 @@ inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent
         {
             buffer = dtoa::impl::Utoa_2Digits(buffer, k);
         }
-#endif
         else
         {
             const uint32_t r = k % 10;
