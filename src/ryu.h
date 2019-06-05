@@ -1553,7 +1553,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
         {
             za = za && (a % 10 == 0);
             zb = zb && (bi == 0);
-            bi = b % 10;
+            bi = static_cast<uint32_t>(b % 10);
 
             a /= 10;
             b /= 10;
@@ -1565,7 +1565,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
             while (a % 10 == 0)
             {
                 zb = zb && (bi == 0);
-                bi = b % 10;
+                bi = static_cast<uint32_t>(b % 10);
 
                 a /= 10;
                 b /= 10;
