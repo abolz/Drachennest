@@ -1248,9 +1248,10 @@ inline uint64_t ComputePow5_Single(int k)
     const auto p = ComputePow5_Double(k);
     return p.hi + (k < 0);
 #else
-    static constexpr int MinDecExp = -29;
-    static constexpr int MaxDecExp =  47;
+    static constexpr int MinDecExp = -30;
+    static constexpr int MaxDecExp =  46;
     static constexpr uint64_t Pow5[MaxDecExp - MinDecExp + 1] = {
+        0xA2425FF75E14FC32, // e =  -133, k =  -30
         0xCAD2F7F5359A3B3F, // e =  -131, k =  -29
         0xFD87B5F28300CA0E, // e =  -129, k =  -28
         0x9E74D1B791E07E49, // e =  -126, k =  -27
@@ -1331,7 +1332,6 @@ inline uint64_t ComputePow5_Single(int k)
         0x8F7E32CE7BEA5C6F, // e =    39, k =   44
         0xB35DBF821AE4F38B, // e =    41, k =   45
         0xE0352F62A19E306E, // e =    43, k =   46
-        0x8C213D9DA502DE45, // e =    46, k =   47
     };
 
     RYU_ASSERT(k >= MinDecExp);
@@ -1340,33 +1340,40 @@ inline uint64_t ComputePow5_Single(int k)
 #endif
 }
 
-inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
+inline uint32_t MulShift(uint32_t m, uint64_t mul, int j)
 {
 #if defined(__SIZEOF_INT128__)
     __extension__ using uint128_t = unsigned __int128;
-    return static_cast<uint64_t>((uint128_t{mul} * m) >> (j & 63));
+    const uint64_t shifted_sum = static_cast<uint64_t>((uint128_t{mul} * m) >> (j & 63));
 #elif defined(_MSC_VER) && defined(_M_X64)
     uint64_t hi;
     uint64_t lo = _umul128(m, mul, &hi);
-    return __shiftright128(lo, hi, static_cast<unsigned char>(j));
+    const uint64_t shifted_sum = __shiftright128(lo, hi, static_cast<unsigned char>(j));
 #else
     const uint64_t bits0 = uint64_t{m} * Lo32(mul);
     const uint64_t bits1 = uint64_t{m} * Hi32(mul);
     const uint64_t sum = bits1 + Hi32(bits0);
-    const uint64_t shifted_sum = sum >> (j - 32);
-    return shifted_sum;
+#if defined(_MSC_VER) && defined(_M_IX86)
+    const uint64_t shifted_sum = __ull_rshift(sum, j);
+#else
+    const int shift = j & 31;
+    const uint64_t shifted_sum = sum >> shift;
 #endif
+#endif
+
+    RYU_ASSERT(shifted_sum <= UINT32_MAX);
+    return static_cast<uint32_t>(shifted_sum);
 }
 
-inline void MulPow5DivPow2_Single(uint32_t u, uint32_t v, uint32_t w, int e5, int e2, uint64_t& a, uint64_t& b, uint64_t& c)
+inline void MulPow5DivPow2_Single(uint32_t u, uint32_t v, uint32_t w, int e5, int e2, uint32_t& a, uint32_t& b, uint32_t& c)
 {
-    // j >= 57 and m has at most 24 + 2 = 26 bits.
+    // j >= 58 and m has at most 24 + 2 = 26 bits.
     // The product along with the subsequent shift therefore requires
-    // 26 + 64 - 57 = 33 bits.
+    // 26 + 64 - 58 = 32 bits.
 
     const auto k = FloorLog2Pow5(e5) + 1 - 64;
     const auto j = e2 - k;
-    RYU_ASSERT(j >= 57);
+    RYU_ASSERT(j >= 58);
     RYU_ASSERT(j <= 63);
 
     const auto pow5 = ComputePow5_Single(e5);
@@ -1502,9 +1509,10 @@ inline ToDecimalResult<float> ToDecimal(float value)
     bool zb = false;
     bool zc = false;
 
+    int q;
     if (e2 >= 0)
     {
-        const int q = FloorLog10Pow2(e2) - (e2 > 3);
+        q = FloorLog10Pow2(e2);
         RYU_ASSERT(q >= 0);
         e10 = q;
 
@@ -1519,7 +1527,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
     }
     else
     {
-        const int q = FloorLog10Pow5(-e2) - (-e2 > 1);
+        q = FloorLog10Pow5(-e2);
         RYU_ASSERT(q >= 0);
         e10 = q + e2;
 
@@ -1533,9 +1541,9 @@ inline ToDecimalResult<float> ToDecimal(float value)
         }
     }
 
-    uint64_t a;
-    uint64_t b;
-    uint64_t c;
+    uint32_t a;
+    uint32_t b;
+    uint32_t c;
     MulPow5DivPow2_Single(u, v, w, -e10, e10 - e2, a, b, c);
 
     //
@@ -1546,19 +1554,42 @@ inline ToDecimalResult<float> ToDecimal(float value)
     RYU_ASSERT(!accept_bounds || zc == false);
     c -= zc;
 
-    if (za || zb)
+    uint32_t bi = 0; // The last removed digit, b[i-1]
+
+    // zb_prev determines whether the last i-1 trailing digits of b are 0.
+    bool zb_prev = zb;
+
+    if (q != 0 && a / 10 >= c / 10)
     {
-        RYU_ASSERT((e2 >= 0 ? FloorLog10Pow2(e2) : FloorLog10Pow5(-e2)) == 0 || (a / 10 < c / 10));
+        // The digit-removal loop below is never going to be executed, but we 
+        // need to know the correct values of bi and zb_prev at the rounding step.
 
-        uint32_t bi = 0;
+        if (!zb) // Not required for correctness, but x % 10^q == 0 implies x % 10^(q-1) == 0.
+        {
+            if (e2 >= 0)
+                zb_prev = (q <= 10) && MultipleOfPow5(v, q - 1);
+            else
+                zb_prev = (q <= Single::SignificandSize + 2) && MultipleOfPow2(v, q - 1);
+        }
 
-        bool zb_prev = zb;
+        const auto p5 = -(e10 - 1);
+        const auto p2 =  (e10 - 1) - e2;
+        const auto k = FloorLog2Pow5(p5) + 1 - 64;
+        const auto j = p2 - k;
+        RYU_ASSERT(j >= 58);
+        RYU_ASSERT(j <= 63);
 
+//      bi = MulShift(v, ComputePow5_Single(p5), j) % 10;
+        bi = MulShift(v, ComputePow5_Single(p5), j) - 10 * b;
+    }
+
+    if (za || zb_prev)
+    {
         while (a / 10 < c / 10)
         {
             za = za && (a % 10 == 0);
 
-            bi = static_cast<uint32_t>(b % 10);
+            bi = b % 10;
             zb_prev = zb;
             zb = zb && (bi == 0);
 
@@ -1573,7 +1604,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
             while (a % 10 == 0)
             {
-                bi = static_cast<uint32_t>(b % 10);
+                bi = b % 10;
                 zb_prev = zb;
                 zb = zb && (bi == 0);
 
@@ -1593,7 +1624,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
     }
     else
     {
-        bool round_down = true;
+        bool round_down = bi < 5;
 
         while (a / 100 < c / 100)
         {
@@ -1619,8 +1650,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
         b += round_up ? 1 : 0;
     }
 
-    RYU_ASSERT(b <= UINT32_MAX);
-    return {static_cast<uint32_t>(b), e10};
+    return {b, e10};
 }
 
 //==================================================================================================
