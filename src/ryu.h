@@ -1077,7 +1077,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
         //           = min(p2(x), p5(x) - e2) >= q
         //           = p2(x) >= q and p5(x) - e2 >= q
         //           = p2(x) >= q
-        //           = u % 2^q == 0
+        //           = x % 2^q == 0
 
         if (q <= Double::SignificandSize + 2)
         {
@@ -1121,6 +1121,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
     //      --c;
     // Since we only assign to zc iff accept_bounds == false and zc is
     // initialized to false, we can simplify the test here.
+    RYU_ASSERT(!accept_bounds || zc == false);
     c -= zc;
 
     if (za || zb)
@@ -1145,15 +1146,15 @@ inline ToDecimalResult<double> ToDecimal(double value)
         // We'll use the value of zb_prev if and only if bi == 5 after the loops
         // below, which can only happen if the loops are run at least once, in
         // which case zb_prev has been initialized.
-        //
-        // Small optimization: Reuse zb instead of introducing another variable.
-//      bool zb_prev;
+        bool zb_prev = zb;
 
         while (a / 10 < c / 10)
         {
             za = za && (a % 10 == 0);
-            zb = zb && (bi == 0);
+
             bi = static_cast<uint32_t>(b % 10);
+            zb_prev = zb;
+            zb = zb && (bi == 0);
 
             a /= 10;
             b /= 10;
@@ -1163,10 +1164,13 @@ inline ToDecimalResult<double> ToDecimal(double value)
 //      if (accept_smaller && za)
         if (za)
         {
+            RYU_ASSERT(accept_bounds);
+
             while (a % 10 == 0)
             {
-                zb = zb && (bi == 0);
                 bi = static_cast<uint32_t>(b % 10);
+                zb_prev = zb;
+                zb = zb && (bi == 0);
 
                 a /= 10;
                 b /= 10;
@@ -1175,7 +1179,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
             }
         }
 
-        const bool round_down = bi < 5 || (bi == 5 && zb && b % 2 == 0);
+        const bool round_down = bi < 5 || (bi == 5 && zb_prev && b % 2 == 0);
 
         // A return value of b is valid if and only if a != b or za == true.
         // A return value of b + 1 is valid if and only if b + 1 <= c.
@@ -1218,8 +1222,6 @@ inline ToDecimalResult<double> ToDecimal(double value)
             ++e10;
         }
 
-        // A return value of b is valid if and only if a != b or za == true.
-        // A return value of b + 1 is valid if and only if b + 1 <= c.
         const bool round_up = (a == b || !round_down);
 //        RYU_ASSERT(!round_up || b < c);
 
@@ -1346,7 +1348,7 @@ inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
 #elif defined(_MSC_VER) && defined(_M_X64)
     uint64_t hi;
     uint64_t lo = _umul128(m, mul, &hi);
-    return __shiftright128(lo, hi, j);
+    return __shiftright128(lo, hi, static_cast<unsigned char>(j));
 #else
     const uint64_t bits0 = uint64_t{m} * Lo32(mul);
     const uint64_t bits1 = uint64_t{m} * Hi32(mul);
@@ -1541,6 +1543,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
     // Find the shortest decimal representation in the interval of legal representations.
     //
 
+    RYU_ASSERT(!accept_bounds || zc == false);
     c -= zc;
 
     if (za || zb)
@@ -1549,11 +1552,15 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
         uint32_t bi = 0;
 
+        bool zb_prev = zb;
+
         while (a / 10 < c / 10)
         {
             za = za && (a % 10 == 0);
-            zb = zb && (bi == 0);
+
             bi = static_cast<uint32_t>(b % 10);
+            zb_prev = zb;
+            zb = zb && (bi == 0);
 
             a /= 10;
             b /= 10;
@@ -1562,10 +1569,13 @@ inline ToDecimalResult<float> ToDecimal(float value)
         }
         if (za)
         {
+            RYU_ASSERT(accept_bounds);
+
             while (a % 10 == 0)
             {
-                zb = zb && (bi == 0);
                 bi = static_cast<uint32_t>(b % 10);
+                zb_prev = zb;
+                zb = zb && (bi == 0);
 
                 a /= 10;
                 b /= 10;
@@ -1574,10 +1584,8 @@ inline ToDecimalResult<float> ToDecimal(float value)
             }
         }
 
-        const bool round_down = bi < 5 || (bi == 5 && zb && b % 2 == 0);
+        const bool round_down = bi < 5 || (bi == 5 && zb_prev && b % 2 == 0);
 
-        // A return value of b is valid if and only if a != b or za == true.
-        // A return value of b + 1 is valid if and only if b + 1 <= c.
         const bool round_up = ((a == b && !(accept_bounds && za)) || !round_down);
 //        RYU_ASSERT(!round_up || b < c);
 
@@ -1605,8 +1613,6 @@ inline ToDecimalResult<float> ToDecimal(float value)
             ++e10;
         }
 
-        // A return value of b is valid if and only if a != b or za == true.
-        // A return value of b + 1 is valid if and only if b + 1 <= c.
         const bool round_up = (a == b || !round_down);
 //        RYU_ASSERT(!round_up || b < c);
 
