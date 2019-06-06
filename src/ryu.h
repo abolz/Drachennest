@@ -914,13 +914,7 @@ inline bool MultipleOfPow2(uint64_t value, int e2)
     RYU_ASSERT(e2 >= 0);
     RYU_ASSERT(e2 <= 63);
 
-#if defined(_MSC_VER) && defined(_M_X64)
-    // TODO: bzhi actually returns its argument unmodified if the index is out of range.
-    //       Remove range checks in the digit-removal loop?
-    return _bzhi_u64(value, e2) == 0;
-#else
     return (value & ((uint64_t{1} << e2) - 1)) == 0;
-#endif
 }
 
 } // namespace impl
@@ -1411,13 +1405,7 @@ inline bool MultipleOfPow2(uint32_t value, int e2)
     RYU_ASSERT(e2 >= 0);
     RYU_ASSERT(e2 <= 31);
 
-#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
-    // TODO: bzhi actually returns its argument unmodified if the index is out of range.
-    //       Remove range checks in the digit-removal loop?
-    return _bzhi_u32(value, e2) == 0;
-#else
     return (value & ((uint32_t{1} << e2) - 1)) == 0;
-#endif
 }
 
 } // namespace impl
