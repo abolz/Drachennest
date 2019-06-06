@@ -961,14 +961,9 @@ inline ToDecimalResult<double> ToDecimal(double value)
             // Move trailing zeros into the decimal exponent.
             // NB: This is actually not required for fixed-point notation.
             int k = 0;
-            for (;;)
-            {
-                const uint64_t q = m2 / 10;
-                const uint64_t r = m2 % 10;
-                if (r != 0)
-                    break;
-                m2 = q;
-                k++;
+            while (m2 % 10 == 0) {
+                m2 /= 10;
+                ++k;
             }
 
             return {m2, k};
@@ -1445,14 +1440,9 @@ inline ToDecimalResult<float> ToDecimal(float value)
             m2 >>= -e2;
 
             int k = 0;
-            for (;;)
-            {
-                const uint32_t q = m2 / 10;
-                const uint32_t r = m2 % 10;
-                if (r != 0)
-                    break;
-                m2 = q;
-                k++;
+            while (m2 % 10 == 0) {
+                m2 /= 10;
+                ++k;
             }
 
             return {m2, k};
