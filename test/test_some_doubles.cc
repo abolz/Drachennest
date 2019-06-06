@@ -2,6 +2,7 @@
 #include <string.h>
 #include <assert.h>
 #include <random>
+#include <iostream>
 
 // #include "../src/grisu2.h"
 // #include "../src/grisu3.h"
@@ -38,15 +39,18 @@ int main()
 {
     constexpr int P = 53;
     constexpr uint64_t MaxF = (1ull << (P - 1)) - 1;
-    //constexpr int ExpBias     = std::numeric_limits<double>::max_exponent - 1 + (P - 1);
-    //constexpr int MaxExponent = std::numeric_limits<double>::max_exponent - 1 - (P - 1);
-    //constexpr int MinExponent = std::numeric_limits<double>::min_exponent - 1 - (P - 1);
-    constexpr int MinExp = 0; // 65; // -81 + ExpBias + 2; // -81 + ExpBias + 2; // 0;
-    constexpr int MaxExp = 2048 - 1; // 79; // -5 + ExpBias + 2; // 2047 - 1;
+    constexpr int ExpBias     = std::numeric_limits<double>::max_exponent - 1 + (P - 1);
+    constexpr int MaxExponent = std::numeric_limits<double>::max_exponent - 1 - (P - 1);
+    constexpr int MinExponent = std::numeric_limits<double>::min_exponent - 1 - (P - 1);
+    constexpr int MinExp = 0; // -81 + ExpBias + 2; // -81 + ExpBias + 2; // 0;
+    constexpr int MaxExp = 2048 - 1; //  -1 + ExpBias + 2; // 2047 - 1;
 
-    constexpr int NumSignificandsPerExponent = 1 << 15;
+    constexpr int NumSignificandsPerExponent = 1 << 20;
 
-    std::mt19937 random;
+    std::random_device rd_seed;
+    const auto seed = rd_seed();
+    std::cout << "seed = " << seed << '\n';
+    std::mt19937 random(seed);
 
     uint64_t num_checked = 0;
     uint64_t num_optimal = 0;
@@ -118,9 +122,9 @@ int main()
                 }
                 else
                 {
-                    //printf("\nNOT short: 0x%016llX [actual = %s] [expected = %s]\n", bits, buf, tmp);
+                    printf("\nNOT short: 0x%016llX [actual = %s] [expected = %s]\n", bits, buf, tmp);
                     //printf("\nCheckDoubleBits(0x%016llX, \"%s\");", bits, tmp);
-                    //break;
+                    break;
                 }
                 if (num1.digits == num2.digits)
                 {
@@ -128,9 +132,9 @@ int main()
                 }
                 else
                 {
-                   //printf("\nNOT optimal: 0x%016llX [actual = %s] [expected = %s]\n", bits, buf, tmp);
+                   printf("\nNOT optimal: 0x%016llX [actual = %s] [expected = %s]\n", bits, buf, tmp);
                    //printf("\nCheckDoubleBits(0x%016llX, \"%s\");", bits, tmp);
-                   //break;
+                   break;
                 }
             }
         }

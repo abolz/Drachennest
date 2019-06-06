@@ -30,11 +30,13 @@ int main()
 {
     constexpr int P = 24;
     constexpr uint32_t MaxF = (1u << (P - 1)) - 1;
-    //constexpr int ExpBias     = std::numeric_limits<float>::max_exponent - 1 + (P - 1);
-    //constexpr int MaxExponent = std::numeric_limits<float>::max_exponent - 1 - (P - 1);
-    //constexpr int MinExponent = std::numeric_limits<float>::min_exponent - 1 - (P - 1);
-    constexpr int MinExp = 0;       // -40 + 2 + ExpBias;
-    constexpr int MaxExp = 255 - 1; //  -5 + 2 + ExpBias;
+    constexpr int ExpBias     = std::numeric_limits<float>::max_exponent - 1 + (P - 1);
+    constexpr int MaxExponent = std::numeric_limits<float>::max_exponent - 1 - (P - 1);
+    constexpr int MinExponent = std::numeric_limits<float>::min_exponent - 1 - (P - 1);
+    constexpr int MinExp = 0; // 2 + ExpBias; // 0;
+    constexpr int MaxExp = 255 - 1;
+    //constexpr int MinExp = -40 + 2 + ExpBias;
+    //constexpr int MaxExp =  -1 + 2 + ExpBias;
 
     uint32_t num_checked = 0;
     uint32_t num_optimal = 0;
@@ -102,18 +104,18 @@ int main()
                 }
                 else
                 {
-                    // printf("\nnum1 = %9s * 10^%d\n", num1.digits.c_str(), num1.exponent);
-                    // printf("\nnum2 = %9s * 10^%d\n", num2.digits.c_str(), num2.exponent);
+                   printf("\nNOT short: 0x%08X [actual = %s] [expected = %s]\n", bits, buf, tmp);
+                   break;
                 }
                 if (num1.digits == num2.digits)
                 {
                     ++curr_num_optimal;
                 }
-                //else
-                //{
-                //    printf("\nNOT optimal: 0x%08X [actual = %s] [expected = %s]\n", bits, buf, tmp);
-                //    break;
-                //}
+                else
+                {
+                   printf("\nNOT optimal: 0x%08X [actual = %s] [expected = %s]\n", bits, buf, tmp);
+                   break;
+                }
             }
         }
 
@@ -128,6 +130,11 @@ int main()
                 100.0 * (double)curr_not_short / (double)curr_num_checked,
                 curr_not_short);
         }
+        //else
+        //{
+        //    break;
+        //}
+
 
         num_checked += curr_num_checked;
         num_optimal += curr_num_optimal;
@@ -149,5 +156,3 @@ int main()
 #include "double-conversion/fast-dtoa.cc"
 #include "double-conversion/fixed-dtoa.cc"
 #include "double-conversion/strtod.cc"
-
-// #include "../lib/floaxie.cc"

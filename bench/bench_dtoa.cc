@@ -13,8 +13,8 @@
 
 #include <math.h>
 
-#define BENCH_GRISU2 1
-//#define BENCH_GRISU3 1
+//#define BENCH_GRISU2 1
+#define BENCH_GRISU3 1
 //#define BENCH_RYU 1
 //#define BENCH_CHARCONV 1
 //#define BENCH_DOUBLE_CONVERSION 1
@@ -444,17 +444,23 @@ int main(int argc, char** argv)
     //    Register_Uniform(std::pow(10.0, e), std::pow(10.0, e+1));
     //}
 
+    //for (int d = 1; d <= 15; ++d) {
+    //    Register_Digits_double(StrPrintf("1.%d-digits", d - 1), d, -(d - 1));
+    //}
+    //for (int d = 1; d <= 15; ++d) {
+    //    Register_Digits_double(StrPrintf("%d.1-digits", d - 1), d, -1);
+    //}
+    //for (int d = 1; d <= 15; ++d) {
+    //    Register_Digits_double(StrPrintf("%d-digits / 10^22", d), d, -22);
+    //}
+    //for (int d = 1; d <= 15; ++d) {
+    //    Register_Digits_double(StrPrintf("%d-digits * 10^22", d), d, 22);
+    //}
+
     for (int d = 1; d <= 15; ++d) {
-        Register_Digits_double(StrPrintf("1.%d-digits", d - 1), d, -(d - 1));
-    }
-    for (int d = 1; d <= 15; ++d) {
-        Register_Digits_double(StrPrintf("%d.1-digits", d - 1), d, -1);
-    }
-    for (int d = 1; d <= 15; ++d) {
-        Register_Digits_double(StrPrintf("%d-digits / 10^22", d), d, -22);
-    }
-    for (int d = 1; d <= 15; ++d) {
-        Register_Digits_double(StrPrintf("%d-digits * 10^22", d), d, 22);
+        for (int e = -22; e <= 22; e += 1) {
+            Register_Digits_double(StrPrintf("%2d,%3d", d, e), d, e);
+        }
     }
 #endif
 

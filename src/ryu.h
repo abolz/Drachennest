@@ -1144,6 +1144,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
         if (accept_bounds && za && (a % 10 == 0))
         {
             bi = static_cast<uint32_t>(b % 10);
+            zb_prev = zb; // TODO: Why is this _not_ required? bi != 5 here?
 
             while (a % 10 == 0) {
                 a /= 10;
@@ -1562,6 +1563,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
         if (accept_bounds && za && (a % 10 == 0))
         {
             bi = b % 10;
+            zb_prev = zb; // TODO: Why is this _not_ required? bi != 5 here?
 
             while (a % 10 == 0) {
                 a /= 10;
