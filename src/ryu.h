@@ -1085,115 +1085,82 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
     c -= !accept_bounds && zc;
 
-    if (za || zb)
+    RYU_ASSERT((e2 >= 0 ? FloorLog10Pow2(e2) : FloorLog10Pow5(-e2)) == 0 || (a / 10 < c / 10));
+
+    uint64_t br   = 0; // Digits removed from b
+    uint64_t mask = 1; // 10^(number of digits removed)
+
+    while (a / 10000 < c / 10000)
     {
-        // zb determines whether the last i trailing digits of b are 0:
-        // b[0, 1, ..., i-1] == 0. To properly round the result we need to know
-        // the last removed digit bi = b[i-1] and whether b[0, 1, ..., i-2] are
-        // all 0's.
-        //
-        // zb_prev determines whether the last i-1 trailing digits of b are 0:
-        // b[0, 1, ..., i-2] == 0.
-        //
-        // We have removed q = q' - 1 digits. If q' == 0, b[i-1] == 0. Otherwise
-        // we will remove at least one more digit, i.e. execute the loop at
-        // least once, and therefore determine the correct values of b[i-1] and
-        // zb_prev.
-        //
-        // Note, we'll use the value of zb_prev if and only if bi == 5 after the
-        // loops below, which can only happen if the loops are run at least
-        // once, in which case zb_prev has been initialized.
+        za = za && (a % 10000 == 0);
 
-        RYU_ASSERT((e2 >= 0 ? FloorLog10Pow2(e2) : FloorLog10Pow5(-e2)) == 0 || (a / 10 < c / 10));
+        br = static_cast<uint32_t>(b % 10000) * mask + br;
+        mask *= 10000;
 
-        uint32_t bi = 0;
-        bool zb_prev = zb;
-
-        while (a / 10 < c / 10)
-        {
-            za = za && (a % 10 == 0);
-
-            bi = static_cast<uint32_t>(b % 10);
-            zb_prev = zb;
-            zb = zb && (bi == 0);
-
-            a /= 10;
-            b /= 10;
-            c /= 10;
-            ++e10;
-        }
-
-        if (accept_bounds && za && (a % 10 == 0))
-        {
-            // The loop below is executed at least once and after the first
-            // iteration we have a == b == c. If the loop is executed more than
-            // once, we necessarily have bi == 0 and zb_prev will not change
-            // after the first iteration.
-
-            while (a % 10 == 0)
-            {
-                bi = static_cast<uint32_t>(b % 10);
-                zb_prev = zb;
-                zb = zb && (bi == 0);
-
-                a /= 10;
-//              b /= 10;
-//              c /= 10;
-                ++e10;
-            }
-//          RYU_ASSERT(b == a);
-//          RYU_ASSERT(c == a);
-
-            b = a;
-//          c = a;
-        }
-
-        // A return value of b is valid if and only if a != b or za == true.
-        // A return value of b + 1 is valid if and only if b + 1 <= c.
-        const bool round_up = (a == b && !(accept_bounds && za)) || !(bi < 5 || (bi == 5 && zb_prev && b % 2 == 0));
-
-//      RYU_ASSERT(!round_up || b < c);
-        b += round_up ? 1 : 0;
+        a /= 10000;
+        b /= 10000;
+        c /= 10000;
+        e10 += 4;
     }
-    else
+
+    if (a / 100 < c / 100)
     {
-        // If the loop is never executed, bi == 0, i.e. we need to round down.
-        // Otherwise we will compute a correct value of round_down in the loop
-        // body.
-        bool round_down = true;
+        za = za && (a % 100 == 0);
 
-        while (a / 10000 < c / 10000)
-        {
-            round_down = (b % 10000 < 5000);
-            a /= 10000;
-            b /= 10000;
-            c /= 10000;
-            e10 += 4;
-        }
+        br = static_cast<uint32_t>(b % 100) * mask + br;
+        mask *= 100;
 
-        if (a / 100 < c / 100)
-        {
-            round_down = (b % 100 < 50);
-            a /= 100;
-            b /= 100;
-            c /= 100;
-            e10 += 2;
-        }
+        a /= 100;
+        b /= 100;
+        c /= 100;
+        e10 += 2;
+    }
 
-        if (a / 10 < c / 10)
+    if (a / 10 < c / 10)
+    {
+        za = za && (a % 10 == 0);
+
+        br = static_cast<uint32_t>(b % 10) * mask + br;
+        mask *= 10;
+
+        a /= 10;
+        b /= 10;
+//      c /= 10;
+        ++e10;
+    }
+
+    if (accept_bounds && za && (a % 10 == 0))
+    {
+        // The loop below is executed at least once and after the first
+        // iteration we have a == b == c. If the loop is executed more than
+        // once, we necessarily have bi == 0 and zb_prev will not change
+        // after the first iteration.
+
+        while (a % 10 == 0)
         {
-            round_down = (b % 10 < 5);
+            br = static_cast<uint32_t>(b % 10) * mask + br;
+            mask *= 10;
+
             a /= 10;
-            b /= 10;
+//          b /= 10;
 //          c /= 10;
             ++e10;
         }
+//      RYU_ASSERT(b == a);
+//      RYU_ASSERT(c == a);
 
-        const bool round_up = (a == b) || !round_down;
-
-//      RYU_ASSERT(!round_up || b < c);
-        b += round_up ? 1 : 0;
+        b = a;
+//      c = a;
     }
+
+    const uint64_t half = mask / 2;
+
+    // A return value of b is valid if and only if a != b or za == true.
+    // A return value of b + 1 is valid if and only if b + 1 <= c.
+    const bool round_up = (a == b && !(accept_bounds && za)) || !(br < half || (br == half && zb && b % 2 == 0));
+
+//  RYU_ASSERT(!round_up || b < c);
+    b += round_up ? 1 : 0;
 
     return {b, e10};
 }
