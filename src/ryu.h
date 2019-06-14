@@ -838,14 +838,16 @@ inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 
 inline void MulPow5DivPow2_Double(uint64_t u, uint64_t v, uint64_t w, int e5, int e2, uint64_t& a, uint64_t& b, uint64_t& c)
 {
+    static constexpr int BitsPerPow5 = 128;
+
     // j >= 121 and m has at most 53 + 2 = 55 bits.
     // The product along with the subsequent shift therefore requires
     // 55 + 128 - 121 = 62 bits.
 
-    const auto k = FloorLog2Pow5(e5) + 1 - 128;
+    const auto k = FloorLog2Pow5(e5) + 1 - BitsPerPow5;
     const auto j = e2 - k;
-    RYU_ASSERT(j >= 121); // 121 - 64 = 57
-    RYU_ASSERT(j <= 127); // 127 - 64 = 63
+    RYU_ASSERT(j >= BitsPerPow5 - 7); // 121 - 64 = 57
+    RYU_ASSERT(j <= BitsPerPow5 - 1); // 127 - 64 = 63
 
     const auto pow5 = ComputePow5_Double(e5);
 
@@ -1132,9 +1134,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
     if (accept_bounds && za && (a % 10 == 0))
     {
         // The loop below is executed at least once and after the first
-        // iteration we have a == b == c. If the loop is executed more than
-        // once, we necessarily have bi == 0 and zb_prev will not change
-        // after the first iteration.
+        // iteration we have a == b == c.
 
         while (a % 10 == 0)
         {
@@ -1297,14 +1297,16 @@ inline uint32_t MulShift(uint32_t m, uint64_t mul, int j)
 
 inline void MulPow5DivPow2_Single(uint32_t u, uint32_t v, uint32_t w, int e5, int e2, uint32_t& a, uint32_t& b, uint32_t& c)
 {
+    static constexpr int BitsPerPow5 = 64;
+
     // j >= 58 and m has at most 24 + 2 = 26 bits.
     // The product along with the subsequent shift therefore requires
     // 26 + 64 - 58 = 32 bits.
 
-    const auto k = FloorLog2Pow5(e5) + 1 - 64;
+    const auto k = FloorLog2Pow5(e5) + 1 - BitsPerPow5;
     const auto j = e2 - k;
-    RYU_ASSERT(j >= 58);
-    RYU_ASSERT(j <= 63);
+    RYU_ASSERT(j >= BitsPerPow5 - 6); // 58
+    RYU_ASSERT(j <= BitsPerPow5 - 1); // 63
 
     const auto pow5 = ComputePow5_Single(e5);
 
