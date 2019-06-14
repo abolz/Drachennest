@@ -111,7 +111,7 @@ inline uint64_t Load64(uint32_t lo, uint32_t hi)
 //
 // Double-precision implementation
 //==================================================================================================
-// Constant data = 9872 bytes
+// Constant data = 9872 (+ 368) bytes
 
 namespace impl {
 
@@ -952,7 +952,6 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
         if ((0 <= -e2 && -e2 < Double::SignificandSize) && MultipleOfPow2(m2, -e2))
         {
-            // Fast path for integers in the range [1, 2^53).
             // Since 2^52 <= m2 < 2^53 and 0 <= -e2 <= 52:
             //  1 <= value = m2 / 2^-e2 < 2^53.
             // Since m2 is divisible by 2^-e2, value is an integer.
@@ -980,7 +979,6 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
     const uint32_t lower_boundary_is_closer = (ieee_mantissa == 0 && ieee_exponent > 1);
 
-    // We subtract 2 so that the bounds computation has 2 additional bits.
     e2 -= 2;
     const uint64_t u = 4 * m2 - 2 + lower_boundary_is_closer;
     const uint64_t v = 4 * m2;
@@ -996,10 +994,6 @@ inline ToDecimalResult<double> ToDecimal(double value)
     bool za = false; // a[0, ..., i-1] == 0
     bool zb = false; // b[0, ..., i-1] == 0
     bool zc = false; // c[0, ..., i-1] == 0
-    // We only need to know za iff accept_lower == true.
-    // We only need to know zc iff accept_upper == false.
-    // Since accept_lower == accept_upper == accept_bounds, we only need to know
-    // one or the other.
 
     if (e2 >= 0)
     {
@@ -1055,7 +1049,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
         const int q = FloorLog10Pow5(-e2) - (-e2 > 1); // == max(0, q' - 1)
         RYU_ASSERT(q >= 0);
 
-        e10 = e2 + q;
+        e10 = q + e2;
         RYU_ASSERT(e10 < 0);
         RYU_ASSERT(e10 - e2 >= 0);
 
@@ -1083,19 +1077,6 @@ inline ToDecimalResult<double> ToDecimal(double value)
     uint64_t c;
     MulPow5DivPow2_Double(u, v, w, -e10, e10 - e2, a, b, c);
 
-    // TODO:
-    //
-    // For normal floating-point numbers:
-    // (4*f - 2) / 100    <= a <= c <= 100 * (4*f + 2)
-    // (4*2^52 - 2) / 100 <= a <= c <  100 * (4*2^53 + 2)
-    // (2^54 - 2) / 100   <= a <= c <  100 * (2^55 + 2)
-    // 180143985094819    <= a <= c <  3602879701896397000
-    //
-    // Would it be better to call a modified DecimalLength() right here in this
-    // case?
-    RYU_ASSERT(ieee_exponent == 0 || a >= 180143985094819);
-    RYU_ASSERT(ieee_exponent == 0 || c <= 3602879701896397000);
-
     //
     // Step 4:
     // Find the shortest decimal representation in the interval of valid
@@ -1108,24 +1089,24 @@ inline ToDecimalResult<double> ToDecimal(double value)
     {
         // zb determines whether the last i trailing digits of b are 0:
         // b[0, 1, ..., i-1] == 0. To properly round the result we need to know
-        // the last removed digit b[i-1] and whether b[0, 1, ..., i-2] are all
-        // 0's.
-        // We have removed q = q' - 1 digits. If q' == 0, we neccessarily have
-        // b[i-1] == 0. Otherwise we will remove at least one more digit, i.e.
-        // execute the loop at least once, and therefore determine the correct
-        // values of b[i-1] and zb_prev.
-
-//      RYU_ASSERT(q' == 0 || (a / 10 < c / 10));
-        RYU_ASSERT((e2 >= 0 ? FloorLog10Pow2(e2) : FloorLog10Pow5(-e2)) == 0 || (a / 10 < c / 10));
-
-        uint32_t bi = 0; // The last removed digit, b[i-1]
-
+        // the last removed digit bi = b[i-1] and whether b[0, 1, ..., i-2] are
+        // all 0's.
+        //
         // zb_prev determines whether the last i-1 trailing digits of b are 0:
         // b[0, 1, ..., i-2] == 0.
         //
-        // We'll use the value of zb_prev if and only if bi == 5 after the loops
-        // below, which can only happen if the loops are run at least once, in
-        // which case zb_prev has been initialized.
+        // We have removed q = q' - 1 digits. If q' == 0, b[i-1] == 0. Otherwise
+        // we will remove at least one more digit, i.e. execute the loop at
+        // least once, and therefore determine the correct values of b[i-1] and
+        // zb_prev.
+        //
+        // Note, we'll use the value of zb_prev if and only if bi == 5 after the
+        // loops below, which can only happen if the loops are run at least
+        // once, in which case zb_prev has been initialized.
+
+        RYU_ASSERT((e2 >= 0 ? FloorLog10Pow2(e2) : FloorLog10Pow5(-e2)) == 0 || (a / 10 < c / 10));
+
+        uint32_t bi = 0;
         bool zb_prev = zb;
 
         while (a / 10 < c / 10)
@@ -1141,27 +1122,37 @@ inline ToDecimalResult<double> ToDecimal(double value)
             c /= 10;
             ++e10;
         }
+
         if (accept_bounds && za && (a % 10 == 0))
         {
-            bi = static_cast<uint32_t>(b % 10);
-            zb_prev = zb; // TODO: Why is this _not_ required? bi != 5 here?
+            // The loop below is executed at least once and after the first
+            // iteration we have a == b == c. If the loop is executed more than
+            // once, we necessarily have bi == 0 and zb_prev will not change
+            // after the first iteration.
 
-            while (a % 10 == 0) {
+            while (a % 10 == 0)
+            {
+                bi = static_cast<uint32_t>(b % 10);
+                zb_prev = zb;
+                zb = zb && (bi == 0);
+
                 a /= 10;
+//              b /= 10;
+//              c /= 10;
                 ++e10;
             }
+//          RYU_ASSERT(b == a);
+//          RYU_ASSERT(c == a);
 
             b = a;
 //          c = a;
         }
 
-        const bool round_down = bi < 5 || (bi == 5 && zb_prev && b % 2 == 0);
-
         // A return value of b is valid if and only if a != b or za == true.
         // A return value of b + 1 is valid if and only if b + 1 <= c.
-        const bool round_up = ((a == b && !(accept_bounds && za)) || !round_down);
-//      RYU_ASSERT(!round_up || b < c);
+        const bool round_up = (a == b && !(accept_bounds && za)) || !(bi < 5 || (bi == 5 && zb_prev && b % 2 == 0));
 
+//      RYU_ASSERT(!round_up || b < c);
         b += round_up ? 1 : 0;
     }
     else
@@ -1198,9 +1189,9 @@ inline ToDecimalResult<double> ToDecimal(double value)
             ++e10;
         }
 
-        const bool round_up = (a == b || !round_down);
-//      RYU_ASSERT(!round_up || b < c);
+        const bool round_up = (a == b) || !round_down;
 
+//      RYU_ASSERT(!round_up || b < c);
         b += round_up ? 1 : 0;
     }
 
@@ -1212,7 +1203,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
 //
 // Single-precision implementation
 //==================================================================================================
-// Constant data: 624 bytes
+// Constant data: 624 (+ 88) bytes
 
 namespace impl {
 
@@ -1481,7 +1472,10 @@ inline ToDecimalResult<float> ToDecimal(float value)
     {
         q = FloorLog10Pow2(e2);
         RYU_ASSERT(q >= 0);
+
         e10 = q;
+        RYU_ASSERT(e10 >= 0);
+        RYU_ASSERT(e10 - e2 <= 0);
 
         if (q <= 10) // 10 = floor(log_5(2^24))
         {
@@ -1494,7 +1488,10 @@ inline ToDecimalResult<float> ToDecimal(float value)
     {
         q = FloorLog10Pow5(-e2);
         RYU_ASSERT(q >= 0);
+
         e10 = q + e2;
+        RYU_ASSERT(e10 < 0);
+        RYU_ASSERT(e10 - e2 >= 0);
 
         if (q <= Single::SignificandSize + 2)
         {
@@ -1516,14 +1513,25 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
     c -= !accept_bounds && zc;
 
-    uint32_t bi = 0; // The last removed digit, b[i-1]
+    // zb determines whether the last i trailing digits of b are 0:
+    // b[0, 1, ..., i-1] == 0. To properly round the result we need to know the
+    // last removed digit bi = b[i-1] and whether b[0, 1, ..., i-2] are all 0's.
+    //
+    // zb_prev determines whether the last i-1 trailing digits of b are 0:
+    // b[0, 1, ..., i-2] == 0.
+    //
+    // We have removed q digits. If q == 0, b[i-1] == 0. Otherwise, if the loop
+    // below is executed at least once, we will determine the correct values of
+    // b[i-1] and zb_prev inside the loop body. If the loop is never going to be
+    // executed, we need to explicitly compute the correct values of bi and
+    // zb_prev.
 
-    // zb_prev determines whether the last i-1 trailing digits of b are 0.
+    uint32_t bi = 0;
     bool zb_prev = zb;
 
     if (q != 0 && a / 10 >= c / 10)
     {
-        // The digit-removal loop below is never going to be executed, but we 
+        // The digit-removal loop below is never going to be executed, but we
         // need to know the correct values of bi and zb_prev at the rounding step.
 
         if (!zb) // Not required for correctness, but x % 10^q == 0 implies x % 10^(q-1) == 0.
@@ -1562,23 +1570,29 @@ inline ToDecimalResult<float> ToDecimal(float value)
         }
         if (accept_bounds && za && (a % 10 == 0))
         {
-            bi = b % 10;
-            zb_prev = zb; // TODO: Why is this _not_ required? bi != 5 here?
+            while (a % 10 == 0)
+            {
+                bi = b % 10;
+                zb_prev = zb;
+                zb = zb && (bi == 0);
 
-            while (a % 10 == 0) {
                 a /= 10;
+//              b /= 10;
+//              c /= 10;
                 ++e10;
             }
+//          RYU_ASSERT(b == a);
+//          RYU_ASSERT(c == a);
 
             b = a;
 //          c = a;
         }
 
-        const bool round_down = bi < 5 || (bi == 5 && zb_prev && b % 2 == 0);
+        // A return value of b is valid if and only if a != b or za == true.
+        // A return value of b + 1 is valid if and only if b + 1 <= c.
+        const bool round_up = (a == b && !(accept_bounds && za)) || !(bi < 5 || (bi == 5 && zb_prev && b % 2 == 0));
 
-        const bool round_up = ((a == b && !(accept_bounds && za)) || !round_down);
 //      RYU_ASSERT(!round_up || b < c);
-
         b += round_up ? 1 : 0;
     }
     else
@@ -1603,9 +1617,9 @@ inline ToDecimalResult<float> ToDecimal(float value)
             ++e10;
         }
 
-        const bool round_up = (a == b || !round_down);
-//      RYU_ASSERT(!round_up || b < c);
+        const bool round_up = (a == b) || !round_down;
 
+//      RYU_ASSERT(!round_up || b < c);
         b += round_up ? 1 : 0;
     }
 
