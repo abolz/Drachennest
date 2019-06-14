@@ -1134,11 +1134,13 @@ inline ToDecimalResult<double> ToDecimal(double value)
     if (accept_bounds && za && (a % 10 == 0))
     {
         // The loop below is executed at least once and after the first
-        // iteration we have a == b == c.
+        // iteration we have a == b == c, i.e., after the first iteration, we
+        // only remove 0's from b, so br cannot possibly change.
+
+        br = static_cast<uint32_t>(b % 10) * mask + br;
 
         while (a % 10 == 0)
         {
-            br = static_cast<uint32_t>(b % 10) * mask + br;
             mask *= 10;
 
             a /= 10;
