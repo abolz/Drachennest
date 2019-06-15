@@ -76,7 +76,7 @@ def ComputeRequiredBitSizes(exponent_bits, explicit_mantissa_bits):
 
 def PrintRequiredBitSizes(total_bits, exponent_bits, explicit_mantissa_bits):
     b = ComputeRequiredBitSizes(exponent_bits, explicit_mantissa_bits)
-    print 'float{}: [{}, {}]'.format(total_bits, *b)
+    print('float{}: [{}, {}]'.format(total_bits, *b))
 
 PrintRequiredBitSizes(16,  5, 10) # ==> [15, 21]
 PrintRequiredBitSizes(32,  8, 23) # ==> [60, 63]

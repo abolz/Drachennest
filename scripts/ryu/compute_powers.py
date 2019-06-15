@@ -22,7 +22,7 @@ def ToHexString(n, bits):
     p = (bits + (4 - 1)) // 4       # Round up to four bits per hexit
 #   p = 2**((p - 1).bit_length())   # Round up to next power-of-2
     assert 4*p >= n.bit_length()
-    return '0x{:0{}X}'.format(n, p)
+    return '0x{:0{}X}u'.format(n, p)
 
 def FormatHexChunks(n, bits_per_chunk = 64):
     chunks = Split(n, bits_per_chunk)
@@ -63,12 +63,12 @@ def ComputeRyuPower(k, bits):
     return f, e
 
 def PrintRyuPowers(bits, min_exponent, max_exponent, bits_per_chunk=64):
-    print '// Let e = FloorLog2Pow5(k) + 1 - {}'.format(bits)
-    print '// For k >= 0, stores 5^k in the form: floor( 5^k / 2^e )'
-    print '// For k <= 0, stores 5^k in the form:  ceil(2^-e / 5^-k)'
+    print('// Let e = FloorLog2Pow5(k) + 1 - {}'.format(bits))
+    print('// For k >= 0, stores 5^k in the form: floor( 5^k / 2^e )')
+    print('// For k <= 0, stores 5^k in the form:  ceil(2^-e / 5^-k)')
     for k in range(min_exponent, max_exponent + 1):
         f, e = ComputeRyuPower(k, bits)
-        print FormatHexChunks(f, bits_per_chunk) + ', // e = {:5d}, k = {:4d}'.format(e, k)
+        print(FormatHexChunks(f, bits_per_chunk) + ', // e = {:5d}, k = {:4d}'.format(e, k))
 
 # float16:
 # PrintRyuPowers(bits=32, min_exponent=0, max_exponent=9, bits_per_chunk=32)

@@ -47,7 +47,7 @@ def ComputeTableSize(exponent_bits, explicit_mantissa_bits):
 
 def PrintTableSize(total_bits, exponent_bits, explicit_mantissa_bits):
     b = ComputeTableSize(exponent_bits, explicit_mantissa_bits)
-    print 'float{}: [{}, {}]'.format(total_bits, *b)
+    print('float{}: [{}, {}]'.format(total_bits, *b))
 
 PrintTableSize(16,  5, 10) # ==> [0, 9]
 PrintTableSize(32,  8, 23) # ==> [-29, 47]

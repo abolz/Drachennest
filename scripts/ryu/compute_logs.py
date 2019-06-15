@@ -91,7 +91,7 @@ def FindFloorApprox(log_approx, b, B, int_width, min_exponent, max_exponent, sig
     assert signed or max_exponent >= 0
     assert min_exponent <= max_exponent
 
-    print 'Find approximation for floor(log_{} {}^e)'.format(b, B)
+    print('Find approximation for floor(log_{} {}^e)'.format(b, B))
     # print '  in [{}, {}]'.format(min_exponent, max_exponent)
     # print 'Integer bit width: {}'.format(int_width)
 
@@ -127,8 +127,8 @@ def FindFloorApprox(log_approx, b, B, int_width, min_exponent, max_exponent, sig
         if min_e <= min_exponent and max_exponent <= max_e:
             max_target_exponent = max_int # 262380
             if True:
-                print 'Found.'
-                print 'Computing exact valid range of target exponent...'
+                print('Found.')
+                print('Computing exact valid range of target exponent...')
                 real_min_e = -min_e
                 if signed:
                     while True:
@@ -152,34 +152,34 @@ def FindFloorApprox(log_approx, b, B, int_width, min_exponent, max_exponent, sig
                 real_max_e = max_e
 
             if signed:
-                print 'inline int{}_t FloorLog{}Pow{}(int{}_t e) {{'.format(int_width, b, B, int_width)
-                print '    assert(e >= {:d});'.format(real_min_e)
-                print '    assert(e <= {:d});'.format(real_max_e)
-                print '    return (e * {}) >> {};'.format(L.mul, L.shift)
-                print '}'
+                print('inline int{}_t FloorLog{}Pow{}(int{}_t e) {{'.format(int_width, b, B, int_width))
+                print('    assert(e >= {:d});'.format(real_min_e))
+                print('    assert(e <= {:d});'.format(real_max_e))
+                print('    return (e * {}) >> {};'.format(L.mul, L.shift))
+                print('}')
             else:
-                print 'inline uint{}_t FloorLog{}Pow{}(uint{}_t e) {{'.format(int_width, b, B, int_width)
-                print '    assert(e <= {:d});'.format(real_max_e)
-                print '    return (e * {}) >> {};'.format(L.mul, L.shift)
-                print '}'
+                print('inline uint{}_t FloorLog{}Pow{}(uint{}_t e) {{'.format(int_width, b, B, int_width))
+                print('    assert(e <= {:d});'.format(real_max_e))
+                print('    return (e * {}) >> {};'.format(L.mul, L.shift))
+                print('}')
             return
 
     if int_width < 64:
         return FindFloorApprox(log_approx, b, B, int_width * 2, min_exponent, max_exponent)
 
-    print 'FAIL.'
+    print('FAIL.')
 
 INITIAL_INT_WIDTH = 32
 
 def FindFloorApproxForPrec(float_width, exponent_bits, precision):
-    print 'Finding logs for float{}'.format(float_width)
+    print('Finding logs for float{}'.format(float_width))
     bias = 2**(exponent_bits - 1) - 1 + (precision - 1)
     min_exponent = 1 - bias
     max_exponent = 2**exponent_bits - 2 - bias
     min_exponent -= 2
     max_exponent -= 2
-    print 'min_exponent = {}'.format(min_exponent)
-    print 'max_exponent = {}'.format(max_exponent)
+    print('min_exponent = {}'.format(min_exponent))
+    print('max_exponent = {}'.format(max_exponent))
     FindFloorApprox(Log10_2, 10, 2, INITIAL_INT_WIDTH, 0, max_exponent)
     FindFloorApprox(Log10_5, 10, 5, INITIAL_INT_WIDTH, 0, -min_exponent)
 
