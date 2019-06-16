@@ -1085,123 +1085,95 @@ inline ToDecimalResult<double> ToDecimal(double value)
     // representations.
     //
 
+    //
+    // TODO:
+    //  Use Theorem 6.2 from Floitsch's Grisu paper here?
+    //  Might be at least beneficial for 32-bit platforms...
+    //
+
     c -= !accept_bounds && zc;
 
-    if /*likely*/ (!za && !zb)
+    const uint64_t aq = a;
+    const uint64_t bq = b;
+
+    //
+    // TODO:
+    //  Use a small table with powers-of-10 for mask and count the number of
+    //  removed digits? The loop then would be even simpler than the "fast" path?!
+    //
+    uint64_t mask = 1; // 10^(number of digits removed)
+
+    while (a / 10000 < c / 10000)
     {
-        bool round_down = true;
-
-        while (a / 10000 < c / 10000)
-        {
-            round_down = static_cast<uint32_t>(b % 10000) < 5000;
-            a /= 10000;
-            b /= 10000;
-            c /= 10000;
-            e10 += 4;
-        }
-
-        if (a / 100 < c / 100)
-        {
-            round_down = static_cast<uint32_t>(b % 100) < 50;
-            a /= 100;
-            b /= 100;
-            c /= 100;
-            e10 += 2;
-        }
-
-        if (a / 10 < c / 10)
-        {
-            round_down = static_cast<uint32_t>(b % 10) < 5;
-            a /= 10;
-            b /= 10;
-//          c /= 10;
-            ++e10;
-        }
-
-        // A return value of b is valid if and only if a != b or za == true.
-        // A return value of b + 1 is valid if and only if b + 1 <= c.
-        const bool round_up = (a == b) || !round_down;
-
-//      RYU_ASSERT(!round_up || b < c);
-        b += round_up ? 1 : 0;
+        mask *= 10000;
+        a /= 10000;
+        b /= 10000;
+        c /= 10000;
+        e10 += 4;
     }
-    else
+
+    if (a / 100 < c / 100)
     {
-        uint64_t br   = 0; // Digits removed from b
-        uint64_t mask = 1; // 10^(number of digits removed)
+        mask *= 100;
+        a /= 100;
+        b /= 100;
+        c /= 100;
+        e10 += 2;
+    }
 
-        while (a / 10000 < c / 10000)
+    if (a / 10 < c / 10)
+    {
+        mask *= 10;
+        a /= 10;
+        b /= 10;
+//      c /= 10;
+        ++e10;
+    }
+
+    // za ccurrently determines whether the first q removed digits were all
+    // 0's. Still need to check whether the digits removed in the loop above
+    // are all 0's.
+    //
+    // TODO:
+    //  We need the value of za below.
+    //  Can this be avoided?! Rewrite round_up test?!
+    //
+    za = za && (aq - a * mask == 0);
+
+    if /*unlikely?*/ (accept_bounds && za && (a % 10 == 0))
+    {
+        // The loop below is executed at least once and after the first
+        // iteration we have a == b == c. (After the first iteration, we
+        // only remove 0's from b.)
+
+        while (a % 10 == 0)
         {
-            za = za && (a % 10000 == 0);
-
-            br = static_cast<uint32_t>(b % 10000) * mask + br;
-            mask *= 10000;
-
-            a /= 10000;
-            b /= 10000;
-            c /= 10000;
-            e10 += 4;
-        }
-
-        if (a / 100 < c / 100)
-        {
-            za = za && (a % 100 == 0);
-
-            br = static_cast<uint32_t>(b % 100) * mask + br;
-            mask *= 100;
-
-            a /= 100;
-            b /= 100;
-            c /= 100;
-            e10 += 2;
-        }
-
-        if (a / 10 < c / 10)
-        {
-            za = za && (a % 10 == 0);
-
-            br = static_cast<uint32_t>(b % 10) * mask + br;
             mask *= 10;
-
             a /= 10;
-            b /= 10;
+//          b /= 10;
 //          c /= 10;
             ++e10;
         }
+//      RYU_ASSERT(b == a);
+//      RYU_ASSERT(c == a);
 
-        if (accept_bounds && za && (a % 10 == 0))
-        {
-            // The loop below is executed at least once and after the first
-            // iteration we have a == b == c, i.e., after the first iteration, we
-            // only remove 0's from b, so br cannot possibly change.
+        b = a;
+//      c = a;
 
-            br = static_cast<uint32_t>(b % 10) * mask + br;
-
-            while (a % 10 == 0)
-            {
-                mask *= 10;
-
-                a /= 10;
-//              b /= 10;
-//              c /= 10;
-                ++e10;
-            }
-//          RYU_ASSERT(b == a);
-//          RYU_ASSERT(c == a);
-
-            b = a;
-//          c = a;
-        }
-
-        const uint64_t half = mask / 2;
-
-        // A return value of b is valid if and only if a != b or za == true.
-        // A return value of b + 1 is valid if and only if b + 1 <= c.
-        const bool round_up = (a == b && !(accept_bounds && za)) || !(br < half || (br == half && zb && b % 2 == 0));
-
-//      RYU_ASSERT(!round_up || b < c);
-        b += round_up ? 1 : 0;
+        // NB:
+        // a == b && (accept_bounds && za)
+        //  ==> only the 0.5 test is used...
     }
+
+    const uint64_t br = bq - b * mask; // Digits removed from b
+    const uint64_t half = mask / 2;
+
+    // A return value of b is valid if and only if a != b or za == true.
+    // A return value of b + 1 is valid if and only if b + 1 <= c.
+    const bool round_up = (a == b && !(accept_bounds && za)) || !(br < half || (br == half && zb && b % 2 == 0));
+
+//  RYU_ASSERT(!round_up || b < c);
+    b += round_up ? 1 : 0;
 
     return {b, e10};
 }
