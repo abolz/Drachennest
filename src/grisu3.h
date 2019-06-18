@@ -450,6 +450,27 @@ inline bool Grisu3(uint64_t& decimal_digits, int& decimal_exponent, Float value)
         const auto f2 = ieee_significand | Fp::HiddenBit;
         const auto e2 = static_cast<int>(ieee_exponent) - Fp::ExponentBias;
 
+        if ((0 <= -e2 && -e2 < 53) && (f2 & ((1ull << -e2) - 1)) == 0)
+        {
+            // Fast path for integers in the range [1, 2^53).
+            // Since 2^52 <= m2 < 2^53 and 0 <= -e2 <= 52:
+            //  1 <= value = m2 / 2^-e2 < 2^53.
+            // Since m2 is divisible by 2^-e2, value is an integer.
+            uint64_t m2 = f2 >> -e2;
+
+            // Move trailing zeros into the decimal exponent.
+            // NB: This is actually not required for fixed-point notation.
+            int k = 0;
+            while (m2 % 10 == 0) {
+                m2 /= 10;
+                ++k;
+            }
+
+            decimal_digits = m2;
+            decimal_exponent = k;
+            return true;
+        }
+
         const auto fm = 4 * f2 - 2 + (lower_boundary_is_closer ? 1 : 0);
         const auto fv = 4 * f2;
         const auto fp = 4 * f2 + 2;

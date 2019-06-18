@@ -454,6 +454,21 @@ inline void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, Float value)
         const auto f2 = ieee_significand | Fp::HiddenBit;
         const auto e2 = static_cast<int>(ieee_exponent) - Fp::ExponentBias;
 
+        if ((0 <= -e2 && -e2 < 53) && (f2 & ((1ull << -e2) - 1)) == 0)
+        {
+            uint64_t m2 = f2 >> -e2;
+
+            int k = 0;
+            while (m2 % 10 == 0) {
+                m2 /= 10;
+                ++k;
+            }
+
+            decimal_digits = m2;
+            decimal_exponent = k;
+            return;
+        }
+
         const auto fm = 4 * f2 - 2 + (lower_boundary_is_closer ? 1 : 0);
         const auto fv = 4 * f2;
         const auto fp = 4 * f2 + 2;
@@ -490,6 +505,21 @@ inline void Grisu2(uint64_t& decimal_digits, int& decimal_exponent, Float value)
 
         const auto f2 = ieee_significand | Fp::HiddenBit;
         const auto e2 = static_cast<int>(ieee_exponent) - Fp::ExponentBias;
+
+        if ((0 <= -e2 && -e2 < 53) && (f2 & ((1ull << -e2) - 1)) == 0)
+        {
+            uint64_t m2 = f2 >> -e2;
+
+            int k = 0;
+            while (m2 % 10 == 0) {
+                m2 /= 10;
+                ++k;
+            }
+
+            decimal_digits = m2;
+            decimal_exponent = k;
+            return;
+        }
 
         const auto fm = 4 * f2 - 2 + (lower_boundary_is_closer ? 1 : 0);
         const auto fp = 4 * f2 + 2;
