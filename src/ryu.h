@@ -1101,7 +1101,10 @@ inline ToDecimalResult<double> ToDecimal(double value)
     //  Use a small table with powers-of-10 for mask and count the number of
     //  removed digits? The loop then would be even simpler than the "fast" path?!
     //
-    uint64_t mask = 1; // 10^(number of digits removed)
+
+    uint64_t mask = 1;
+    // mask = 10^(number of digits removed),
+    // i.e., (b % mask) contains the actual digits removed from b.
 
     while (a / 10000 < c / 10000)
     {
@@ -1130,50 +1133,50 @@ inline ToDecimalResult<double> ToDecimal(double value)
         ++e10;
     }
 
-    // za ccurrently determines whether the first q removed digits were all
-    // 0's. Still need to check whether the digits removed in the loop above
-    // are all 0's.
-    //
-    // TODO:
-    //  We need the value of za below.
-    //  Can this be avoided?! Rewrite round_up test?!
-    //
-    za = za && (aq - a * mask == 0);
-
-    if /*unlikely?*/ (accept_bounds && za && (a % 10 == 0))
+    if /*likely*/ (!za && !zb)
     {
-        // The loop below is executed at least once and after the first
-        // iteration we have a == b == c. (After the first iteration, we
-        // only remove 0's from b.)
+        const uint64_t br = bq - b * mask; // Digits removed from b
+        const uint64_t half = mask / 2;
 
-        while (a % 10 == 0)
-        {
-            mask *= 10;
-            a /= 10;
-//          b /= 10;
-//          c /= 10;
-            ++e10;
-        }
-//      RYU_ASSERT(b == a);
-//      RYU_ASSERT(c == a);
-
-        b = a;
-//      c = a;
-
-        // NB:
-        // a == b && (accept_bounds && za)
-        //  ==> only the 0.5 test is used...
+        b += (a == b || br >= half);
     }
+    else
+    {
+        // za ccurrently determines whether the first q removed digits were all
+        // 0's. Still need to check whether the digits removed in the loop above
+        // are all 0's.
+        const uint64_t ar = aq - a * mask; // Digits removed from a
+        za = za && (ar == 0);
 
-    const uint64_t br = bq - b * mask; // Digits removed from b
-    const uint64_t half = mask / 2;
+        if (accept_bounds && za && (a % 10 == 0))
+        {
+            // The loop below is executed at least once and after the first
+            // iteration we have a == b == c.
+            // We only remove 0's from a, so ar and za don't change.
 
-    // A return value of b is valid if and only if a != b or za == true.
-    // A return value of b + 1 is valid if and only if b + 1 <= c.
-    const bool round_up = (a == b && !(accept_bounds && za)) || !(br < half || (br == half && zb && b % 2 == 0));
+            while (a % 10 == 0)
+            {
+                mask *= 10;
+                a /= 10;
+//              b /= 10;
+//              c /= 10;
+                ++e10;
+            }
 
-//  RYU_ASSERT(!round_up || b < c);
-    b += round_up ? 1 : 0;
+            b = a;
+//          c = a;
+        }
+
+        const uint64_t br = bq - b * mask; // Digits removed from b
+        const uint64_t half = mask / 2;
+
+        // A return value of b is valid if and only if a != b or za == true.
+        // A return value of b + 1 is valid if and only if b + 1 <= c.
+        const bool round_up = (a == b && !(accept_bounds && za)) || !(br < half || (br == half && zb && b % 2 == 0));
+
+//      RYU_ASSERT(!round_up || b < c);
+        b += round_up ? 1 : 0;
+    }
 
     return {b, e10};
 }
