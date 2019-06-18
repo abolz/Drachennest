@@ -972,7 +972,8 @@ inline ToDecimalResult<double> ToDecimal(double value)
     }
 
     const bool is_even = (m2 & 1) == 0;
-    const bool accept_bounds = is_even; // == accept_lower == accept_upper
+    const bool accept_lower = is_even;
+    const bool accept_upper = is_even;
 
     //
     // Step 2:
@@ -1091,7 +1092,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
     //  Might be at least beneficial for 32-bit platforms...
     //
 
-    c -= !accept_bounds && zc;
+    c -= !accept_upper && zc;
 
     const uint64_t aq = a;
     const uint64_t bq = b;
@@ -1148,7 +1149,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
         const uint64_t ar = aq - a * mask; // Digits removed from a
         za = za && (ar == 0);
 
-        if (accept_bounds && za && (a % 10 == 0))
+        if (accept_lower && za && (a % 10 == 0))
         {
             // The loop below is executed at least once and after the first
             // iteration we have a == b == c.
@@ -1172,7 +1173,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
         // A return value of b is valid if and only if a != b or za == true.
         // A return value of b + 1 is valid if and only if b + 1 <= c.
-        const bool round_up = (a == b && !(accept_bounds && za)) || !(br < half || (br == half && zb && b % 2 == 0));
+        const bool round_up = (a == b && !(accept_lower && za)) || !(br < half || (br == half && zb && b % 2 == 0));
 
 //      RYU_ASSERT(!round_up || b < c);
         b += round_up ? 1 : 0;
