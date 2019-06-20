@@ -1129,7 +1129,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
     }
     else
     {
-        // za ccurrently determines whether the first q removed digits were all
+        // za currently determines whether the first q removed digits were all
         // 0's. Still need to check whether the digits removed in the loop above
         // are all 0's.
         const uint64_t ar = aq - a * mask; // Digits removed from a
@@ -1480,7 +1480,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
     //
     // TODO:
     //  Do this only for 32-bit platforms?!
-    // 
+    //
 
     uint32_t a = static_cast<uint32_t>(aq);
     uint32_t b = static_cast<uint32_t>(bq);
@@ -1488,6 +1488,8 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
     if (static_cast<uint32_t>(cq >> 32) != 0)
     {
+        RYU_ASSERT(aq / 10 < cq / 10);
+
         mask = 10;
         a = static_cast<uint32_t>(aq / 2) / 5;
         b = static_cast<uint32_t>(bq / 2) / 5;
