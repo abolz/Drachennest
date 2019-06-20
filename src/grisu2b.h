@@ -185,7 +185,7 @@ inline int CountLeadingZeros64(uint64_t x)
 {
     GRISU_ASSERT(x != 0);
 
-#if defined(__GNUC__)
+#if defined(__GNUC__) || defined(__clang__)
     return __builtin_clzll(x);
 #elif defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64))
     return static_cast<int>(_CountLeadingZeros64(x));

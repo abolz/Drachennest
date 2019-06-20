@@ -333,7 +333,7 @@ inline int CountLeadingZeros32(uint32_t x)
 {
     DRAGON4_ASSERT(x != 0);
 
-#if defined(__GNUC__)
+#if defined(__GNUC__) || defined(__clang__)
     return __builtin_clz(x);
 #elif defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64))
     return static_cast<int>(_CountLeadingZeros(x));
