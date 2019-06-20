@@ -12,15 +12,19 @@ def ModularInverse(a, m):
     assert g == 1
     return x % m
 
-def PrintTable(max_e5, bits):
+def PrintTable(base, max_exp, bits):
     assert bits % 4 == 0
-    print('    {{0x{:0{}X}u, 0x{:0{}X}u}},'.format(1, bits // 4, 2**bits - 1, bits // 4))
-    for e in range(1, max_e5 + 1):
-        a = 5**e
+    print('{{0x{:0{}X}u, 0x{:0{}X}u}}, // {}^{}'.format(1, bits // 4, 2**bits - 1, bits // 4, base, 0))
+    e = 1
+    while True:
+        a = base**e
+        if a >= 2**bits:
+            break
         m = ModularInverse(a, 2**bits)
         assert (a * m) % 2**bits == 1
-        print('    {{0x{:0{}X}u, 0x{:0{}X}u}},'.format(m, bits // 4, 2**bits // a, bits // 4))
+        print('{{0x{:0{}X}u, 0x{:0{}X}u}}, // {}^{}'.format(m, bits // 4, 2**bits // a, bits // 4, base, e))
+        e += 1
     print('')
 
-PrintTable(max_e5=10, bits=32) # 10 = floor(log_5(2^26))
-PrintTable(max_e5=22, bits=64) # 22 = floor(log_5(2^55))
+PrintTable(base=5, max_exp=10, bits=32) # 10 = floor(log_5(2^26))
+PrintTable(base=5, max_exp=22, bits=64) # 22 = floor(log_5(2^55))
