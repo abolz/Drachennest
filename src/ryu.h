@@ -1185,10 +1185,9 @@ inline uint64_t ComputePow5_Single(int k)
     const auto p = ComputePow5_Double(k);
     return p.hi + (k < 0);
 #else
-    static constexpr int MinDecExp = -30;
-    static constexpr int MaxDecExp =  46;
+    static constexpr int MinDecExp = -29;
+    static constexpr int MaxDecExp =  47;
     static constexpr uint64_t Pow5[MaxDecExp - MinDecExp + 1] = {
-        0xA2425FF75E14FC32, // e =  -133, k =  -30
         0xCAD2F7F5359A3B3F, // e =  -131, k =  -29
         0xFD87B5F28300CA0E, // e =  -129, k =  -28
         0x9E74D1B791E07E49, // e =  -126, k =  -27
@@ -1265,6 +1264,7 @@ inline uint64_t ComputePow5_Single(int k)
         0x8F7E32CE7BEA5C6F, // e =    39, k =   44
         0xB35DBF821AE4F38B, // e =    41, k =   45
         0xE0352F62A19E306E, // e =    43, k =   46
+        0x8C213D9DA502DE45, // e =    46, k =   47
     };
 
     RYU_ASSERT(k >= MinDecExp);
@@ -1273,7 +1273,7 @@ inline uint64_t ComputePow5_Single(int k)
 #endif
 }
 
-inline uint32_t MulShift(uint32_t m, uint64_t mul, int j)
+inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
 {
 #if defined(__SIZEOF_INT128__)
     __extension__ using uint128_t = unsigned __int128;
@@ -1294,21 +1294,20 @@ inline uint32_t MulShift(uint32_t m, uint64_t mul, int j)
 #endif
 #endif
 
-    RYU_ASSERT(shifted_sum <= UINT32_MAX);
-    return static_cast<uint32_t>(shifted_sum);
+    return shifted_sum;
 }
 
-inline void MulPow5DivPow2_Single(uint32_t u, uint32_t v, uint32_t w, int e5, int e2, uint32_t& a, uint32_t& b, uint32_t& c)
+inline void MulPow5DivPow2_Single(uint32_t u, uint32_t v, uint32_t w, int e5, int e2, uint64_t& a, uint64_t& b, uint64_t& c)
 {
     static constexpr int BitsPerPow5 = 64;
 
-    // j >= 58 and m has at most 24 + 2 = 26 bits.
+    // j >= 57 and m has at most 24 + 2 = 26 bits.
     // The product along with the subsequent shift therefore requires
-    // 26 + 64 - 58 = 32 bits.
+    // 26 + 64 - 57 = 33 bits.
 
     const auto k = FloorLog2Pow5(e5) + 1 - BitsPerPow5;
     const auto j = e2 - k;
-    RYU_ASSERT(j >= BitsPerPow5 - 6); // 58
+    RYU_ASSERT(j >= BitsPerPow5 - 7); // 57
     RYU_ASSERT(j <= BitsPerPow5 - 1); // 63
 
     const auto pow5 = ComputePow5_Single(e5);
@@ -1400,7 +1399,8 @@ inline ToDecimalResult<float> ToDecimal(float value)
     }
 
     const bool is_even = (m2 & 1) == 0;
-    const bool accept_bounds = is_even;
+    const bool accept_lower = is_even;
+    const bool accept_upper = is_even;
 
     //
     // Step 2:
@@ -1425,10 +1425,9 @@ inline ToDecimalResult<float> ToDecimal(float value)
     bool zb = false;
     bool zc = false;
 
-    int q;
     if (e2 >= 0)
     {
-        q = FloorLog10Pow2(e2);
+        const int q = FloorLog10Pow2(e2) - (e2 > 3); // == max(0, q' - 1)
         RYU_ASSERT(q >= 0);
 
         e10 = q;
@@ -1444,7 +1443,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
     }
     else
     {
-        q = FloorLog10Pow5(-e2);
+        const int q = FloorLog10Pow5(-e2) - (-e2 > 1); // == max(0, q' - 1)
         RYU_ASSERT(q >= 0);
 
         e10 = q + e2;
@@ -1459,123 +1458,92 @@ inline ToDecimalResult<float> ToDecimal(float value)
         }
     }
 
-    uint32_t a;
-    uint32_t b;
-    uint32_t c;
-    MulPow5DivPow2_Single(u, v, w, -e10, e10 - e2, a, b, c);
+    uint64_t aq;
+    uint64_t bq;
+    uint64_t cq;
+    MulPow5DivPow2_Single(u, v, w, -e10, e10 - e2, aq, bq, cq);
 
     //
     // Step 4:
     // Find the shortest decimal representation in the interval of legal representations.
     //
 
-    c -= !accept_bounds && zc;
+    cq -= !accept_upper && zc;
 
-    // zb determines whether the last i trailing digits of b are 0:
-    // b[0, 1, ..., i-1] == 0. To properly round the result we need to know the
-    // last removed digit bi = b[i-1] and whether b[0, 1, ..., i-2] are all 0's.
+    // c < 2^33 = 8'589'934'592,
+    // and we will therefore remove at most 9 decimal digits, i.e. mask fits into an uint32_t.
+    uint32_t mask = 1;
+
+    // aq,bq,cq sometimes have 33 bits and we want to use 32-bit operations as much as
+    // possible. In this case, we remove the first decimal digit and then use 32-bit
+    // integers.
     //
-    // zb_prev determines whether the last i-1 trailing digits of b are 0:
-    // b[0, 1, ..., i-2] == 0.
-    //
-    // We have removed q digits. If q == 0, b[i-1] == 0. Otherwise, if the loop
-    // below is executed at least once, we will determine the correct values of
-    // b[i-1] and zb_prev inside the loop body. If the loop is never going to be
-    // executed, we need to explicitly compute the correct values of bi and
-    // zb_prev.
+    // TODO:
+    //  Do this only for 32-bit platforms?!
+    // 
 
-    uint32_t bi = 0;
-    bool zb_prev = zb;
+    uint32_t a = static_cast<uint32_t>(aq);
+    uint32_t b = static_cast<uint32_t>(bq);
+    uint32_t c = static_cast<uint32_t>(cq);
 
-    if (q != 0 && a / 10 >= c / 10)
+    if (static_cast<uint32_t>(cq >> 32) != 0)
     {
-        // The digit-removal loop below is never going to be executed, but we
-        // need to know the correct values of bi and zb_prev at the rounding step.
-
-        if (!zb) // Not required for correctness, but x % 10^q == 0 implies x % 10^(q-1) == 0.
-        {
-            if (e2 >= 0)
-                zb_prev = (q <= 10) && MultipleOfPow5(v, q - 1);
-            else
-                zb_prev = (q <= Single::SignificandSize + 2) && MultipleOfPow2(v, q - 1);
-        }
-
-        const auto p5 = -(e10 - 1);
-        const auto p2 =  (e10 - 1) - e2;
-        const auto k = FloorLog2Pow5(p5) + 1 - 64;
-        const auto j = p2 - k;
-        RYU_ASSERT(j >= 58);
-        RYU_ASSERT(j <= 63);
-
-//      bi = MulShift(v, ComputePow5_Single(p5), j) % 10;
-        bi = MulShift(v, ComputePow5_Single(p5), j) - 10 * b;
+        mask = 10;
+        a = static_cast<uint32_t>(aq / 2) / 5;
+        b = static_cast<uint32_t>(bq / 2) / 5;
+        c = static_cast<uint32_t>(cq / 2) / 5;
+        ++e10;
     }
 
-    if (za || zb_prev)
+    while (a / 100 < c / 100)
     {
-        while (a / 10 < c / 10)
-        {
-            za = za && (a % 10 == 0);
+        mask *= 100;
+        a /= 100;
+        b /= 100;
+        c /= 100;
+        e10 += 2;
+    }
 
-            bi = b % 10;
-            zb_prev = zb;
-            zb = zb && (bi == 0);
+    if (a / 10 < c / 10)
+    {
+        mask *= 10;
+        a /= 10;
+        b /= 10;
+//      c /= 10;
+        ++e10;
+    }
 
-            a /= 10;
-            b /= 10;
-            c /= 10;
-            ++e10;
-        }
-        if (accept_bounds && za && (a % 10 == 0))
+    if /*likely*/ (!za && !zb)
+    {
+        const uint32_t br = static_cast<uint32_t>(bq - uint64_t{b} * mask); // Digits removed from b
+        const uint32_t half = mask / 2;
+
+        b += (a == b || br >= half);
+    }
+    else
+    {
+        const uint32_t ar = static_cast<uint32_t>(aq - uint64_t{a} * mask); // Digits removed from a
+        za = za && (ar == 0);
+
+        if (accept_lower && za && (a % 10 == 0))
         {
             while (a % 10 == 0)
             {
-                bi = b % 10;
-                zb_prev = zb;
-                zb = zb && (bi == 0);
-
+                mask *= 10;
                 a /= 10;
 //              b /= 10;
 //              c /= 10;
                 ++e10;
             }
-//          RYU_ASSERT(b == a);
-//          RYU_ASSERT(c == a);
 
             b = a;
 //          c = a;
         }
 
-        // A return value of b is valid if and only if a != b or za == true.
-        // A return value of b + 1 is valid if and only if b + 1 <= c.
-        const bool round_up = (a == b && !(accept_bounds && za)) || !(bi < 5 || (bi == 5 && zb_prev && b % 2 == 0));
+        const uint32_t br = static_cast<uint32_t>(bq - uint64_t{b} * mask); // Digits removed from b
+        const uint32_t half = mask / 2;
 
-//      RYU_ASSERT(!round_up || b < c);
-        b += round_up ? 1 : 0;
-    }
-    else
-    {
-        bool round_down = bi < 5;
-
-        while (a / 100 < c / 100)
-        {
-            round_down = (b % 100 < 50);
-            a /= 100;
-            b /= 100;
-            c /= 100;
-            e10 += 2;
-        }
-
-        if (a / 10 < c / 10)
-        {
-            round_down = (b % 10 < 5);
-            a /= 10;
-            b /= 10;
-//          c /= 10;
-            ++e10;
-        }
-
-        const bool round_up = (a == b) || !round_down;
+        const bool round_up = (a == b && !(accept_lower && za)) || !(br < half || (br == half && zb && b % 2 == 0));
 
 //      RYU_ASSERT(!round_up || b < c);
         b += round_up ? 1 : 0;
