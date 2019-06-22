@@ -53,7 +53,8 @@ def ComputeRyuPower(k, bits):
     e = FloorLog2Pow5(k) + 1 - bits
     if k >= 0:
         if e > 0:
-            f = 5**k // 2**e
+            # f = 5**k // 2**e
+            f = Ceil(5**k, 2**e)
         else:
             f = 5**k * 2**(-e)
     else:
