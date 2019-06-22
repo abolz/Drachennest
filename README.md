@@ -11,7 +11,8 @@ and [Grisu3](https://github.com/abolz/Drachennest/blob/master/src/grisu3.h) algo
 
 * Loitsch, [_Printing Floating-Point Numbers Quickly and Accurately with Integers_](https://dl.acm.org/citation.cfm?id=1806623),
 
-The Grisu3 implementation uses the Dragon4 algorithm as a fallback.
+The Grisu3 implementation uses the [Dragon4](https://github.com/abolz/Drachennest/blob/master/src/dragon4.h)
+algorithm as a fallback.
 
 * Steele, White, [_How to Print FloatingPoint Numbers Accurately_](https://dl.acm.org/citation.cfm?id=93559),
 * Burger, Dybvig, [_Printing Floating-Point Numbers Quickly and Accurately_](https://dl.acm.org/citation.cfm?id=231397),
