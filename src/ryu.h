@@ -1513,14 +1513,14 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
     if /*likely*/ (!za && !zb)
     {
-        const uint32_t br = static_cast<uint32_t>(bq - uint64_t{b} * mask); // Digits removed from b
+        const uint32_t br = static_cast<uint32_t>(bq) - b * mask; // Digits removed from b
         const uint32_t half = mask / 2;
 
         b += (a == b || br >= half);
     }
     else
     {
-        const uint32_t ar = static_cast<uint32_t>(aq - uint64_t{a} * mask); // Digits removed from a
+        const uint32_t ar = static_cast<uint32_t>(aq) - a * mask; // Digits removed from a
         za = za && (ar == 0);
 
         if (accept_lower && za && (a % 10 == 0))
@@ -1538,7 +1538,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
 //          c = a;
         }
 
-        const uint32_t br = static_cast<uint32_t>(bq - uint64_t{b} * mask); // Digits removed from b
+        const uint32_t br = static_cast<uint32_t>(bq) - b * mask; // Digits removed from b
         const uint32_t half = mask / 2;
 
         const bool round_up = (a == b && !(accept_lower && za)) || !(br < half || (br == half && zb && b % 2 == 0));
