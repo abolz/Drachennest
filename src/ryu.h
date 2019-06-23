@@ -1137,10 +1137,8 @@ inline ToDecimalResult<double> ToDecimal(double value)
         // za currently determines whether the first q removed digits were all
         // 0's. Still need to check whether the digits removed in the loop above
         // are all 0's.
-        const uint64_t ar = aq - a * mask; // Digits removed from a
-        za = za && (ar == 0);
-
-        if (accept_lower && za)
+        const bool can_use_lower = accept_lower && za && (aq - a * mask == 0);
+        if (can_use_lower)
         {
             // If the loop is executed at least once, we have a == b == c when
             // the loop terminates.
@@ -1164,7 +1162,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
         // A return value of b is valid if and only if a != b or za == true.
         // A return value of b + 1 is valid if and only if b + 1 <= c.
-        const bool round_up = (a == b && !(accept_lower && za)) || !(br < half || (br == half && zb && b % 2 == 0));
+        const bool round_up = (a == b && !can_use_lower) || !(br < half || (br == half && zb && b % 2 == 0));
 
 //      RYU_ASSERT(!round_up || b < c);
         b += round_up ? 1 : 0;
@@ -1530,10 +1528,8 @@ inline ToDecimalResult<float> ToDecimal(float value)
     }
     else
     {
-        const uint32_t ar = static_cast<uint32_t>(aq) - a * mask; // Digits removed from a
-        za = za && (ar == 0);
-
-        if (accept_lower && za)
+        const bool can_use_lower = accept_lower && za && (static_cast<uint32_t>(aq) - a * mask == 0);
+        if (can_use_lower)
         {
             for (;;)
             {
@@ -1552,7 +1548,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
         const uint32_t br = static_cast<uint32_t>(bq) - b * mask; // Digits removed from b
         const uint32_t half = mask / 2;
 
-        const bool round_up = (a == b && !(accept_lower && za)) || !(br < half || (br == half && zb && b % 2 == 0));
+        const bool round_up = (a == b && !can_use_lower) || !(br < half || (br == half && zb && b % 2 == 0));
 
 //      RYU_ASSERT(!round_up || b < c);
         b += round_up ? 1 : 0;
