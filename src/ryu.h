@@ -948,8 +948,13 @@ inline ToDecimalResult<double> ToDecimal(double value)
             // Move trailing zeros into the decimal exponent.
             // NB: This is actually not required for fixed-point notation.
             int k = 0;
-            while (m2 % 10 == 0) {
-                m2 /= 10;
+            for (;;)
+            {
+                const uint64_t q = m2 / 10;
+                const uint64_t r = m2 - 10 * q;
+                if (r != 0)
+                    break;
+                m2 = q;
                 ++k;
             }
 
@@ -1135,23 +1140,23 @@ inline ToDecimalResult<double> ToDecimal(double value)
         const uint64_t ar = aq - a * mask; // Digits removed from a
         za = za && (ar == 0);
 
-        if (accept_lower && za && (a % 10 == 0))
+        if (accept_lower && za)
         {
-            // The loop below is executed at least once and after the first
-            // iteration we have a == b == c.
+            // If the loop is executed at least once, we have a == b == c when
+            // the loop terminates.
             // We only remove 0's from a, so ar and za don't change.
-
-            while (a % 10 == 0)
+            for (;;)
             {
+                const uint64_t q = a / 10;
+                const uint64_t r = a - 10 * q;
+                if (r != 0)
+                    break;
                 mask *= 10;
-                a /= 10;
-//              b /= 10;
-//              c /= 10;
+                a = q;
+                b = q;
+//              c = q;
                 ++e10;
             }
-
-            b = a;
-//          c = a;
         }
 
         const uint64_t br = bq - b * mask; // Digits removed from b
@@ -1385,8 +1390,13 @@ inline ToDecimalResult<float> ToDecimal(float value)
             m2 >>= -e2;
 
             int k = 0;
-            while (m2 % 10 == 0) {
-                m2 /= 10;
+            for (;;)
+            {
+                const uint32_t q = m2 / 10;
+                const uint32_t r = m2 - 10 * q;
+                if (r != 0)
+                    break;
+                m2 = q;
                 ++k;
             }
 
@@ -1523,19 +1533,20 @@ inline ToDecimalResult<float> ToDecimal(float value)
         const uint32_t ar = static_cast<uint32_t>(aq) - a * mask; // Digits removed from a
         za = za && (ar == 0);
 
-        if (accept_lower && za && (a % 10 == 0))
+        if (accept_lower && za)
         {
-            while (a % 10 == 0)
+            for (;;)
             {
+                const uint32_t q = a / 10;
+                const uint32_t r = a - 10 * q;
+                if (r != 0)
+                    break;
                 mask *= 10;
-                a /= 10;
-//              b /= 10;
-//              c /= 10;
+                a = q;
+                b = q;
+//              c = q;
                 ++e10;
             }
-
-            b = a;
-//          c = a;
         }
 
         const uint32_t br = static_cast<uint32_t>(bq) - b * mask; // Digits removed from b
