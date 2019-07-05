@@ -17,11 +17,6 @@
 //#define BENCH_GRISU2 1
 //#define BENCH_GRISU3 1
 #define BENCH_RYU 1
-//#define BENCH_DOUBLE_CONVERSION 1
-//#define BENCH_SPRINTF 1
-//#define BENCH_MILO 1
-//#define BENCH_SWIFT 1
-//#define BENCH_FLOAXIE 1
 
 #define BENCH_SINGLE 0
 #define BENCH_DOUBLE 1
@@ -36,8 +31,8 @@
 struct D2S
 {
     static char const* Name() { return "Grisu2"; }
-    char* operator()(char* buf, int buflen, float f) const { return grisu2_Ftoa(buf, buflen, f); }
-    char* operator()(char* buf, int buflen, double f) const { return grisu2_Dtoa(buf, buflen, f); }
+    char* operator()(char* buf, int /*buflen*/, float f) const { return grisu2::ToChars(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, double f) const { return grisu2::ToChars(buf, f); }
 };
 #endif
 #if BENCH_GRISU3
@@ -45,8 +40,8 @@ struct D2S
 struct D2S
 {
     static char const* Name() { return "Grisu3 (Dragon4)"; }
-    char* operator()(char* buf, int buflen, float f) const { return grisu3_Ftoa(buf, buflen, f); }
-    char* operator()(char* buf, int buflen, double f) const { return grisu3_Dtoa(buf, buflen, f); }
+    char* operator()(char* buf, int /*buflen*/, float f) const { return grisu3::ToChars(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, double f) const { return grisu3::ToChars(buf, f); }
 };
 #endif
 #if BENCH_RYU
@@ -54,61 +49,17 @@ struct D2S
 struct D2S
 {
     static char const* Name() { return "Ryu"; }
-    char* operator()(char* buf, int buflen, float f) const { return ryu_Ftoa(buf, buflen, f); }
-    char* operator()(char* buf, int buflen, double f) const { return ryu_Dtoa(buf, buflen, f); }
+    char* operator()(char* buf, int /*buflen*/, float f) const { return ryu::ToChars(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, double f) const { return ryu::ToChars(buf, f); }
 };
 #endif
 #if BENCH_CHARCONV
-#include "charconv.h"
+#include <charconv>
 struct D2S
 {
     static char const* Name() { return "charconv"; }
-    char* operator()(char* buf, int buflen, float f) const { return charconv_Ftoa(buf, buflen, f); }
-    char* operator()(char* buf, int buflen, double f) const { return charconv_Dtoa(buf, buflen, f); }
-};
-#endif
-#if BENCH_DOUBLE_CONVERSION
-#include "double-conversion.h"
-struct D2S
-{
-    static char const* Name() { return "double-conversion"; }
-    char* operator()(char* buf, int buflen, float f) const { return double_conversion_Ftoa(buf, buflen, f); }
-    char* operator()(char* buf, int buflen, double f) const { return double_conversion_Dtoa(buf, buflen, f); }
-};
-#endif
-#if BENCH_SPRINTF
-struct D2S
-{
-    static char const* Name() { return "sprintf"; }
-    char* operator()(char* buf, int buflen, float f) const { return buf + std::snprintf(buf, static_cast<size_t>(buflen), "%.9g", f); }
-    char* operator()(char* buf, int buflen, double f) const { return buf + std::snprintf(buf, static_cast<size_t>(buflen), "%.17g", f); }
-};
-#endif
-#if BENCH_MILO
-#include "milo.h"
-struct D2S
-{
-    static char const* Name() { return "Milo"; }
-//  char* operator()(char* buf, int buflen, float f) const { return milo_Ftoa(buf, buflen, f); }
-    char* operator()(char* buf, int buflen, double f) const { return milo_Dtoa(buf, buflen, f); }
-};
-#endif
-#if BENCH_SWIFT
-#include "swift.h"
-struct D2S
-{
-    static char const* Name() { return "Swift"; }
-    char* operator()(char* buf, int buflen, float f) const { return swift_Ftoa(buf, buflen, f); }
-    char* operator()(char* buf, int buflen, double f) const { return swift_Dtoa(buf, buflen, f); }
-};
-#endif
-#if BENCH_FLOAXIE
-#include "floaxie.h"
-struct D2S
-{
-    static char const* Name() { return "Floaxie"; }
-    char* operator()(char* buf, int buflen, float f) const { return floaxie_Ftoa(buf, buflen, f); }
-    char* operator()(char* buf, int buflen, double f) const { return floaxie_Dtoa(buf, buflen, f); }
+    char* operator()(char* buf, int buflen, float f) const { return std::to_chars(buf, buf + buflen, f, std::chars_format::general).ptr; }
+    char* operator()(char* buf, int buflen, double f) const { return std::to_chars(buf, buf + buflen, f, std::chars_format::general).ptr; }
 };
 #endif
 
@@ -256,11 +207,12 @@ static inline void RegisterBenchmarks(char const* name, std::vector<Float> const
     const char* float_name = sizeof(Float) == 4 ? "single" : "double";
     auto* bench = benchmark::RegisterBenchmark(StrPrintf("%s - %s   ", float_name, name), BenchIt<D2S, Float>, numbers);
 
-    bench->ComputeStatistics("min", [](const std::vector<double>& v) -> double {
-        return *(std::min_element(std::begin(v), std::end(v)));
-    });
+    //bench->ComputeStatistics("min", [](const std::vector<double>& v) -> double {
+    //    return *(std::min_element(std::begin(v), std::end(v)));
+    //});
     bench->Repetitions(3);
-    bench->ReportAggregatesOnly(true);
+    //bench->ReportAggregatesOnly();
+    //bench->DisplayAggregatesOnly();
 }
 
 //----------------------------------------------------------------------------------------------------------
@@ -436,6 +388,14 @@ static inline void Register_Digits_single(const char* name, int digits, int e10)
 
 int main(int argc, char** argv)
 {
+#if defined(__clang__)
+    printf("Clang %d.%d\n", __clang_major__, __clang_minor__);
+#elif defined(__GNUC__)
+    printf("Gcc %s\n", __VERSION__);
+#elif defined(_MSC_VER)
+    printf("Msc %d\n", _MSC_FULL_VER);
+#endif
+
     printf("Benchmarking %s\n", D2S::Name());
 
 #if BENCH_DOUBLE
@@ -447,8 +407,9 @@ int main(int argc, char** argv)
     //    Register_Uniform(std::pow(10.0, e), std::pow(10.0, e+1));
     //}
 
-#if 0
-    for (int d = 1; d <= 15; ++d) {
+#if 1
+//  for (int d = 1; d <= 15; ++d) {
+    for (int d = 15; d >= 1; --d) {
         Register_Digits_double(StrPrintf("1.%d-digits", d - 1), d, -(d - 1));
     }
     for (int d = 1; d <= 15; ++d) {
