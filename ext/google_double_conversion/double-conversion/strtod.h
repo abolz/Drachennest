@@ -25,40 +25,26 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef DOUBLE_CONVERSION_CACHED_POWERS_H_
-#define DOUBLE_CONVERSION_CACHED_POWERS_H_
+#ifndef DOUBLE_CONVERSION_STRTOD_H_
+#define DOUBLE_CONVERSION_STRTOD_H_
 
-#include <double-conversion/diy-fp.h>
+#include "utils.h"
 
 namespace double_conversion {
 
-class PowersOfTenCache {
- public:
+// The buffer must only contain digits in the range [0-9]. It must not
+// contain a dot or a sign. It must not start with '0', and must not be empty.
+double Strtod(Vector<const char> buffer, int exponent);
 
-  // Not all powers of ten are cached. The decimal exponent of two neighboring
-  // cached numbers will differ by kDecimalExponentDistance.
-  static const int kDecimalExponentDistance;
+// The buffer must only contain digits in the range [0-9]. It must not
+// contain a dot or a sign. It must not start with '0', and must not be empty.
+float Strtof(Vector<const char> buffer, int exponent);
 
-  static const int kMinDecimalExponent;
-  static const int kMaxDecimalExponent;
-
-  // Returns a cached power-of-ten with a binary exponent in the range
-  // [min_exponent; max_exponent] (boundaries included).
-  static void GetCachedPowerForBinaryExponentRange(int min_exponent,
-                                                   int max_exponent,
-                                                   DiyFp* power,
-                                                   int* decimal_exponent);
-
-  // Returns a cached power of ten x ~= 10^k such that
-  //   k <= decimal_exponent < k + kCachedPowersDecimalDistance.
-  // The given decimal_exponent must satisfy
-  //   kMinDecimalExponent <= requested_exponent, and
-  //   requested_exponent < kMaxDecimalExponent + kDecimalExponentDistance.
-  static void GetCachedPowerForDecimalExponent(int requested_exponent,
-                                               DiyFp* power,
-                                               int* found_exponent);
-};
+// For special use cases, the heart of the Strtod() function is also available
+// separately, it assumes that 'trimmed' is as produced by TrimAndCut(), i.e.
+// no leading or trailing zeros, also no lone zero, and not 'too many' digits.
+double StrtodTrimmed(Vector<const char> trimmed, int exponent);
 
 }  // namespace double_conversion
 
-#endif  // DOUBLE_CONVERSION_CACHED_POWERS_H_
+#endif  // DOUBLE_CONVERSION_STRTOD_H_

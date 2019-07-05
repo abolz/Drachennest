@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,33 +25,10 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#ifndef DOUBLE_CONVERSION_DOUBLE_CONVERSION_H_
+#define DOUBLE_CONVERSION_DOUBLE_CONVERSION_H_
 
-#include <double-conversion/diy-fp.h>
-#include <double-conversion/utils.h>
+#include "string-to-double.h"
+#include "double-to-string.h"
 
-namespace double_conversion {
-
-void DiyFp::Multiply(const DiyFp& other) {
-  // Simply "emulates" a 128 bit multiplication.
-  // However: the resulting number only contains 64 bits. The least
-  // significant 64 bits are only used for rounding the most significant 64
-  // bits.
-  const uint64_t kM32 = 0xFFFFFFFFU;
-  uint64_t a = f_ >> 32;
-  uint64_t b = f_ & kM32;
-  uint64_t c = other.f_ >> 32;
-  uint64_t d = other.f_ & kM32;
-  uint64_t ac = a * c;
-  uint64_t bc = b * c;
-  uint64_t ad = a * d;
-  uint64_t bd = b * d;
-  uint64_t tmp = (bd >> 32) + (ad & kM32) + (bc & kM32);
-  // By adding 1U << 31 to tmp we round the final result.
-  // Halfway cases will be round up.
-  tmp += 1U << 31;
-  uint64_t result_f = ac + (ad >> 32) + (bc >> 32) + (tmp >> 32);
-  e_ += other.e_ + 64;
-  f_ = result_f;
-}
-
-}  // namespace double_conversion
+#endif  // DOUBLE_CONVERSION_DOUBLE_CONVERSION_H_
