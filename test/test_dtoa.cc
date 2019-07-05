@@ -1,10 +1,5 @@
-#include "double-conversion.h"
-#include "grisu2.h"
-#include "grisu3.h"
-#include "ryu.h"
-//#include "milo.h"
-//#include "swift.h"
-//#include "floaxie.h"
+#include "drachennest.h"
+#include "double-conversion/double-conversion.h"
 
 #include "catch.hpp"
 
@@ -24,6 +19,44 @@ constexpr int BufSize = 64;
 //
 //==================================================================================================
 
+static char* ftoa_double_conversion(char* buf, int buflen, float value)
+{
+    using namespace double_conversion;
+
+    const auto& conv = DoubleToStringConverter::EcmaScriptConverter();
+    StringBuilder builder(buf, buflen);
+    conv.ToShortestSingle(value, &builder);
+    return buf + builder.position();
+}
+
+static char* dtoa_double_conversion(char* buf, int buflen, double value)
+{
+    using namespace double_conversion;
+
+    const auto& conv = DoubleToStringConverter::EcmaScriptConverter();
+    StringBuilder builder(buf, buflen);
+    conv.ToShortest(value, &builder);
+    return buf + builder.position();
+}
+
+static float strtof_double_conversion(const char* buf, int len)
+{
+    double_conversion::StringToDoubleConverter s2d(0, 0.0, 1.0, "inf", "nan");
+    int processed_characters_count = 0;
+    return s2d.StringToFloat(buf, len, &processed_characters_count);
+}
+
+static double strtod_double_conversion(const char* buf, int len)
+{
+    double_conversion::StringToDoubleConverter s2d(0, 0.0, 1.0, "inf", "nan");
+    int processed_characters_count = 0;
+    return s2d.StringToDouble(buf, len, &processed_characters_count);
+}
+
+//==================================================================================================
+//
+//==================================================================================================
+
 //struct D2SBase
 //{
 //    virtual ~D2SBase() {}
@@ -38,57 +71,33 @@ struct D2S_DoubleConversion
 {
     bool Optimal() const { return true; }
     const char* Name() const { return "double-conversion"; }
-    char* operator()(char* buf, int buflen, float f) { return double_conversion_Ftoa(buf, buflen, f); }
-    char* operator()(char* buf, int buflen, double f) { return double_conversion_Dtoa(buf, buflen, f); }
+    char* operator()(char* buf, int buflen, float f) { return ftoa_double_conversion(buf, buflen, f); }
+    char* operator()(char* buf, int buflen, double f) { return dtoa_double_conversion(buf, buflen, f); }
 };
 
 struct D2S_Grisu2
 {
     bool Optimal() const { return false; }
     const char* Name() const { return "grisu2"; }
-    char* operator()(char* buf, int buflen, float f) { return grisu2_Ftoa(buf, buflen, f); }
-    char* operator()(char* buf, int buflen, double f) { return grisu2_Dtoa(buf, buflen, f); }
+    char* operator()(char* buf, int /*buflen*/, float f) { return drachennest::ftoa_grisu2(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, double f) { return drachennest::dtoa_grisu2(buf, f); }
 };
 
 struct D2S_Grisu3
 {
     bool Optimal() const { return true; }
     const char* Name() const { return "grisu3-dragon4"; }
-    char* operator()(char* buf, int buflen, float f) { return grisu3_Ftoa(buf, buflen, f); }
-    char* operator()(char* buf, int buflen, double f) { return grisu3_Dtoa(buf, buflen, f); }
+    char* operator()(char* buf, int /*buflen*/, float f) { return drachennest::ftoa_grisu3(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, double f) { return drachennest::dtoa_grisu3(buf, f); }
 };
 
 struct D2S_Ryu
 {
     bool Optimal() const { return true; }
     const char* Name() const { return "ryu"; }
-    char* operator()(char* buf, int buflen, float f) { return ryu_Ftoa(buf, buflen, f); }
-    char* operator()(char* buf, int buflen, double f) { return ryu_Dtoa(buf, buflen, f); }
+    char* operator()(char* buf, int buflen, float f) { return drachennest::ftoa_ryu(buf, f); }
+    char* operator()(char* buf, int buflen, double f) { return drachennest::dtoa_ryu(buf, f); }
 };
-
-//struct D2S_Milo
-//{
-//    bool Optimal() const { return false; }
-//    const char* Name() const { return "milo"; }
-//    char* operator()(char* buf, int buflen, float f) = delete;
-//    char* operator()(char* buf, int buflen, double f) { return milo_Dtoa(buf, buflen, f); }
-//};
-
-//struct D2S_Swift
-//{
-//    bool Optimal() const { return true; }
-//    const char* Name() const { return "swift"; }
-//    char* operator()(char* buf, int buflen, float f) { return swift_Ftoa(buf, buflen, f); }
-//    char* operator()(char* buf, int buflen, double f) { return swift_Dtoa(buf, buflen, f); }
-//};
-
-//struct D2S_Floaxie
-//{
-//    bool Optimal() const { return false; }
-//    const char* Name() const { return "floaxie"; }
-//    char* operator()(char* buf, int buflen, float f) { return floaxie_Ftoa(buf, buflen, f); }
-//    char* operator()(char* buf, int buflen, double f) { return floaxie_Dtoa(buf, buflen, f); }
-//};
 
 //==================================================================================================
 //
@@ -217,7 +226,7 @@ static void CheckSingle(Converter d2s, float f0)
     CAPTURE(buf0);
 
     // Strtod
-    const float f1 = double_conversion_Strtof(buf0, length0);
+    const float f1 = strtof_double_conversion(buf0, length0);
 
     const uint32_t bits0 = ReinterpretBits<uint32_t>(f0);
     const uint32_t bits1 = ReinterpretBits<uint32_t>(f1);
@@ -226,7 +235,7 @@ static void CheckSingle(Converter d2s, float f0)
     CHECK(bits0 == bits1);
 
     char buf1[BufSize];
-    char* end1 = double_conversion_Ftoa(buf1, BufSize, f0);
+    char* end1 = ftoa_double_conversion(buf1, BufSize, f0);
     *end1 = '\0';
 
     if (d2s.Optimal())
@@ -316,7 +325,7 @@ static void CheckDouble(Converter d2s, double f0)
     CAPTURE(buf0);
 
     // Strtod
-    const double f1 = double_conversion_Strtod(buf0, length0);
+    const double f1 = strtod_double_conversion(buf0, length0);
 
     const uint64_t bits0 = ReinterpretBits<uint64_t>(f0);
     const uint64_t bits1 = ReinterpretBits<uint64_t>(f1);
@@ -325,7 +334,7 @@ static void CheckDouble(Converter d2s, double f0)
     CHECK(bits0 == bits1);
 
     char buf1[BufSize];
-    char* end1 = double_conversion_Dtoa(buf1, BufSize, f0);
+    char* end1 = dtoa_double_conversion(buf1, BufSize, f0);
     *end1 = '\0';
 
     if (d2s.Optimal())
