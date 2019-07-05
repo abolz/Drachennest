@@ -1,8 +1,9 @@
 /.vs/
 /.vscode/
 /backups/
-/build/
+/build*/
 /doc/
+/out/
 /scratch/
 /scripts/dtoa/*.pyc
 /scripts/grisu/*.pyc
