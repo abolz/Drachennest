@@ -22,7 +22,7 @@ def ToHexString(n, bits):
     p = (bits + (4 - 1)) // 4       # Round up to four bits per hexit
 #   p = 2**((p - 1).bit_length())   # Round up to next power-of-2
     assert 4*p >= n.bit_length()
-    return '0x{:0{}X}'.format(n, p)
+    return('0x{:0{}X}'.format(n, p))
 
 def FormatHexChunks(n, bits_per_chunk = 64):
     chunks = Split(n, bits_per_chunk)
@@ -63,12 +63,12 @@ def ComputeGrisuPower(k, bits):
     return f, e
 
 def PrintGrisuPowers(bits, min_exponent, max_exponent, step = 1):
-    print '// Let e = FloorLog2Pow10(k) + 1 - {}'.format(bits)
-    print '// For k >= 0, stores 10^k in the form: round_up(10^k / 2^e )'
-    print '// For k <= 0, stores 10^k in the form: round_up(2^-e / 10^-k)'
+    print('// Let e = FloorLog2Pow10(k) + 1 - {}'.format(bits))
+    print('// For k >= 0, stores 10^k in the form: round_up(10^k / 2^e )')
+    print('// For k <= 0, stores 10^k in the form: round_up(2^-e / 10^-k)')
     for k in range(min_exponent, max_exponent + 1, step):
         f, e = ComputeGrisuPower(k, bits)
-        print FormatHexChunks(f, bits_per_chunk=64) + ', // e = {:5d}, k = {:4d}'.format(e, k)
+        print(FormatHexChunks(f, bits_per_chunk=64) + ', // e = {:5d}, k = {:4d}'.format(e, k))
 
 # For double-precision:
 # PrintGrisuPowers(bits=64, min_exponent=-300, max_exponent=324, step=8)
@@ -116,69 +116,69 @@ def PrintGrisuPowersForExponentRange(alpha, gamma, q = 64, p = 53, exponent_bits
     k_min_cached = k_min;
     k_max_cached = k_min + k_del * (num_cached - 1)
 
-    print 'constexpr int kAlpha = {:3d};'.format(alpha)
-    print 'constexpr int kGamma = {:3d};'.format(gamma)
-    print '// k_min = {:4d}'.format(k_min)
-    print '// k_max = {:4d}'.format(k_max)
-#   print '// k_del = {:4d}'.format(k_del)
-#   print '// k_min (max) = {}'.format(k_min + (k_del - 1))
-    print ''
-    print 'constexpr int kCachedPowersSize       = {:>4d};'.format(num_cached)
-    print 'constexpr int kCachedPowersMinDecExp  = {:>4d};'.format(k_min_cached)
-    print 'constexpr int kCachedPowersMaxDecExp  = {:>4d};'.format(k_max_cached)
-    print 'constexpr int kCachedPowersDecExpStep = {:>4d};'.format(k_del)
-    print ''
+    print('constexpr int kAlpha = {:3d};'.format(alpha))
+    print('constexpr int kGamma = {:3d};'.format(gamma))
+    print('// k_min = {:4d}'.format(k_min))
+    print('// k_max = {:4d}'.format(k_max))
+#   print('// k_del = {:4d}'.format(k_del))
+#   print('// k_min (max) = {}'.format(k_min + (k_del - 1)))
+    print('')
+    print('constexpr int kCachedPowersSize       = {:>4d};'.format(num_cached))
+    print('constexpr int kCachedPowersMinDecExp  = {:>4d};'.format(k_min_cached))
+    print('constexpr int kCachedPowersMaxDecExp  = {:>4d};'.format(k_max_cached))
+    print('constexpr int kCachedPowersDecExpStep = {:>4d};'.format(k_del))
+    print('')
 
-    # print 'inline CachedPower GetCachedPower(int index)'
-    # print '{'
-    # print '    static constexpr uint{}_t kSignificands[] = {{'.format(q)
+    # print('inline CachedPower GetCachedPower(int index)')
+    # print('{')
+    # print('    static constexpr uint{}_t kSignificands[] = {{'.format(q))
     # for k in range(k_min_cached, k_max_cached + 1, k_del):
     #     f, e = ComputeGrisuPower(k, q)
-    #     print '        ' + FormatHexChunks(f, q) + ', // e = {:5d}, k = {:4d}'.format(e, k)
-    # print '    };'
-    # print ''
-    # print '    GRISU_ASSERT(index >= 0);'
-    # print '    GRISU_ASSERT(index < kCachedPowersSize);'
-    # print ''
-    # print '    const int k = kCachedPowersMinDecExp + index * kCachedPowersDecExpStep;'
-    # print '    const int e = FloorLog2Pow10(k) + 1 - {};'.format(q)
-    # print ''
-    # print '    return {kSignificands[index], e, k};'
-    # print '}'
+    #     print('        ' + FormatHexChunks(f, q) + ', // e = {:5d}, k = {:4d}'.format(e, k))
+    # print('    };')
+    # print('')
+    # print('    GRISU_ASSERT(index >= 0);')
+    # print('    GRISU_ASSERT(index < kCachedPowersSize);')
+    # print('')
+    # print('    const int k = kCachedPowersMinDecExp + index * kCachedPowersDecExpStep;')
+    # print('    const int e = FloorLog2Pow10(k) + 1 - {};'.format(q))
+    # print('')
+    # print('    return {kSignificands[index], e, k};')
+    # print('}')
 
-    print '// For a normalized DiyFp w = f * 2^e, this function returns a (normalized)'
-    print '// cached power-of-ten c = f_c * 2^e_c, such that the exponent of the product'
-    print '// w * c satisfies'
-    print '//'
-    print '//      kAlpha <= e_c + e + q <= kGamma.'
-    print '//'
-    print 'inline CachedPower GetCachedPowerForBinaryExponent(int e)'
-    print '{'
-    print '    static constexpr uint{}_t kSignificands[] = {{'.format(q)
+    print('// For a normalized DiyFp w = f * 2^e, this function returns a (normalized)')
+    print('// cached power-of-ten c = f_c * 2^e_c, such that the exponent of the product')
+    print('// w * c satisfies')
+    print('//')
+    print('//      kAlpha <= e_c + e + q <= kGamma.')
+    print('//')
+    print('inline CachedPower GetCachedPowerForBinaryExponent(int e)')
+    print('{')
+    print('    static constexpr uint{}_t kSignificands[] = {{'.format(q))
     for k in range(k_min_cached, k_max_cached + 1, k_del):
         f, e = ComputeGrisuPower(k, q)
-        print '        ' + FormatHexChunks(f, q) + ', // e = {:5d}, k = {:4d}'.format(e, k)
-    print '    };'
-    print ''
-    print '    GRISU_ASSERT(e >= {:>5d});'.format(e_min)
-    print '    GRISU_ASSERT(e <= {:>5d});'.format(e_max)
-    print ''
-    print '    const int k = CeilLog10Pow2(kAlpha - e - 1);'
-    print '    GRISU_ASSERT(k >= kCachedPowersMinDecExp - (kCachedPowersDecExpStep - 1));'
-    print '    GRISU_ASSERT(k <= kCachedPowersMaxDecExp);'
-    print ''
-    print '    const unsigned index = static_cast<unsigned>(k - (kCachedPowersMinDecExp - (kCachedPowersDecExpStep - 1))) / kCachedPowersDecExpStep;'
-    print '    GRISU_ASSERT(index < kCachedPowersSize);'
-    print ''
-    print '    const int k_cached = kCachedPowersMinDecExp + static_cast<int>(index) * kCachedPowersDecExpStep;'
-    print '    const int e_cached = FloorLog2Pow10(k_cached) + 1 - {};'.format(q)
-    print ''
-    print '    const CachedPower cached = {kSignificands[index], e_cached, k_cached};'
-    print '    GRISU_ASSERT(kAlpha <= cached.e + e + {});'.format(q)
-    print '    GRISU_ASSERT(kGamma >= cached.e + e + {});'.format(q)
-    print ''
-    print '    return cached;'
-    print '}'
+        print('        ' + FormatHexChunks(f, q) + ', // e = {:5d}, k = {:4d}'.format(e, k))
+    print('    };')
+    print('')
+    print('    GRISU_ASSERT(e >= {:>5d});'.format(e_min))
+    print('    GRISU_ASSERT(e <= {:>5d});'.format(e_max))
+    print('')
+    print('    const int k = CeilLog10Pow2(kAlpha - e - 1);')
+    print('    GRISU_ASSERT(k >= kCachedPowersMinDecExp - (kCachedPowersDecExpStep - 1));')
+    print('    GRISU_ASSERT(k <= kCachedPowersMaxDecExp);')
+    print('')
+    print('    const unsigned index = static_cast<unsigned>(k - (kCachedPowersMinDecExp - (kCachedPowersDecExpStep - 1))) / kCachedPowersDecExpStep;')
+    print('    GRISU_ASSERT(index < kCachedPowersSize);')
+    print('')
+    print('    const int k_cached = kCachedPowersMinDecExp + static_cast<int>(index) * kCachedPowersDecExpStep;')
+    print('    const int e_cached = FloorLog2Pow10(k_cached) + 1 - {};'.format(q))
+    print('')
+    print('    const CachedPower cached = {kSignificands[index], e_cached, k_cached};')
+    print('    GRISU_ASSERT(kAlpha <= cached.e + e + {});'.format(q))
+    print('    GRISU_ASSERT(kGamma >= cached.e + e + {});'.format(q))
+    print('')
+    print('    return cached;')
+    print('}')
 
 # PrintGrisuPowersForExponentRange(-60, -32, q=64, p=53, exponent_bits=11)
 # PrintGrisuPowersForExponentRange(-59, -32, q=64, p=53, exponent_bits=11)
