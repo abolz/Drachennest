@@ -21,8 +21,9 @@ matrix:
         - LINKFLAGS="--coverage"
         - GCOV=true
       after_success:
+        - echo $PWD
         - lcov --directory . --capture --output-file coverage.info
-        - lcov --extract coverage.info "./src/*" --output-file coverage.info
+        - lcov --extract coverage.info "./*" --output-file coverage.info
         - lcov --list coverage.info
         - bash <(curl -s https://codecov.io/bash) -X gcov
     - os: linux
