@@ -1,15 +1,45 @@
-image: Visual Studio 2017
-
-platform:
-  - x64
-
-configuration:
-  - Release
-  - Debug
-
 environment:
   matrix:
-    - TOOLSET: vs2017
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
+      configuration: Debug
+      platform: x64
+      GENERATOR: Visual Studio 15 2017
+      ARCHITECTURE: x64
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
+      configuration: Release
+      platform: x64
+      GENERATOR: Visual Studio 15 2017
+      ARCHITECTURE: x64
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      configuration: Debug
+      platform: x64
+      GENERATOR: Visual Studio 16 2019
+      ARCHITECTURE: x64
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      configuration: Release
+      platform: x64
+      GENERATOR: Visual Studio 16 2019
+      ARCHITECTURE: x64
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
+      configuration: Debug
+      platform: x86
+      GENERATOR: Visual Studio 15 2017
+      ARCHITECTURE: Win32
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
+      configuration: Release
+      platform: x86
+      GENERATOR: Visual Studio 15 2017
+      ARCHITECTURE: Win32
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      configuration: Debug
+      platform: x86
+      GENERATOR: Visual Studio 16 2019
+      ARCHITECTURE: Win32
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      configuration: Release
+      platform: x86
+      GENERATOR: Visual Studio 16 2019
+      ARCHITECTURE: Win32
 
 clone_script:
   - cmd: git clone -q --branch=%APPVEYOR_REPO_BRANCH% https://github.com/%APPVEYOR_REPO_NAME%.git %APPVEYOR_BUILD_FOLDER%
@@ -17,16 +47,18 @@ clone_script:
   - cmd: git checkout -qf %APPVEYOR_REPO_COMMIT%
   - cmd: git submodule update --init --recursive
 
+init:
+  - cmake --version
+  - msbuild /version
+
 build:
   verbosity: quiet
 
-before_build:
-  - ps: wget "https://github.com/premake/premake-core/releases/download/v5.0.0-alpha11/premake-5.0.0-alpha11-windows.zip" -OutFile premake.zip
-  - ps: 7z x premake.zip
-
 build_script:
-  - premake5 %TOOLSET%
-  - msbuild .\build\%TOOLSET%\test.vcxproj
+  - mkdir build
+  - cd build
+  - cmake -G "%GENERATOR%" -A "%ARCHITECTURE%" ..
+  - cmake --build . --config "%configuration%"
 
 test_script:
-  - .\build\%TOOLSET%\bin\%CONFIGURATION%\test.exe
+  - .\build\test\%configuration%\test_dtoa.exe
