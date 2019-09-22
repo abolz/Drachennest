@@ -1162,7 +1162,10 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
         // A return value of b is valid if and only if a != b or za == true.
         // A return value of b + 1 is valid if and only if b + 1 <= c.
-        const bool round_up = (a == b && !can_use_lower) || !(br < half || (br == half && zb && b % 2 == 0));
+        const bool round_up = (a == b && !can_use_lower) // out of range
+            || (br > half)                               // > half
+            || (br == half && !zb)                       // > half
+            || (br == half && zb && b % 2 != 0);         // = half: round to nearest-even
 
 //      RYU_ASSERT(!round_up || b < c);
         b += round_up ? 1 : 0;
@@ -1548,7 +1551,10 @@ inline ToDecimalResult<float> ToDecimal(float value)
         const uint32_t br = static_cast<uint32_t>(bq) - b * mask; // Digits removed from b
         const uint32_t half = mask / 2;
 
-        const bool round_up = (a == b && !can_use_lower) || !(br < half || (br == half && zb && b % 2 == 0));
+        const bool round_up = (a == b && !can_use_lower) // out of range
+            || (br > half)                               // > half
+            || (br == half && !zb)                       // > half
+            || (br == half && zb && b % 2 != 0);         // = half: round to nearest-even
 
 //      RYU_ASSERT(!round_up || b < c);
         b += round_up ? 1 : 0;
