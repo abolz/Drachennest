@@ -133,4 +133,4 @@ install:
 script:
   - export CXX=$COMPILER
   - make test_dtoa
-  - ./build/test/test_dtoa
+  - ./test/test_dtoa
