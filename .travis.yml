@@ -22,7 +22,7 @@ matrix:
         - GCOV=true
       after_success:
         - lcov --directory . --capture --output-file coverage.info
-        - lcov --extract coverage.info "$PWD/src/*" --output-file coverage.info
+        - lcov --extract coverage.info "./src/*" --output-file coverage.info
         - lcov --list coverage.info
         - bash <(curl -s https://codecov.io/bash) -X gcov
     - os: linux
@@ -125,6 +125,7 @@ matrix:
 
 before_install:
   - eval "${MATRIX_EVAL}"
+  - CXX --version
 
 install:
   - mkdir build
