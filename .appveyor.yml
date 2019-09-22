@@ -61,4 +61,4 @@ build_script:
   - cmake --build . --config "%configuration%"
 
 test_script:
-  - .\build\test\%configuration%\test_dtoa.exe
+  - .\test\%configuration%\test_dtoa.exe
