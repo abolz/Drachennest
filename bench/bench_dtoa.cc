@@ -207,12 +207,11 @@ static inline void RegisterBenchmarks(char const* name, std::vector<Float> const
     const char* float_name = sizeof(Float) == 4 ? "single" : "double";
     auto* bench = benchmark::RegisterBenchmark(StrPrintf("%s - %s   ", float_name, name), BenchIt<D2S, Float>, numbers);
 
-    //bench->ComputeStatistics("min", [](const std::vector<double>& v) -> double {
-    //    return *(std::min_element(std::begin(v), std::end(v)));
-    //});
+    bench->ComputeStatistics("min", [](const std::vector<double>& v) -> double {
+        return *(std::min_element(std::begin(v), std::end(v)));
+    });
     bench->Repetitions(3);
-    //bench->ReportAggregatesOnly();
-    //bench->DisplayAggregatesOnly();
+    bench->ReportAggregatesOnly();
 }
 
 //----------------------------------------------------------------------------------------------------------
@@ -408,8 +407,8 @@ int main(int argc, char** argv)
     //}
 
 #if 1
-//  for (int d = 1; d <= 15; ++d) {
-    for (int d = 15; d >= 1; --d) {
+    for (int d = 1; d <= 15; ++d) {
+//  for (int d = 15; d >= 1; --d) {
         Register_Digits_double(StrPrintf("1.%d-digits", d - 1), d, -(d - 1));
     }
     for (int d = 1; d <= 15; ++d) {
