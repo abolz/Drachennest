@@ -58,7 +58,7 @@ build_script:
   - mkdir build
   - cd build
   - cmake -G "%GENERATOR%" -A "%ARCHITECTURE%" ..
-  - cmake --build . --config "%configuration%"
+  - cmake --build . --target test_dtoa --config "%configuration%"
 
 test_script:
   - .\test\%configuration%\test_dtoa.exe
