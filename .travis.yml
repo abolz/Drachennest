@@ -125,15 +125,12 @@ matrix:
         - CONFIGURATION=debug
         - CXXFLAGS="-std=c++14 -stdlib=libc++"
 
-before_install:
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then wget "https://github.com/premake/premake-core/releases/download/v5.0.0-alpha11/premake-5.0.0-alpha11-linux.tar.gz" -O premake5.tar.gz; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx"   ]]; then wget "https://github.com/premake/premake-core/releases/download/v5.0.0-alpha11/premake-5.0.0-alpha11-macosx.tar.gz" -O premake5.tar.gz; fi
-  - tar -xvf premake5.tar.gz
-
 install:
-  - ./premake5 --cxxflags="$CXXFLAGS" --linkflags="$LINKFLAGS" gmake
+  - mkdir build
+  - cd build
+  - cmake -G"Unix Makefiles" -DCMAKE_CXX_FLAGS="$CXXFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$LINKFLAGS" ..
 
 script:
   - export CXX=$COMPILER
-  - make -C build/gmake/ config=$CONFIGURATION test
-  - ./build/gmake/bin/$CONFIGURATION/test
+  - make -C build/ test_dtoa
+  - ./build/test/test_dtoa
