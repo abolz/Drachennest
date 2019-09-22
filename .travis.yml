@@ -15,8 +15,8 @@ matrix:
             - lcov
       compiler: gcc
       env:
-        - COMPILER=g++-6
-        - CONFIGURATION=debug
+        - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
+        - CONFIGURATION=Debug
         - CXXFLAGS="-std=c++11 -O0 -fprofile-arcs -ftest-coverage --coverage"
         - LINKFLAGS="--coverage"
         - GCOV=true
@@ -34,8 +34,8 @@ matrix:
             - g++-6
       compiler: gcc
       env:
-        - COMPILER=g++-6
-        - CONFIGURATION=release
+        - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
+        - CONFIGURATION=Release
         - CXXFLAGS="-std=c++11"
     - os: linux
       addons:
@@ -46,8 +46,8 @@ matrix:
             - g++-6
       compiler: gcc
       env:
-        - COMPILER=g++-6
-        - CONFIGURATION=debug
+        - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
+        - CONFIGURATION=Debug
         - CXXFLAGS="-std=c++11 -fsanitize=undefined"
         - LINKFLAGS="-lubsan"
     - os: linux
@@ -59,8 +59,8 @@ matrix:
             - g++-6
       compiler: gcc
       env:
-        - COMPILER=g++-6
-        - CONFIGURATION=release
+        - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
+        - CONFIGURATION=Release
         - CXXFLAGS="-std=c++14"
     - os: linux
       addons:
@@ -71,8 +71,8 @@ matrix:
             - g++-6
       compiler: gcc
       env:
-        - COMPILER=g++-6
-        - CONFIGURATION=debug
+        - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
+        - CONFIGURATION=Debug
         - CXXFLAGS="-std=c++14"
     - os: linux
       addons:
@@ -83,8 +83,8 @@ matrix:
             - g++-7
       compiler: gcc
       env:
-        - COMPILER=g++-7
-        - CONFIGURATION=release
+        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+        - CONFIGURATION=Release
         - CXXFLAGS="-std=c++17 -fsanitize=undefined"
         - LINKFLAGS="-lubsan"
     - os: linux
@@ -96,41 +96,43 @@ matrix:
             - g++-7
       compiler: gcc
       env:
-        - COMPILER=g++-7
-        - CONFIGURATION=debug
+        - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+        - CONFIGURATION=Debug
         - CXXFLAGS="-std=c++17"
     - os: osx
       compiler: clang
       env:
-        - COMPILER=clang++
-        - CONFIGURATION=release
+        - MATRIX_EVAL="CC=clang && CXX=clang++"
+        - CONFIGURATION=Release
         - CXXFLAGS="-std=c++11 -stdlib=libc++"
     - os: osx
       compiler: clang
       env:
-        - COMPILER=clang++
-        - CONFIGURATION=debug
+        - MATRIX_EVAL="CC=clang && CXX=clang++"
+        - CONFIGURATION=Debug
         - CXXFLAGS="-std=c++11 -stdlib=libc++ -fsanitize=undefined"
         - LINKFLAGS="-fsanitize=undefined"
     - os: osx
       compiler: clang
       env:
-        - COMPILER=clang++
-        - CONFIGURATION=release
+        - MATRIX_EVAL="CC=clang && CXX=clang++"
+        - CONFIGURATION=Release
         - CXXFLAGS="-std=c++14 -stdlib=libc++"
     - os: osx
       compiler: clang
       env:
-        - COMPILER=clang++
-        - CONFIGURATION=debug
+        - MATRIX_EVAL="CC=clang && CXX=clang++"
+        - CONFIGURATION=Debug
         - CXXFLAGS="-std=c++14 -stdlib=libc++"
+
+before_install:
+  - eval "${MATRIX_EVAL}"
 
 install:
   - mkdir build
   - cd build
-  - cmake -G"Unix Makefiles" -DCMAKE_CXX_FLAGS="$CXXFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$LINKFLAGS" ..
+  - cmake -G"Unix Makefiles" -DCMAKE_BUILD_TYPE="$CONFIGURATION" -DCMAKE_CXX_FLAGS="$CXXFLAGS" -DCMAKE_EXE_LINKER_FLAGS="$LINKFLAGS" ..
 
 script:
-  - export CXX=$COMPILER
   - make test_dtoa
   - ./test/test_dtoa
