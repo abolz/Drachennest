@@ -1288,7 +1288,7 @@ inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
     const uint64_t bits0 = uint64_t{m} * Lo32(mul);
     const uint64_t bits1 = uint64_t{m} * Hi32(mul);
     const uint64_t sum = bits1 + Hi32(bits0);
-#if defined(_MSC_VER) && defined(_M_IX86)
+#if defined(_MSC_VER) && defined(_M_IX86) && !defined(__clang__)
     const uint64_t shifted_sum = __ull_rshift(sum, j);
 #else
     const int shift = j & 31;
