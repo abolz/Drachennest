@@ -951,7 +951,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
             for (;;)
             {
                 const uint64_t q = m2 / 10;
-                const uint64_t r = m2 - 10 * q;
+                const uint32_t r = static_cast<uint32_t>(m2) - 10 * static_cast<uint32_t>(q);
                 if (r != 0)
                     break;
                 m2 = q;
@@ -962,7 +962,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
         }
     }
 
-    const bool is_even = (m2 & 1) == 0;
+    const bool is_even = (m2 % 2) == 0;
     const bool accept_lower = is_even;
     const bool accept_upper = is_even;
 
@@ -1096,7 +1096,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
     uint64_t mask = 1;
     // mask = 10^(number of digits removed),
-    // i.e., (b % mask) contains the actual digits removed from b.
+    // i.e., (bq % mask) contains the actual digits removed from bq.
 
     while (a / 10000 < c / 10000)
     {
@@ -1127,7 +1127,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
     if /*likely*/ (!za && !zb)
     {
-        const uint64_t br = bq - b * mask; // Digits removed from b
+        const uint64_t br = bq - b * mask; // Digits removed from bq
         const uint64_t half = mask / 2;
 
         b += (a == b || br >= half);
@@ -1146,7 +1146,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
             for (;;)
             {
                 const uint64_t q = a / 10;
-                const uint64_t r = a - 10 * q;
+                const uint32_t r = static_cast<uint32_t>(a) - 10 * static_cast<uint32_t>(q);
                 if (r != 0)
                     break;
                 mask *= 10;
@@ -1157,18 +1157,17 @@ inline ToDecimalResult<double> ToDecimal(double value)
             }
         }
 
-        const uint64_t br = bq - b * mask; // Digits removed from b
+        const uint64_t br = bq - b * mask; // Digits removed from bq
         const uint64_t half = mask / 2;
 
         // A return value of b is valid if and only if a != b or za == true.
         // A return value of b + 1 is valid if and only if b + 1 <= c.
         const bool round_up = (a == b && !can_use_lower) // out of range
-            || (br > half)                               // > half
-            || (br == half && !zb)                       // > half
-            || (br == half && zb && b % 2 != 0);         // = half: round to nearest-even
+            || (br > half)
+            || (br == half && (!zb || b % 2 != 0));
 
 //      RYU_ASSERT(!round_up || b < c);
-        b += round_up ? 1 : 0;
+        b += round_up;
     }
 
     return {b, e10};
@@ -1405,7 +1404,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
         }
     }
 
-    const bool is_even = (m2 & 1) == 0;
+    const bool is_even = (m2 % 2) == 0;
     const bool accept_lower = is_even;
     const bool accept_upper = is_even;
 
@@ -1524,7 +1523,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
     if /*likely*/ (!za && !zb)
     {
-        const uint32_t br = static_cast<uint32_t>(bq) - b * mask; // Digits removed from b
+        const uint32_t br = static_cast<uint32_t>(bq) - b * mask; // Digits removed from bq
         const uint32_t half = mask / 2;
 
         b += (a == b || br >= half);
@@ -1548,16 +1547,15 @@ inline ToDecimalResult<float> ToDecimal(float value)
             }
         }
 
-        const uint32_t br = static_cast<uint32_t>(bq) - b * mask; // Digits removed from b
+        const uint32_t br = static_cast<uint32_t>(bq) - b * mask; // Digits removed from bq
         const uint32_t half = mask / 2;
 
         const bool round_up = (a == b && !can_use_lower) // out of range
-            || (br > half)                               // > half
-            || (br == half && !zb)                       // > half
-            || (br == half && zb && b % 2 != 0);         // = half: round to nearest-even
+            || (br > half)
+            || (br == half && (!zb || b % 2 != 0));
 
 //      RYU_ASSERT(!round_up || b < c);
-        b += round_up ? 1 : 0;
+        b += round_up;
     }
 
     return {b, e10};
@@ -1614,6 +1612,16 @@ inline char* ToChars(char* buffer, Float value, bool force_trailing_dot_zero = f
 }
 
 } // namespace ryu
+
+//ryu::ToDecimalResult<double> ToDecimal(double value)
+//{
+//    return ryu::ToDecimal(value);
+//}
+
+//ryu::ToDecimalResult<float> ToDecimal(float value)
+//{
+//    return ryu::ToDecimal(value);
+//}
 
 //char* Dtoa(char* buffer, double value)
 //{
