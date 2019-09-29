@@ -270,7 +270,7 @@ inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent
 
             // 0 < decimal_point <= Min(17 - 1, MaxExp)
             // So we need to move at most 16 bytes one place to the left.
-#if 0
+#if 1
             std::memmove(buffer, buffer + 1, static_cast<unsigned>(decimal_point));
 #else
             char* const src = buffer + 1;
