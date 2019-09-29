@@ -58,8 +58,13 @@ struct D2S
 struct D2S
 {
     static char const* Name() { return "charconv"; }
+#if 0
     char* operator()(char* buf, int buflen, float f) const { return std::to_chars(buf, buf + buflen, f, std::chars_format::general).ptr; }
     char* operator()(char* buf, int buflen, double f) const { return std::to_chars(buf, buf + buflen, f, std::chars_format::general).ptr; }
+#else
+    char* operator()(char* buf, int buflen, float f) const { return std::to_chars(buf, buf + buflen, f).ptr; }
+    char* operator()(char* buf, int buflen, double f) const { return std::to_chars(buf, buf + buflen, f).ptr; }
+#endif
 };
 #endif
 
