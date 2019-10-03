@@ -951,7 +951,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
             for (;;)
             {
                 const uint64_t q = m2 / 10;
-                const uint32_t r = static_cast<uint32_t>(m2) - 10 * static_cast<uint32_t>(q);
+                const uint32_t r = Lo32(m2) - 10 * Lo32(q); // = m2 % 10
                 if (r != 0)
                     break;
                 m2 = q;
@@ -1146,7 +1146,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
             for (;;)
             {
                 const uint64_t q = a / 10;
-                const uint32_t r = static_cast<uint32_t>(a) - 10 * static_cast<uint32_t>(q);
+                const uint32_t r = Lo32(a) - 10 * Lo32(q); // = a % 10
                 if (r != 0)
                     break;
                 mask *= 10;
@@ -1488,18 +1488,21 @@ inline ToDecimalResult<float> ToDecimal(float value)
     //  Do this only for 32-bit platforms?!
     //
 
-    uint32_t a = static_cast<uint32_t>(aq);
-    uint32_t b = static_cast<uint32_t>(bq);
-    uint32_t c = static_cast<uint32_t>(cq);
+    uint32_t a = Lo32(aq);
+    uint32_t b = Lo32(bq);
+    uint32_t c = Lo32(cq);
 
-    if (static_cast<uint32_t>(cq >> 32) != 0)
+    if (Hi32(cq) != 0)
     {
         RYU_ASSERT(aq / 10 < cq / 10);
+        RYU_ASSERT(Hi32(aq / 2) == 0);
+        RYU_ASSERT(Hi32(bq / 2) == 0);
+        RYU_ASSERT(Hi32(cq / 2) == 0);
 
         mask = 10;
-        a = static_cast<uint32_t>(aq / 2) / 5;
-        b = static_cast<uint32_t>(bq / 2) / 5;
-        c = static_cast<uint32_t>(cq / 2) / 5;
+        a = Lo32(aq / 2) / 5; // = aq / 10
+        b = Lo32(bq / 2) / 5; // = bq / 10
+        c = Lo32(cq / 2) / 5; // = cq / 10
         ++e10;
     }
 
@@ -1523,14 +1526,14 @@ inline ToDecimalResult<float> ToDecimal(float value)
 
     if /*likely*/ (!za && !zb)
     {
-        const uint32_t br = static_cast<uint32_t>(bq) - b * mask; // Digits removed from bq
+        const uint32_t br = Lo32(bq) - b * mask; // Digits removed from bq
         const uint32_t half = mask / 2;
 
         b += (a == b || br >= half);
     }
     else
     {
-        const bool can_use_lower = accept_lower && za && (static_cast<uint32_t>(aq) - a * mask == 0);
+        const bool can_use_lower = accept_lower && za && (Lo32(aq) - a * mask == 0);
         if (can_use_lower)
         {
             for (;;)
@@ -1547,7 +1550,7 @@ inline ToDecimalResult<float> ToDecimal(float value)
             }
         }
 
-        const uint32_t br = static_cast<uint32_t>(bq) - b * mask; // Digits removed from bq
+        const uint32_t br = Lo32(bq) - b * mask; // Digits removed from bq
         const uint32_t half = mask / 2;
 
         const bool round_up = (a == b && !can_use_lower) // out of range
