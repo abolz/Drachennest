@@ -13,10 +13,13 @@
 
 #include <math.h>
 
+#include "../src/ryu.h"
+
 //#define BENCH_CHARCONV 1
 //#define BENCH_GRISU2 1
 //#define BENCH_GRISU3 1
 #define BENCH_RYU 1
+//#define BENCH_RYU_UPSTREAM 1
 
 #define BENCH_SINGLE 0
 #define BENCH_DOUBLE 1
@@ -51,6 +54,15 @@ struct D2S
     static char const* Name() { return "Ryu"; }
     char* operator()(char* buf, int /*buflen*/, float f) const { return ryu::ToChars(buf, f); }
     char* operator()(char* buf, int /*buflen*/, double f) const { return ryu::ToChars(buf, f); }
+};
+#endif
+#if BENCH_RYU_UPSTREAM
+#include "ryu/ryu/ryu.h"
+struct D2S
+{
+    static char const* Name() { return "Ryu (upstream)"; }
+    char* operator()(char* buf, int /*buflen*/, float f) const { return buf + f2s_buffered_n(f, buf); }
+    char* operator()(char* buf, int /*buflen*/, double f) const { return buf + d2s_buffered_n(f, buf); }
 };
 #endif
 #if BENCH_CHARCONV
@@ -156,16 +168,16 @@ static inline char const* StrPrintf(char const* format, Args&&... args)
 
 #if BENCH_TO_DECIMAL
 #if BENCH_GRISU2
-inline uint32_t ToDecimal(int& exponent, float  value) { return grisu2_Ftoa(exponent, value); }
-inline uint64_t ToDecimal(int& exponent, double value) { return grisu2_Dtoa(exponent, value); }
+inline uint32_t ToDecimal(int& exponent, float  value) { const auto dec = grisu2::ToDecimal(value); /*exponent = dec.exponent;*/ return dec.digits; }
+inline uint64_t ToDecimal(int& exponent, double value) { const auto dec = grisu2::ToDecimal(value); /*exponent = dec.exponent;*/ return dec.digits; }
 #endif
 #if BENCH_GRISU3
-inline uint32_t ToDecimal(int& exponent, float  value) { return grisu3_Ftoa(exponent, value); }
-inline uint64_t ToDecimal(int& exponent, double value) { return grisu3_Dtoa(exponent, value); }
+inline uint32_t ToDecimal(int& exponent, float  value) { const auto dec = grisu3::ToDecimal(value); /*exponent = dec.exponent;*/ return dec.digits; }
+inline uint64_t ToDecimal(int& exponent, double value) { const auto dec = grisu3::ToDecimal(value); /*exponent = dec.exponent;*/ return dec.digits; }
 #endif
 #if BENCH_RYU
-inline uint32_t ToDecimal(int& exponent, float  value) { return ryu_Ftoa(exponent, value); }
-inline uint64_t ToDecimal(int& exponent, double value) { return ryu_Dtoa(exponent, value); }
+inline uint32_t ToDecimal(int& exponent, float  value) { const auto dec = ryu::ToDecimal(value); /*exponent = dec.exponent;*/ return dec.digits; }
+inline uint64_t ToDecimal(int& exponent, double value) { const auto dec = ryu::ToDecimal(value); /*exponent = dec.exponent;*/ return dec.digits; }
 #endif
 
 template <typename, typename Float>
@@ -362,7 +374,7 @@ static constexpr float kPow10_f32[] = {
 static inline void Register_Digits_single(const char* name, int digits, int e10)
 {
     assert(digits >= 1);
-    assert(digits <= 7);
+    assert(digits <= 9);
     assert(e10 >= -10);
     assert(e10 <= 10);
 
@@ -402,6 +414,7 @@ int main(int argc, char** argv)
 
     printf("Benchmarking %s\n", D2S::Name());
 
+#if 1
 #if BENCH_DOUBLE
     Register_RandomBits_double();
     Register_Uniform(0.0, 1.0);
@@ -411,7 +424,7 @@ int main(int argc, char** argv)
     //    Register_Uniform(std::pow(10.0, e), std::pow(10.0, e+1));
     //}
 
-#if 1
+#if 0
     for (int d = 1; d <= 15; ++d) {
 //  for (int d = 15; d >= 1; --d) {
         Register_Digits_double(StrPrintf("1.%d-digits", d - 1), d, -(d - 1));
@@ -427,6 +440,8 @@ int main(int argc, char** argv)
     }
 #else
     for (int d = 1; d <= 18; ++d) {
+    //for (int d = 18; d >= 1; --d) {
+        //for (int e = 22; e >= -22; e -= 1) {
         for (int e = -22; e <= 22; e += 1) {
             Register_Digits_double(StrPrintf("%2d,%3d", d, e), d, e);
         }
@@ -439,6 +454,7 @@ int main(int argc, char** argv)
     Register_Uniform(0.0f, 1.0f);
     Register_Uniform(0.0f, 1.0e+38f);
 
+#if 0
     for (int d = 1; d <= 7; ++d) {
         Register_Digits_single(StrPrintf("1.%d-digits", d - 1), d, -(d - 1));
     }
@@ -451,6 +467,14 @@ int main(int argc, char** argv)
     for (int d = 1; d <= 7; ++d) {
         Register_Digits_single(StrPrintf("%d-digits * 10^10", d), d, 10);
     }
+#else
+    for (int d = 1; d <= 9; ++d) {
+        for (int e = -10; e <= 10; e += 1) {
+            Register_Digits_single(StrPrintf("%2d,%3d", d, e), d, e);
+        }
+    }
+#endif
+#endif
 #endif
 
     benchmark::Initialize(&argc, argv);

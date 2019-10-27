@@ -16,4 +16,5 @@ target_link_libraries(
     PRIVATE
         google_benchmark
         google_double_conversion
+        ryu
     )
