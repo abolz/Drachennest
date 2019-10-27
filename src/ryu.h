@@ -915,6 +915,20 @@ inline bool MultipleOfPow2(uint64_t value, int e2)
     return (value & ((uint64_t{1} << e2) - 1)) == 0;
 }
 
+struct DivMod64Result {
+    uint64_t q;
+    uint32_t r;
+
+    explicit operator bool() const noexcept { return r == 0; } // Hm...
+};
+
+inline DivMod64Result DivMod64(uint64_t n, uint32_t d)
+{
+    const uint64_t q = n / d;
+    const uint32_t r = Lo32(n) - d * Lo32(q);
+    return {q, r};
+}
+
 RYU_NEVER_INLINE ToDecimalResult<double> RemoveTrailingZeros64(uint64_t m2)
 {
     // m2 < 2^53, which has 16 decimal digits.
@@ -922,13 +936,20 @@ RYU_NEVER_INLINE ToDecimalResult<double> RemoveTrailingZeros64(uint64_t m2)
     RYU_ASSERT(m2 < 9007199254740992);
 
     int k = 0;
-    for (;;)
-    {
-        const uint64_t q = m2 / 10;
-        const uint32_t r = Lo32(m2) - 10 * Lo32(q);
-        if (r != 0)
-            break;
-        m2 = q;
+    if (const auto d = DivMod64(m2, 100000000)) {
+        m2 = d.q;
+        k += 8;
+    }
+    if (const auto d = DivMod64(m2, 10000)) {
+        m2 = d.q;
+        k += 4;
+    }
+    if (const auto d = DivMod64(m2, 100)) {
+        m2 = d.q;
+        k += 2;
+    }
+    if (const auto d = DivMod64(m2, 10)) {
+        m2 = d.q;
         ++k;
     }
 
@@ -1035,14 +1056,22 @@ inline ToDecimalResult<double> ToDecimal(double value)
         //           = p5(x) >= q
         //           = x % 5^q == 0
 
-        if (q <= 22) // 22 = floor(log_5(2^53))
+        if (q == 0)
         {
-            // NB: q <= 22 implies e2 <= 79.
-            // NB: Since w - u <= 4, only one of u, v, and w can be a multiple of 5, if any.
-
-            za = MultipleOfPow5(u, q);
-            zb = MultipleOfPow5(v, q);
-            zc = MultipleOfPow5(w, q);
+            zb = true;
+            if (is_even)
+                za = true;
+            else
+                zc = true;
+        }
+        else if (q <= 22)
+        {
+            if ((zb = MultipleOfPow5(v, q)))
+                ;
+            else if (is_even)
+                za = MultipleOfPow5(u, q);
+            else
+                zc = MultipleOfPow5(w, q);
         }
     }
     else
@@ -1070,14 +1099,17 @@ inline ToDecimalResult<double> ToDecimal(double value)
         //           = p2(x) >= q
         //           = x % 2^q == 0
 
-        if (q <= Double::SignificandSize + 2)
+        if (q <= 1)
         {
-            // NB: q <= 1 implies -4 <= e2 <= -1
-            // NB: 2 <= q <= 55 implies -81 <= e2 <= -5
-
-            za = MultipleOfPow2(u, q);
+            zb = true;
+            if (is_even)
+                za = (q == 0) || !lower_boundary_is_closer;
+            else
+                zc = true;
+        }
+        else if (q <= Double::SignificandSize + 2)
+        {
             zb = MultipleOfPow2(v, q);
-            zc = MultipleOfPow2(w, q);
         }
     }
 
@@ -1098,7 +1130,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
     //  Might be at least beneficial for 32-bit platforms...
     //
 
-    c -= !accept_upper && zc;
+    c -= zc;
 
     const uint64_t aq = a;
     const uint64_t bq = b;
@@ -1106,7 +1138,41 @@ inline ToDecimalResult<double> ToDecimal(double value)
     uint64_t mask = 1;
     // mask = 10^(number of digits removed),
     // i.e., (bq % mask) contains the actual digits removed from bq.
+    // Since c < 2^62, which has 19 decimal digits, we remove at most 18 decimal digits.
 
+#if defined(__GNUC__) || defined(__clang__)
+    //
+    // ARGH...
+    // VC generates DIV instructions for the division by 1e16 below...
+    //
+    if (a / 10000000000000000 < c / 10000000000000000) // Remove 16-18 digits
+    {
+        mask = 10000000000000000;
+        a /= 10000000000000000;
+        b /= 10000000000000000;
+        c /= 10000000000000000;
+        e10 += 16;
+    }
+    else // Remove 0-15 digits
+    {
+        if (a / 100000000 < c / 100000000)
+        {
+            mask = 100000000;
+            a /= 100000000;
+            b /= 100000000;
+            c /= 100000000;
+            e10 += 8;
+        }
+        if (a / 10000 < c / 10000)
+        {
+            mask *= 10000;
+            a /= 10000;
+            b /= 10000;
+            c /= 10000;
+            e10 += 4;
+        }
+    }
+#else
     while (a / 10000 < c / 10000)
     {
         mask *= 10000;
@@ -1115,6 +1181,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
         c /= 10000;
         e10 += 4;
     }
+#endif
 
     if (a / 100 < c / 100)
     {
@@ -1146,7 +1213,7 @@ inline ToDecimalResult<double> ToDecimal(double value)
         // za currently determines whether the first q removed digits were all
         // 0's. Still need to check whether the digits removed in the loop above
         // are all 0's.
-        const bool can_use_lower = accept_lower && za && (aq - a * mask == 0);
+        const bool can_use_lower = za && (aq - a * mask == 0);
         if (can_use_lower)
         {
             // If the loop is executed at least once, we have a == b == c when
