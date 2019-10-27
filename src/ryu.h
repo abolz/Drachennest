@@ -31,6 +31,16 @@
 #define RYU_ASSERT(X) assert(X)
 #endif
 
+#ifndef RYU_NEVER_INLINE
+#if defined(__GNUC__)
+#define RYU_NEVER_INLINE __attribute__((noinline)) inline
+#elif defined(_MSC_VER)
+#define RYU_NEVER_INLINE __declspec(noinline) inline
+#else
+#define RYU_NEVER_INLINE inline
+#endif
+#endif
+
 namespace ryu {
 
 //==================================================================================================
@@ -765,7 +775,7 @@ inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
     // When written as shift = j & 63, clang can optimize the 128-bit shift into
     // a simple funnel shift.
     const int shift = j & 63;
-    return static_cast<uint64_t>((b2 + (b0 >> 64)) >> shift);
+    return static_cast<uint64_t>((b2 + static_cast<uint64_t>(b0 >> 64)) >> shift);
 }
 
 #elif defined(_MSC_VER) && defined(_M_X64)
@@ -905,6 +915,26 @@ inline bool MultipleOfPow2(uint64_t value, int e2)
     return (value & ((uint64_t{1} << e2) - 1)) == 0;
 }
 
+RYU_NEVER_INLINE ToDecimalResult<double> RemoveTrailingZeros64(uint64_t m2)
+{
+    // m2 < 2^53, which has 16 decimal digits.
+    // We therefore remove at most 15 digits.
+    RYU_ASSERT(m2 < 9007199254740992);
+
+    int k = 0;
+    for (;;)
+    {
+        const uint64_t q = m2 / 10;
+        const uint32_t r = Lo32(m2) - 10 * Lo32(q);
+        if (r != 0)
+            break;
+        m2 = q;
+        ++k;
+    }
+
+    return {m2, k};
+}
+
 } // namespace impl
 
 inline ToDecimalResult<double> ToDecimal(double value)
@@ -938,27 +968,12 @@ inline ToDecimalResult<double> ToDecimal(double value)
         m2 = Double::HiddenBit | ieee_mantissa;
         e2 = static_cast<int>(ieee_exponent) - Double::ExponentBias;
 
-        if ((0 <= -e2 && -e2 < Double::SignificandSize) && MultipleOfPow2(m2, -e2))
+        if /*unlikely*/ ((0 <= -e2 && -e2 < Double::SignificandSize) && MultipleOfPow2(m2, -e2))
         {
             // Since 2^52 <= m2 < 2^53 and 0 <= -e2 <= 52:
             //  1 <= value = m2 / 2^-e2 < 2^53.
             // Since m2 is divisible by 2^-e2, value is an integer.
-            m2 >>= -e2;
-
-            // Move trailing zeros into the decimal exponent.
-            // NB: This is actually not required for fixed-point notation.
-            int k = 0;
-            for (;;)
-            {
-                const uint64_t q = m2 / 10;
-                const uint32_t r = Lo32(m2) - 10 * Lo32(q); // = m2 % 10
-                if (r != 0)
-                    break;
-                m2 = q;
-                ++k;
-            }
-
-            return {m2, k};
+            return RemoveTrailingZeros64(m2 >> -e2);
         }
     }
 
@@ -1087,12 +1102,6 @@ inline ToDecimalResult<double> ToDecimal(double value)
 
     const uint64_t aq = a;
     const uint64_t bq = b;
-
-    //
-    // TODO:
-    //  Use a small table with powers-of-10 for mask and count the number of
-    //  removed digits? The loop then would be even simpler than the "fast" path?!
-    //
 
     uint64_t mask = 1;
     // mask = 10^(number of digits removed),
@@ -1353,6 +1362,26 @@ inline bool MultipleOfPow2(uint32_t value, int e2)
     return (value & ((uint32_t{1} << e2) - 1)) == 0;
 }
 
+RYU_NEVER_INLINE ToDecimalResult<float> RemoveTrailingZeros32(uint32_t m2)
+{
+    // m2 < 2^24, which has 8 decimal digits.
+    // We therefore remove at most 7 digits.
+    RYU_ASSERT(m2 < 16777216);
+
+    int k = 0;
+    for (;;)
+    {
+        const uint32_t q = m2 / 10;
+        const uint32_t r = m2 - 10 * q;
+        if (r != 0)
+            break;
+        m2 = q;
+        ++k;
+    }
+
+    return {m2, k};
+}
+
 } // namespace impl
 
 inline ToDecimalResult<float> ToDecimal(float value)
@@ -1385,22 +1414,9 @@ inline ToDecimalResult<float> ToDecimal(float value)
         m2 = Single::HiddenBit | ieee_mantissa;
         e2 = static_cast<int>(ieee_exponent) - Single::ExponentBias;
 
-        if ((0 <= -e2 && -e2 < Single::SignificandSize) && MultipleOfPow2(m2, -e2))
+        if /*unlikely*/ ((0 <= -e2 && -e2 < Single::SignificandSize) && MultipleOfPow2(m2, -e2))
         {
-            m2 >>= -e2;
-
-            int k = 0;
-            for (;;)
-            {
-                const uint32_t q = m2 / 10;
-                const uint32_t r = m2 - 10 * q;
-                if (r != 0)
-                    break;
-                m2 = q;
-                ++k;
-            }
-
-            return {m2, k};
+            return RemoveTrailingZeros32(m2 >> -e2);
         }
     }
 
