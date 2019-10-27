@@ -259,7 +259,14 @@ static inline floating_decimal_64 d2d(const uint64_t ieeeMantissa, const uint32_
     printf("%" PRIu64 " * 2^%d / 10^%u\n", mv, e2, q);
     printf("V+=%" PRIu64 "\nV =%" PRIu64 "\nV-=%" PRIu64 "\n", vp, vr, vm);
 #endif
-    if (q <= 21) {
+    if (q == 0) {
+      vrIsTrailingZeros = true;
+      if (acceptBounds) {
+        vmIsTrailingZeros = true;
+      } else {
+        vp--;
+      }
+    } else if (q <= 21) {
       // This should use q <= 22, but I think 21 is also safe. Smaller values
       // may still be safe, but it's more difficult to reason about them.
       // Only one of mp, mv, and mm can be a multiple of 5, if any.
@@ -301,7 +308,7 @@ static inline floating_decimal_64 d2d(const uint64_t ieeeMantissa, const uint32_
       vrIsTrailingZeros = true;
       if (acceptBounds) {
         // mm = mv - 1 - mmShift, so it has 1 trailing 0 bit iff mmShift == 1.
-        vmIsTrailingZeros = mmShift == 1;
+        vmIsTrailingZeros = (q == 0) || (mmShift == 1);
       } else {
         // mp = mv + 2, so it always has at least one trailing 0 bit.
         --vp;
