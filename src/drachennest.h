@@ -11,3 +11,6 @@ char* ftoa_grisu3(char* buf, float value);
 char* ftoa_ryu   (char* buf, float value);
 
 } // namespace drachennest
+
+char* RyuDtoa    (char* buffer, double value);
+char* RyuFtoa    (char* buffer, float  value);
