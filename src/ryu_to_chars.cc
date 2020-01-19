@@ -957,8 +957,13 @@ static inline bool MultipleOfPow2(uint64_t value, int e2)
     return (value & ((uint64_t{1} << e2) - 1)) == 0;
 }
 
+struct ToDecimalResultDouble {
+    uint64_t digits; // num_digits <= 17
+    int exponent;
+};
+
 #if !RYU_KEEP_TRAILING_ZEROS_IN_SMALL_INT()
-static inline ToDecimalResult<double> RemoveTrailingZeros64(uint64_t m2)
+static inline ToDecimalResultDouble RemoveTrailingZeros64(uint64_t m2)
 {
     // m2 < 2^53, which has 16 decimal digits.
     // We therefore remove at most 15 digits.
@@ -978,11 +983,6 @@ static inline ToDecimalResult<double> RemoveTrailingZeros64(uint64_t m2)
     return {m2, k};
 }
 #endif
-
-struct ToDecimalResultDouble {
-    uint64_t digits; // num_digits <= 17
-    int exponent;
-};
 
 static inline ToDecimalResultDouble ToDecimal(double value)
 {
@@ -1411,8 +1411,13 @@ static inline bool MultipleOfPow2(uint32_t value, int e2)
     return (value & ((uint32_t{1} << e2) - 1)) == 0;
 }
 
+struct ToDecimalResultSingle {
+    uint32_t digits; // num_digits <= 9
+    int exponent;
+};
+
 #if !RYU_KEEP_TRAILING_ZEROS_IN_SMALL_INT()
-static inline ToDecimalResult<float> RemoveTrailingZeros32(uint32_t m2)
+static inline ToDecimalResultSingle RemoveTrailingZeros32(uint32_t m2)
 {
     // m2 < 2^24, which has 8 decimal digits.
     // We therefore remove at most 7 digits.
@@ -1432,11 +1437,6 @@ static inline ToDecimalResult<float> RemoveTrailingZeros32(uint32_t m2)
     return {m2, k};
 }
 #endif
-
-struct ToDecimalResultSingle {
-    uint32_t digits; // num_digits <= 9
-    int exponent;
-};
 
 static inline ToDecimalResultSingle ToDecimal(float value)
 {
