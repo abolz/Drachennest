@@ -17,6 +17,7 @@
 #define RYU_KEEP_TRAILING_ZEROS_IN_SMALL_INT()  1
 #define RYU_SCIENTIFIC_NOTATION_ONLY()          0
 #define RYU_USE_INTRINSICS()                    1
+#define RYU_USE_INTRINSICS_FOR_DECIMAL_LENGTH() 1
 
 #include <cassert>
 #include <climits>
@@ -1682,6 +1683,120 @@ static inline char* Utoa_8Digits(char* buf, uint32_t digits)
     return buf + 8;
 }
 
+#if RYU_USE_INTRINSICS() && RYU_USE_INTRINSICS_FOR_DECIMAL_LENGTH()
+
+// Returns the number of leading 0-bits in x, starting at the most significant bit position.
+// If x is 0, the result is undefined.
+static inline int CountLeadingZeros32(uint32_t x)
+{
+    RYU_ASSERT(x != 0);
+
+#if defined(__GNUC__)
+    return __builtin_clz(x);
+#elif defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64))
+    return static_cast<int>(_CountLeadingZeros(x));
+#elif defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+    return static_cast<int>(__lzcnt(x));
+#else
+    int lz = 0;
+    while ((x >> 31) == 0) {
+        x <<= 1;
+        ++lz;
+    }
+    return lz;
+#endif
+}
+
+// Returns the number of leading 0-bits in x, starting at the most significant bit position.
+// If x is 0, the result is undefined.
+static inline int CountLeadingZeros64(uint64_t x)
+{
+    RYU_ASSERT(x != 0);
+
+#if defined(__GNUC__)
+    return __builtin_clzll(x);
+#elif defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64))
+    return static_cast<int>(_CountLeadingZeros64(x));
+#elif defined(_MSC_VER) && defined(_M_X64)
+    return static_cast<int>(__lzcnt64(x));
+#elif defined(_MSC_VER) && defined(_M_IX86)
+    int lz = static_cast<int>( __lzcnt(static_cast<uint32_t>(x >> 32)) );
+    if (lz == 32) {
+        lz += static_cast<int>( __lzcnt(static_cast<uint32_t>(x)) );
+    }
+    return lz;
+#else
+    int lz = 0;
+    while ((x >> 63) == 0) {
+        x <<= 1;
+        ++lz;
+    }
+    return lz;
+#endif
+}
+
+static inline int DecimalLength(uint32_t v)
+{
+    RYU_ASSERT(v >= 1);
+    RYU_ASSERT(v <= 999999999);
+
+    static constexpr uint32_t Table[] = {
+        0,                 // 10^0  - 1 = 0x0000'0000
+        9,                 // 10^1  - 1 = 0x0000'0009
+        99,                // 10^2  - 1 = 0x0000'0063
+        999,               // 10^3  - 1 = 0x0000'03E7
+        9999,              // 10^4  - 1 = 0x0000'270F
+        99999,             // 10^5  - 1 = 0x0001'869F
+        999999,            // 10^6  - 1 = 0x000F'423F
+        9999999,           // 10^7  - 1 = 0x0098'967F
+        99999999,          // 10^8  - 1 = 0x05F5'E0FF
+        999999999,         // 10^9  - 1 = 0x3B9A'C9FF
+    };
+
+    constexpr int Bits = 32;
+    const int y = ((19 * (Bits - 1) + (1 << 6)) - 19 * CountLeadingZeros32(v)) >> 6;
+    RYU_ASSERT(y >= 0);
+    RYU_ASSERT(y <= 9);
+
+    return y + (Table[y] < v);
+}
+
+static inline int DecimalLength(uint64_t v)
+{
+    RYU_ASSERT(v >= 1);
+    RYU_ASSERT(v <= 99999999999999999ull);
+
+    static constexpr uint64_t Table[] = {
+        0,                 // 10^0  - 1 = 0x0000'0000'0000'0000
+        9,                 // 10^1  - 1 = 0x0000'0000'0000'0009
+        99,                // 10^2  - 1 = 0x0000'0000'0000'0063
+        999,               // 10^3  - 1 = 0x0000'0000'0000'03E7
+        9999,              // 10^4  - 1 = 0x0000'0000'0000'270F
+        99999,             // 10^5  - 1 = 0x0000'0000'0001'869F
+        999999,            // 10^6  - 1 = 0x0000'0000'000F'423F
+        9999999,           // 10^7  - 1 = 0x0000'0000'0098'967F
+        99999999,          // 10^8  - 1 = 0x0000'0000'05F5'E0FF
+        999999999,         // 10^9  - 1 = 0x0000'0000'3B9A'C9FF
+        9999999999,        // 10^10 - 1 = 0x0000'0002'540B'E3FF
+        99999999999,       // 10^11 - 1 = 0x0000'0017'4876'E7FF
+        999999999999,      // 10^12 - 1 = 0x0000'00E8'D4A5'0FFF
+        9999999999999,     // 10^13 - 1 = 0x0000'0918'4E72'9FFF
+        99999999999999,    // 10^14 - 1 = 0x0000'5AF3'107A'3FFF
+        999999999999999,   // 10^15 - 1 = 0x0003'8D7E'A4C6'7FFF
+        9999999999999999,  // 10^16 - 1 = 0x0023'86F2'6FC0'FFFF
+        99999999999999999, // 10^17 - 1 = 0x0163'4578'5D89'FFFF
+    };
+
+    constexpr int Bits = 64;
+    const int y = ((19 * (Bits - 1) + (1 << 6)) - 19 * CountLeadingZeros64(v)) >> 6;
+    RYU_ASSERT(y >= 0);
+    RYU_ASSERT(y <= 17);
+
+    return y + (Table[y] < v);
+}
+
+#else
+
 static inline int DecimalLength(uint32_t v)
 {
     RYU_ASSERT(v >= 1);
@@ -1721,6 +1836,8 @@ static inline int DecimalLength(uint64_t v)
     if (v >= 10ull) { return 2; }
     return 1;
 }
+
+#endif
 
 static inline void PrintDecimalDigits(char* buf, uint32_t output, int output_length)
 {
