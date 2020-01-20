@@ -17,7 +17,7 @@
 #define RYU_KEEP_TRAILING_ZEROS_IN_SMALL_INT()  1
 #define RYU_SCIENTIFIC_NOTATION_ONLY()          0
 #define RYU_USE_INTRINSICS()                    1
-#define RYU_USE_INTRINSICS_FOR_DECIMAL_LENGTH() 1
+#define RYU_USE_INTRINSICS_FOR_DECIMAL_LENGTH() 0
 
 #include <cassert>
 #include <climits>
@@ -1924,40 +1924,28 @@ static inline void PrintDecimalDigits(char* buf, uint64_t output, int output_len
     }
 }
 
-// Print digits * 10^decimal_exponent in a form similar to printf("%g").
-//
-// PRE: sizeof(buffer) >= 24 iff RYU_ASSUME_LARGE_BUFFER is false
-//                     >= 33 otherwise
-// PRE: digits >= 1
-// PRE: digits <= 99999999999999999 (i.e. DecimalLength(digits) <= 17)
-// PRE: abs(decimal_exponent) <= 999
 template <typename UnsignedInt>
 static inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent, bool force_trailing_dot_zero = false)
 {
+//  constexpr bool is_single = sizeof(UnsignedInt) == sizeof(uint32_t);
+
     RYU_ASSERT(digits >= 1);
     RYU_ASSERT(digits <= 99999999999999999ull);
     RYU_ASSERT(decimal_exponent >= -999);
     RYU_ASSERT(decimal_exponent <=  999);
 
-    // NB:
-    // These are the values used by JavaScript's ToString applied to Number type.
-    // Printf uses the values -4 and max_digits10 resp. (sort of).
-    static constexpr int MinExp = -6;
-    static constexpr int MaxExp = 21;
-
-    static_assert(MinExp >= -7, "invalid parameter");
-    static_assert(MaxExp <= 24, "invalid parameter");
-    static_assert(MinExp < MaxExp, "invalid parameter");
-
-#if RYU_KEEP_TRAILING_ZEROS_IN_SMALL_INT()
-    static_assert(MaxExp >= 16, "invalid parameter");
-#endif
-
     const int num_digits = DecimalLength(digits);
     const int decimal_point = num_digits + decimal_exponent;
 
 #if !RYU_SCIENTIFIC_NOTATION_ONLY()
-    const bool use_fixed = MinExp < decimal_point && decimal_point <= MaxExp;
+    // single-precision: MaxDigits10 = 9, MaxIntLength = 8. And MaxAdditionalZeros = 4?
+    constexpr int MaxDigits10 = 17;
+    constexpr int MaxIntLength = 16; // 2^53 = 9'007'199'254'740'992
+    constexpr int MaxAdditionalZeros = 5;
+    constexpr int MaxFixedDecimalPoint = MaxIntLength + MaxAdditionalZeros; //   digits[000]
+    constexpr int MinFixedDecimalPoint = -MaxAdditionalZeros;               // 0.[000]digits
+
+    const bool use_fixed = MinFixedDecimalPoint <= decimal_point && decimal_point <= MaxFixedDecimalPoint;
 #endif
 
     // Prepare the buffer.
@@ -1967,15 +1955,13 @@ static inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_e
 #if !RYU_SCIENTIFIC_NOTATION_ONLY()
     if (use_fixed)
     {
-        // -7 < decimal_point <= 24
-
         if (decimal_point <= 0)
         {
             // 0.[000]digits
 
-            // -6 <= decimal_point <= 0
-            //  ==> 2 <= 2 + -decimal_point <= 8
-            // Pre-filling buffer with 8 '0's is therefore sufficient.
+            // -5 <= decimal_point <= 0
+            //  ==> 2 <= 2 + -decimal_point <= 7
+            // Pre-filling buffer with 7 '0's is therefore sufficient.
             std::memset(buffer, '0', 8);
 
             decimal_digits_position = buffer + (2 + (-decimal_point));
@@ -2004,9 +1990,9 @@ static inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_e
             // and avoid the memset...?!
             //
 
-            // 1 <= num_digits <= 17 <= decimal_point <= 24.
-            // Pre-filling buffer with 24 '0's is therefore sufficient.
-            std::memset(buffer, '0', 24);
+            // 1 <= num_digits <= 17 <= decimal_point <= 21.
+            // Pre-filling buffer with 21 '0's is therefore sufficient.
+            std::memset(buffer, '0', 24); // sp: 12
 
             decimal_digits_position = buffer;
         }
@@ -2044,32 +2030,10 @@ static inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_e
 
 #if RYU_ASSUME_LARGE_BUFFER()
             // We need to move at most 16 bytes one place to the right.
-            std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, 16);
+            std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, 16); // sp: 8
 #else
             // We need to move at most 16 bytes one place to the left.
-#if 0
             std::memmove(buffer, buffer + 1, static_cast<unsigned>(decimal_point));
-#else
-            char* const src = buffer + 1;
-            char* const dst = buffer;
-
-            if (MaxExp >= 16 && (decimal_point & 16) != 0)
-            {
-                RYU_ASSERT(decimal_point == 16);
-
-                std::memmove(dst, src, 16);
-            }
-            else
-            {
-                RYU_ASSERT(decimal_point < 16);
-
-                intptr_t index = 0;
-                if (decimal_point & 1) { std::memmove(dst + index, src + index, 1); index += 1; }
-                if (decimal_point & 2) { std::memmove(dst + index, src + index, 2); index += 2; }
-                if (decimal_point & 4) { std::memmove(dst + index, src + index, 4); index += 4; }
-                if (decimal_point & 8) { std::memmove(dst + index, src + index, 8); index += 8; }
-            }
-#endif
 #endif
 
             buffer[decimal_point] = '.';
@@ -2128,7 +2092,7 @@ static inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_e
         {
             *buffer++ = static_cast<char>('0' + k);
         }
-        else if (k < 100)
+        else if (/* sp || */ k < 100)
         {
             buffer = Utoa_2Digits(buffer, k);
         }
@@ -2144,10 +2108,6 @@ static inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_e
     return buffer;
 }
 
-// Generates a decimal representation of the floating-point number `value` in 'buffer'.
-// Note: The result is _not_ null-terminated.
-//
-// PRE: The buffer must be large enough (32 bytes is sufficient).
 template <typename Float>
 static inline char* ToChars(char* buffer, Float value, bool force_trailing_dot_zero = false)
 {
@@ -2190,11 +2150,19 @@ static inline char* ToChars(char* buffer, Float value, bool force_trailing_dot_z
 //
 //==================================================================================================
 
+// Generates a decimal representation of the floating-point number `value` in 'buffer'.
+// Note: The result is _not_ null-terminated.
+//
+// PRE: The buffer must be large enough (33 bytes is sufficient).
 char* RyuFtoa(char* buffer, float value)
 {
     return ToChars(buffer, value);
 }
 
+// Generates a decimal representation of the floating-point number `value` in 'buffer'.
+// Note: The result is _not_ null-terminated.
+//
+// PRE: The buffer must be large enough (33 bytes is sufficient).
 char* RyuDtoa(char* buffer, double value)
 {
     return ToChars(buffer, value);
