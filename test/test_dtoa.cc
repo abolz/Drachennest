@@ -298,8 +298,8 @@ static void CheckSingle(Converter d2s, float value, const std::string& expected)
         return;
     }
 
-    char buf[32];
-    char* end = d2s(buf, 32, value);
+    char buf[BufSize];
+    char* end = d2s(buf, BufSize, value);
 
     const auto num_actual = ScanNumber(buf, end);
     const auto num_expected = ScanNumber(expected);
@@ -399,8 +399,8 @@ static void CheckDouble(Converter d2s, double value, const std::string& expected
         return;
     }
 
-    char buf[32];
-    char* end = d2s(buf, 32, value);
+    char buf[BufSize];
+    char* end = d2s(buf, BufSize, value);
 
     const auto num_actual = ScanNumber(buf, end);
     const auto num_expected = ScanNumber(expected);
