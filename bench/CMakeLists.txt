@@ -14,6 +14,7 @@ target_link_libraries(
     INTERFACE
         ${DN_INTERFACE}
     PRIVATE
+        drachennest
         google_benchmark
         google_double_conversion
         ryu

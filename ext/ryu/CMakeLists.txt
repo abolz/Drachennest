@@ -11,5 +11,5 @@ target_include_directories(
 target_link_libraries(
     ryu
     INTERFACE
-        ${DN_PROJECT_NAME}
+        ${DN_INTERFACE}
     )
