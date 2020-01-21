@@ -13,15 +13,13 @@
 
 #include <math.h>
 
-#include "../src/ryu.h"
-
 //#define BENCH_CHARCONV 1
 //#define BENCH_GRISU2 1
 //#define BENCH_GRISU3 1
 #define BENCH_RYU 1
 //#define BENCH_RYU_UPSTREAM 1
 
-#define BENCH_SINGLE 0
+#define BENCH_SINGLE 1
 #define BENCH_DOUBLE 1
 #define BENCH_TO_DECIMAL 0
 
@@ -48,6 +46,15 @@ struct D2S
 };
 #endif
 #if BENCH_RYU
+#if 1
+#include "ryu_to_chars.h"
+struct D2S
+{
+    static char const* Name() { return "Ryu"; }
+    char* operator()(char* buf, int /*buflen*/, float f) const { return RyuFtoa(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, double f) const { return RyuDtoa(buf, f); }
+};
+#else
 #include "ryu.h"
 struct D2S
 {
@@ -55,6 +62,7 @@ struct D2S
     char* operator()(char* buf, int /*buflen*/, float f) const { return ryu::ToChars(buf, f); }
     char* operator()(char* buf, int /*buflen*/, double f) const { return ryu::ToChars(buf, f); }
 };
+#endif
 #endif
 #if BENCH_RYU_UPSTREAM
 #include "ryu/ryu/ryu.h"
@@ -424,6 +432,7 @@ int main(int argc, char** argv)
     //    Register_Uniform(std::pow(10.0, e), std::pow(10.0, e+1));
     //}
 
+#if 1
 #if 0
     for (int d = 1; d <= 15; ++d) {
 //  for (int d = 15; d >= 1; --d) {
@@ -440,6 +449,7 @@ int main(int argc, char** argv)
     }
 #else
     for (int d = 1; d <= 18; ++d) {
+		if (d != 1 && d != 18) continue;
     //for (int d = 18; d >= 1; --d) {
         //for (int e = 22; e >= -22; e -= 1) {
         for (int e = -22; e <= 22; e += 1) {
@@ -448,12 +458,14 @@ int main(int argc, char** argv)
     }
 #endif
 #endif
+#endif
 
 #if BENCH_SINGLE
     Register_RandomBits_single();
     Register_Uniform(0.0f, 1.0f);
     Register_Uniform(0.0f, 1.0e+38f);
 
+#if 0
 #if 0
     for (int d = 1; d <= 7; ++d) {
         Register_Digits_single(StrPrintf("1.%d-digits", d - 1), d, -(d - 1));
@@ -473,6 +485,7 @@ int main(int argc, char** argv)
             Register_Digits_single(StrPrintf("%2d,%3d", d, e), d, e);
         }
     }
+#endif
 #endif
 #endif
 #endif

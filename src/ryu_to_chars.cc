@@ -1927,7 +1927,11 @@ static inline void PrintDecimalDigits(char* buf, uint64_t output, int output_len
 template <typename UnsignedInt>
 static inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_exponent, bool force_trailing_dot_zero = false)
 {
-//  constexpr bool is_single = sizeof(UnsignedInt) == sizeof(uint32_t);
+    //
+    // TODO:
+    // Specialized version for single-precision???
+    //
+    // constexpr bool is_single = sizeof(UnsignedInt) == sizeof(uint32_t);
 
     RYU_ASSERT(digits >= 1);
     RYU_ASSERT(digits <= 99999999999999999ull);
@@ -1939,7 +1943,6 @@ static inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_e
 
 #if !RYU_SCIENTIFIC_NOTATION_ONLY()
     // single-precision: MaxDigits10 = 9, MaxIntLength = 8. And MaxAdditionalZeros = 4?
-    constexpr int MaxDigits10 = 17;
     constexpr int MaxIntLength = 16; // 2^53 = 9'007'199'254'740'992
     constexpr int MaxAdditionalZeros = 5;
     constexpr int MaxFixedDecimalPoint = MaxIntLength + MaxAdditionalZeros; //   digits[000]
@@ -1971,7 +1974,7 @@ static inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_e
             // dig.its
 
             // 0 < decimal_point <= Min(17 - 1, MaxExp)
-            // We need to move at most 16 bytes to the left (or right).
+            // We need to move at most 16 bytes to the right or left.
 #if RYU_ASSUME_LARGE_BUFFER()
             // Move digits to the right.
             decimal_digits_position = buffer;
@@ -2150,19 +2153,11 @@ static inline char* ToChars(char* buffer, Float value, bool force_trailing_dot_z
 //
 //==================================================================================================
 
-// Generates a decimal representation of the floating-point number `value` in 'buffer'.
-// Note: The result is _not_ null-terminated.
-//
-// PRE: The buffer must be large enough (33 bytes is sufficient).
 char* RyuFtoa(char* buffer, float value)
 {
     return ToChars(buffer, value);
 }
 
-// Generates a decimal representation of the floating-point number `value` in 'buffer'.
-// Note: The result is _not_ null-terminated.
-//
-// PRE: The buffer must be large enough (33 bytes is sufficient).
 char* RyuDtoa(char* buffer, double value)
 {
     return ToChars(buffer, value);

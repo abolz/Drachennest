@@ -9,6 +9,7 @@
 #include <limits>
 #include <string>
 
+#include "ryu_to_chars.h"
 #include "scan_number.h"
 
 #define TEST_OPTIMAL 0
@@ -95,8 +96,19 @@ struct D2S_Ryu
 {
     bool Optimal() const { return true; }
     const char* Name() const { return "ryu"; }
+#if 1
+    char* operator()(char* buf, int buflen, float f) {
+        assert(buflen >= RyuFtoaMinBufferLength);
+        return RyuFtoa(buf, f);
+    }
+    char* operator()(char* buf, int buflen, double f) {
+        assert(buflen >= RyuDtoaMinBufferLength);
+        return RyuDtoa(buf, f);
+    }
+#else
     char* operator()(char* buf, int buflen, float f) { return drachennest::ftoa_ryu(buf, f); }
     char* operator()(char* buf, int buflen, double f) { return drachennest::dtoa_ryu(buf, f); }
+#endif
 };
 
 //==================================================================================================
@@ -238,6 +250,8 @@ static void CheckSingle(Converter d2s, float f0)
     char* end1 = ftoa_double_conversion(buf1, BufSize, f0);
     *end1 = '\0';
 
+    CAPTURE(buf1);
+
     if (d2s.Optimal())
     {
         const auto num0 = ScanNumber(buf0, end0);
@@ -336,6 +350,8 @@ static void CheckDouble(Converter d2s, double f0)
     char buf1[BufSize];
     char* end1 = dtoa_double_conversion(buf1, BufSize, f0);
     *end1 = '\0';
+
+    CAPTURE(buf1);
 
     if (d2s.Optimal())
     {
