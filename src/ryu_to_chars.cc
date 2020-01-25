@@ -1245,93 +1245,93 @@ static inline ToDecimalResultDouble ToDecimal(double value)
 //==================================================================================================
 // Constant data: 624 (+ 88) bytes
 
-static constexpr int BitsPerPow5_Single = 64;
+static constexpr int BitsPerPow5_Single = 63;
 
 static inline uint64_t ComputePow5_Single(int k)
 {
-    // Let e = FloorLog2Pow5(k) + 1 - 64
+    // Let e = FloorLog2Pow5(k) + 1 - 63
     // For k >= 0, stores 5^k in the form: ceil( 5^k / 2^e )
     // For k <= 0, stores 5^k in the form: ceil(2^-e / 5^-k)
     static constexpr int MinDecExp = -29;
     static constexpr int MaxDecExp =  47;
     static constexpr uint64_t Pow5[MaxDecExp - MinDecExp + 1] = {
-        0xCAD2F7F5359A3B3F, // e =  -131, k =  -29
-        0xFD87B5F28300CA0E, // e =  -129, k =  -28
-        0x9E74D1B791E07E49, // e =  -126, k =  -27
-        0xC612062576589DDB, // e =  -124, k =  -26
-        0xF79687AED3EEC552, // e =  -122, k =  -25
-        0x9ABE14CD44753B53, // e =  -119, k =  -24
-        0xC16D9A0095928A28, // e =  -117, k =  -23
-        0xF1C90080BAF72CB2, // e =  -115, k =  -22
-        0x971DA05074DA7BEF, // e =  -112, k =  -21
-        0xBCE5086492111AEB, // e =  -110, k =  -20
-        0xEC1E4A7DB69561A6, // e =  -108, k =  -19
-        0x9392EE8E921D5D08, // e =  -105, k =  -18
-        0xB877AA3236A4B44A, // e =  -103, k =  -17
-        0xE69594BEC44DE15C, // e =  -101, k =  -16
-        0x901D7CF73AB0ACDA, // e =   -98, k =  -15
-        0xB424DC35095CD810, // e =   -96, k =  -14
-        0xE12E13424BB40E14, // e =   -94, k =  -13
-        0x8CBCCC096F5088CC, // e =   -91, k =  -12
-        0xAFEBFF0BCB24AAFF, // e =   -89, k =  -11
-        0xDBE6FECEBDEDD5BF, // e =   -87, k =  -10
-        0x89705F4136B4A598, // e =   -84, k =   -9
-        0xABCC77118461CEFD, // e =   -82, k =   -8
-        0xD6BF94D5E57A42BD, // e =   -80, k =   -7
-        0x8637BD05AF6C69B6, // e =   -77, k =   -6
-        0xA7C5AC471B478424, // e =   -75, k =   -5
-        0xD1B71758E219652C, // e =   -73, k =   -4
-        0x83126E978D4FDF3C, // e =   -70, k =   -3
-        0xA3D70A3D70A3D70B, // e =   -68, k =   -2
-        0xCCCCCCCCCCCCCCCD, // e =   -66, k =   -1
-        0x8000000000000000, // e =   -63, k =    0
-        0xA000000000000000, // e =   -61, k =    1
-        0xC800000000000000, // e =   -59, k =    2
-        0xFA00000000000000, // e =   -57, k =    3
-        0x9C40000000000000, // e =   -54, k =    4
-        0xC350000000000000, // e =   -52, k =    5
-        0xF424000000000000, // e =   -50, k =    6
-        0x9896800000000000, // e =   -47, k =    7
-        0xBEBC200000000000, // e =   -45, k =    8
-        0xEE6B280000000000, // e =   -43, k =    9
-        0x9502F90000000000, // e =   -40, k =   10
-        0xBA43B74000000000, // e =   -38, k =   11
-        0xE8D4A51000000000, // e =   -36, k =   12
-        0x9184E72A00000000, // e =   -33, k =   13
-        0xB5E620F480000000, // e =   -31, k =   14
-        0xE35FA931A0000000, // e =   -29, k =   15
-        0x8E1BC9BF04000000, // e =   -26, k =   16
-        0xB1A2BC2EC5000000, // e =   -24, k =   17
-        0xDE0B6B3A76400000, // e =   -22, k =   18
-        0x8AC7230489E80000, // e =   -19, k =   19
-        0xAD78EBC5AC620000, // e =   -17, k =   20
-        0xD8D726B7177A8000, // e =   -15, k =   21
-        0x878678326EAC9000, // e =   -12, k =   22
-        0xA968163F0A57B400, // e =   -10, k =   23
-        0xD3C21BCECCEDA100, // e =    -8, k =   24
-        0x84595161401484A0, // e =    -5, k =   25
-        0xA56FA5B99019A5C8, // e =    -3, k =   26
-        0xCECB8F27F4200F3A, // e =    -1, k =   27
-        0x813F3978F8940985, // e =     2, k =   28
-        0xA18F07D736B90BE6, // e =     4, k =   29
-        0xC9F2C9CD04674EDF, // e =     6, k =   30
-        0xFC6F7C4045812297, // e =     8, k =   31
-        0x9DC5ADA82B70B59E, // e =    11, k =   32
-        0xC5371912364CE306, // e =    13, k =   33
-        0xF684DF56C3E01BC7, // e =    15, k =   34
-        0x9A130B963A6C115D, // e =    18, k =   35
-        0xC097CE7BC90715B4, // e =    20, k =   36
-        0xF0BDC21ABB48DB21, // e =    22, k =   37
-        0x96769950B50D88F5, // e =    25, k =   38
-        0xBC143FA4E250EB32, // e =    27, k =   39
-        0xEB194F8E1AE525FE, // e =    29, k =   40
-        0x92EFD1B8D0CF37BF, // e =    32, k =   41
-        0xB7ABC627050305AE, // e =    34, k =   42
-        0xE596B7B0C643C71A, // e =    36, k =   43
-        0x8F7E32CE7BEA5C70, // e =    39, k =   44
-        0xB35DBF821AE4F38C, // e =    41, k =   45
-        0xE0352F62A19E306F, // e =    43, k =   46
-        0x8C213D9DA502DE46, // e =    46, k =   47
+        0x65697BFA9ACD1DA0, // e =  -130, k =  -29
+        0x7EC3DAF941806507, // e =  -128, k =  -28
+        0x4F3A68DBC8F03F25, // e =  -125, k =  -27
+        0x63090312BB2C4EEE, // e =  -123, k =  -26
+        0x7BCB43D769F762A9, // e =  -121, k =  -25
+        0x4D5F0A66A23A9DAA, // e =  -118, k =  -24
+        0x60B6CD004AC94514, // e =  -116, k =  -23
+        0x78E480405D7B9659, // e =  -114, k =  -22
+        0x4B8ED0283A6D3DF8, // e =  -111, k =  -21
+        0x5E72843249088D76, // e =  -109, k =  -20
+        0x760F253EDB4AB0D3, // e =  -107, k =  -19
+        0x49C97747490EAE84, // e =  -104, k =  -18
+        0x5C3BD5191B525A25, // e =  -102, k =  -17
+        0x734ACA5F6226F0AE, // e =  -100, k =  -16
+        0x480EBE7B9D58566D, // e =   -97, k =  -15
+        0x5A126E1A84AE6C08, // e =   -95, k =  -14
+        0x709709A125DA070A, // e =   -93, k =  -13
+        0x465E6604B7A84466, // e =   -90, k =  -12
+        0x57F5FF85E5925580, // e =   -88, k =  -11
+        0x6DF37F675EF6EAE0, // e =   -86, k =  -10
+        0x44B82FA09B5A52CC, // e =   -83, k =   -9
+        0x55E63B88C230E77F, // e =   -81, k =   -8
+        0x6B5FCA6AF2BD215F, // e =   -79, k =   -7
+        0x431BDE82D7B634DB, // e =   -76, k =   -6
+        0x53E2D6238DA3C212, // e =   -74, k =   -5
+        0x68DB8BAC710CB296, // e =   -72, k =   -4
+        0x4189374BC6A7EF9E, // e =   -69, k =   -3
+        0x51EB851EB851EB86, // e =   -67, k =   -2
+        0x6666666666666667, // e =   -65, k =   -1
+        0x4000000000000000, // e =   -62, k =    0
+        0x5000000000000000, // e =   -60, k =    1
+        0x6400000000000000, // e =   -58, k =    2
+        0x7D00000000000000, // e =   -56, k =    3
+        0x4E20000000000000, // e =   -53, k =    4
+        0x61A8000000000000, // e =   -51, k =    5
+        0x7A12000000000000, // e =   -49, k =    6
+        0x4C4B400000000000, // e =   -46, k =    7
+        0x5F5E100000000000, // e =   -44, k =    8
+        0x7735940000000000, // e =   -42, k =    9
+        0x4A817C8000000000, // e =   -39, k =   10
+        0x5D21DBA000000000, // e =   -37, k =   11
+        0x746A528800000000, // e =   -35, k =   12
+        0x48C2739500000000, // e =   -32, k =   13
+        0x5AF3107A40000000, // e =   -30, k =   14
+        0x71AFD498D0000000, // e =   -28, k =   15
+        0x470DE4DF82000000, // e =   -25, k =   16
+        0x58D15E1762800000, // e =   -23, k =   17
+        0x6F05B59D3B200000, // e =   -21, k =   18
+        0x4563918244F40000, // e =   -18, k =   19
+        0x56BC75E2D6310000, // e =   -16, k =   20
+        0x6C6B935B8BBD4000, // e =   -14, k =   21
+        0x43C33C1937564800, // e =   -11, k =   22
+        0x54B40B1F852BDA00, // e =    -9, k =   23
+        0x69E10DE76676D080, // e =    -7, k =   24
+        0x422CA8B0A00A4250, // e =    -4, k =   25
+        0x52B7D2DCC80CD2E4, // e =    -2, k =   26
+        0x6765C793FA10079D, // e =     0, k =   27
+        0x409F9CBC7C4A04C3, // e =     3, k =   28
+        0x50C783EB9B5C85F3, // e =     5, k =   29
+        0x64F964E68233A770, // e =     7, k =   30
+        0x7E37BE2022C0914C, // e =     9, k =   31
+        0x4EE2D6D415B85ACF, // e =    12, k =   32
+        0x629B8C891B267183, // e =    14, k =   33
+        0x7B426FAB61F00DE4, // e =    16, k =   34
+        0x4D0985CB1D3608AF, // e =    19, k =   35
+        0x604BE73DE4838ADA, // e =    21, k =   36
+        0x785EE10D5DA46D91, // e =    23, k =   37
+        0x4B3B4CA85A86C47B, // e =    26, k =   38
+        0x5E0A1FD271287599, // e =    28, k =   39
+        0x758CA7C70D7292FF, // e =    30, k =   40
+        0x4977E8DC68679BE0, // e =    33, k =   41
+        0x5BD5E313828182D7, // e =    35, k =   42
+        0x72CB5BD86321E38D, // e =    37, k =   43
+        0x47BF19673DF52E38, // e =    40, k =   44
+        0x59AEDFC10D7279C6, // e =    42, k =   45
+        0x701A97B150CF1838, // e =    44, k =   46
+        0x46109ECED2816F23, // e =    47, k =   47
     };
 
     RYU_ASSERT(k >= MinDecExp);
@@ -1368,16 +1368,14 @@ static inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
 
 static inline void MulPow5DivPow2_Single(uint32_t u, uint32_t v, uint32_t w, int e5, int e2, uint64_t& a, uint64_t& b, uint64_t& c)
 {
-    static constexpr int BitsPerPow5 = 64;
-
-    // j >= 57 and m has at most 24 + 2 = 26 bits.
+    // j >= 56 and m has at most 24 + 2 = 26 bits.
     // The product along with the subsequent shift therefore requires
-    // 26 + 64 - 57 = 33 bits.
+    // 26 + 63 - 56 = 33 bits.
 
-    const auto k = FloorLog2Pow5(e5) + 1 - BitsPerPow5;
+    const auto k = FloorLog2Pow5(e5) + 1 - BitsPerPow5_Single;
     const auto j = e2 - k;
-    RYU_ASSERT(j >= BitsPerPow5_Single - 7); // 57
-    RYU_ASSERT(j <= BitsPerPow5_Single - 1); // 63
+    RYU_ASSERT(j >= BitsPerPow5_Single - 7); // 56
+    RYU_ASSERT(j <= BitsPerPow5_Single - 1); // 62
 
     const auto pow5 = ComputePow5_Single(e5);
 
