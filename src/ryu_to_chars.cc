@@ -164,7 +164,7 @@ static inline uint32_t Hi32(uint64_t x)
 //
 // Double-precision implementation
 //==================================================================================================
-// Constant data = 9872 (+ 368) bytes
+// Constant data = 10'656 (+ 400) bytes
 
 static constexpr int BitsPerPow5_Double = 124;
 
@@ -178,9 +178,59 @@ static inline Uint64x2 ComputePow5_Double(int k)
     // Let e = FloorLog2Pow5(k) + 1 - 124
     // For k >= 0, stores 5^k in the form: ceil( 5^k / 2^e )
     // For k <= 0, stores 5^k in the form: ceil(2^-e / 5^-k)
-    static constexpr int MinDecExp = -290;
+    static constexpr int MinDecExp = -340;
     static constexpr int MaxDecExp =  325;
     static constexpr Uint64x2 Pow5[MaxDecExp - MinDecExp + 1] = {
+        {0x0BAAEE17FA23EBF7, 0x65D79BCF00D2DF65}, // e =  -913, k = -340
+        {0x0E95A99DF8ACE6F5, 0x3F4D82C2C107973E}, // e =  -911, k = -339
+        {0x091D8A02BB6C1059, 0x479071B9B8A4BE87}, // e =  -908, k = -338
+        {0x0B64EC836A47146F, 0x99748E2826CDEE29}, // e =  -906, k = -337
+        {0x0E3E27A444D8D98B, 0x7FD1B1B2308169B3}, // e =  -904, k = -336
+        {0x08E6D8C6AB0787F7, 0x2FE30F0F5E50E210}, // e =  -901, k = -335
+        {0x0B208EF855C969F4, 0xFBDBD2D335E51A94}, // e =  -899, k = -334
+        {0x0DE8B2B66B3BC472, 0x3AD2C788035E6139}, // e =  -897, k = -333
+        {0x08B16FB203055AC7, 0x64C3BCB5021AFCC4}, // e =  -894, k = -332
+        {0x0ADDCB9E83C6B179, 0x3DF4ABE242A1BBF4}, // e =  -892, k = -331
+        {0x0D953E8624B85DD7, 0x8D71D6DAD34A2AF1}, // e =  -890, k = -330
+        {0x087D4713D6F33AA6, 0xB8672648C40E5AD7}, // e =  -887, k = -329
+        {0x0A9C98D8CCB00950, 0x6680EFDAF511F18D}, // e =  -885, k = -328
+        {0x0D43BF0EFFDC0BA4, 0x80212BD1B2566DF0}, // e =  -883, k = -327
+        {0x084A57695FE98746, 0xD014BB630F7604B6}, // e =  -880, k = -326
+        {0x0A5CED43B7E3E918, 0x8419EA3BD35385E3}, // e =  -878, k = -325
+        {0x0CF42894A5DCE35E, 0xA52064CAC828675C}, // e =  -876, k = -324
+        {0x0818995CE7AA0E1B, 0x27343EFEBD19409A}, // e =  -873, k = -323
+        {0x0A1EBFB4219491A1, 0xF1014EBE6C5F90C0}, // e =  -871, k = -322
+        {0x0CA66FA129F9B60A, 0x6D41A26E077774F0}, // e =  -869, k = -321
+        {0x0FD00B897478238D, 0x08920B098955522C}, // e =  -867, k = -320
+        {0x09E20735E8CB1638, 0x255B46E5F5D5535C}, // e =  -864, k = -319
+        {0x0C5A890362FDDBC6, 0x2EB2189F734AA832}, // e =  -862, k = -318
+        {0x0F712B443BBD52B7, 0xBA5E9EC7501D523F}, // e =  -860, k = -317
+        {0x09A6BB0AA55653B2, 0xD47B233C92125367}, // e =  -857, k = -316
+        {0x0C1069CD4EABE89F, 0x8999EC0BB696E841}, // e =  -855, k = -315
+        {0x0F148440A256E2C7, 0x6C00670EA43CA251}, // e =  -853, k = -314
+        {0x096CD2A865764DBC, 0xA380406926A5E573}, // e =  -850, k = -313
+        {0x0BC807527ED3E12B, 0xCC605083704F5ED0}, // e =  -848, k = -312
+        {0x0EBA09271E88D976, 0xBF7864A44C633683}, // e =  -846, k = -311
+        {0x093445B8731587EA, 0x37AB3EE6AFBE0212}, // e =  -843, k = -310
+        {0x0B8157268FDAE9E4, 0xC5960EA05BAD8297}, // e =  -841, k = -309
+        {0x0E61ACF033D1A45D, 0xF6FB92487298E33C}, // e =  -839, k = -308
+        {0x08FD0C16206306BA, 0xBA5D3B6D479F8E06}, // e =  -836, k = -307
+        {0x0B3C4F1BA87BC869, 0x68F48A4899877187}, // e =  -834, k = -306
+        {0x0E0B62E2929ABA83, 0xC331ACDABFE94DE9}, // e =  -832, k = -305
+        {0x08C71DCD9BA0B492, 0x59FF0C08B7F1D0B2}, // e =  -829, k = -304
+        {0x0AF8E5410288E1B6, 0xF07ECF0AE5EE44DE}, // e =  -827, k = -303
+        {0x0DB71E91432B1A24, 0xAC9E82CD9F69D616}, // e =  -825, k = -302
+        {0x0892731AC9FAF056, 0xEBE311C083A225CE}, // e =  -822, k = -301
+        {0x0AB70FE17C79AC6C, 0xA6DBD630A48AAF41}, // e =  -820, k = -300
+        {0x0D64D3D9DB981787, 0xD092CBBCCDAD5B11}, // e =  -818, k = -299
+        {0x085F0468293F0EB4, 0xE25BBF56008C58EB}, // e =  -815, k = -298
+        {0x0A76C582338ED262, 0x1AF2AF2B80AF6F25}, // e =  -813, k = -297
+        {0x0D1476E2C07286FA, 0xA1AF5AF660DB4AEF}, // e =  -811, k = -296
+        {0x082CCA4DB847945C, 0xA50D98D9FC890ED5}, // e =  -808, k = -295
+        {0x0A37FCE126597973, 0xCE50FF107BAB528B}, // e =  -806, k = -294
+        {0x0CC5FC196FEFD7D0, 0xC1E53ED49A96272D}, // e =  -804, k = -293
+        {0x0FF77B1FCBEBCDC4, 0xF25E8E89C13BB0F8}, // e =  -802, k = -292
+        {0x09FAACF3DF73609B, 0x177B191618C54E9B}, // e =  -799, k = -291
         {0x0C795830D75038C1, 0xDD59DF5B9EF6A242}, // e =  -797, k = -290
         {0x0F97AE3D0D2446F2, 0x54B0573286B44AD2}, // e =  -795, k = -289
         {0x09BECCE62836AC57, 0x74EE367F9430AEC4}, // e =  -792, k = -288
@@ -917,14 +967,14 @@ static inline void MulPow5DivPow2_Double(uint64_t u, uint64_t v, uint64_t w, int
 static inline bool MultipleOfPow5(uint64_t value, int e5)
 {
     RYU_ASSERT(e5 >= 0);
-    RYU_ASSERT(e5 <= 22);
+    RYU_ASSERT(e5 <= 24);
 
     struct MulCmp {
         uint64_t mul;
         uint64_t cmp;
     };
 
-    static constexpr MulCmp Mod5[] = { // 368 bytes
+    static constexpr MulCmp Mod5[] = {
         {0x0000000000000001u, 0xFFFFFFFFFFFFFFFFu}, // 5^0
         {0xCCCCCCCCCCCCCCCDu, 0x3333333333333333u}, // 5^1
         {0x8F5C28F5C28F5C29u, 0x0A3D70A3D70A3D70u}, // 5^2
@@ -948,6 +998,8 @@ static inline bool MultipleOfPow5(uint64_t value, int e5)
         {0xD489E3A9ADDEC2D1u, 0x000000000002F394u}, // 5^20
         {0x90E860BB892C8D5Du, 0x000000000000971Du}, // 5^21
         {0x502E79BF1B6F4F79u, 0x0000000000001E39u}, // 5^22
+        {0xDCD618596BE30FE5u, 0x000000000000060Bu}, // 5^23
+        {0x2C2AD1AB7BFA3661u, 0x0000000000000135u}, // 5^24
     };
 
     return value * Mod5[e5].mul <= Mod5[e5].cmp;
@@ -1243,7 +1295,7 @@ static inline ToDecimalResultDouble ToDecimal(double value)
 //
 // Single-precision implementation
 //==================================================================================================
-// Constant data: 624 (+ 88) bytes
+// Constant data: 808 (+ 104) bytes
 
 static constexpr int BitsPerPow5_Single = 63;
 
@@ -1252,9 +1304,33 @@ static inline uint64_t ComputePow5_Single(int k)
     // Let e = FloorLog2Pow5(k) + 1 - 63
     // For k >= 0, stores 5^k in the form: ceil( 5^k / 2^e )
     // For k <= 0, stores 5^k in the form: ceil(2^-e / 5^-k)
-    static constexpr int MinDecExp = -29;
+    static constexpr int MinDecExp = -53;
     static constexpr int MaxDecExp =  47;
     static constexpr uint64_t Pow5[MaxDecExp - MinDecExp + 1] = {
+        0x7A998238A6C932F0, // e =  -186, k =  -53
+        0x4C9FF163683DBFD6, // e =  -183, k =  -52
+        0x5FC7EDBC424D2FCC, // e =  -181, k =  -51
+        0x77B9E92B52E07BBF, // e =  -179, k =  -50
+        0x4AD431BB13CC4D57, // e =  -176, k =  -49
+        0x5D893E29D8BF60AD, // e =  -174, k =  -48
+        0x74EB8DB44EEF38D8, // e =  -172, k =  -47
+        0x49133890B1558387, // e =  -169, k =  -46
+        0x5B5806B4DDAAE469, // e =  -167, k =  -45
+        0x722E086215159D83, // e =  -165, k =  -44
+        0x475CC53D4D2D8272, // e =  -162, k =  -43
+        0x5933F68CA078E30F, // e =  -160, k =  -42
+        0x6F80F42FC8971BD2, // e =  -158, k =  -41
+        0x45B0989DDD5E7164, // e =  -155, k =  -40
+        0x571CBEC554B60DBC, // e =  -153, k =  -39
+        0x6CE3EE76A9E3912B, // e =  -151, k =  -38
+        0x440E750A2A2E3ABB, // e =  -148, k =  -37
+        0x5512124CB4B9C96A, // e =  -146, k =  -36
+        0x6A5696DFE1E83BC4, // e =  -144, k =  -35
+        0x42761E4BED31255B, // e =  -141, k =  -34
+        0x5313A5DEE87D6EB1, // e =  -139, k =  -33
+        0x67D88F56A29CCA5E, // e =  -137, k =  -32
+        0x40E7599625A1FE7B, // e =  -134, k =  -31
+        0x51212FFBAF0A7E19, // e =  -132, k =  -30
         0x65697BFA9ACD1DA0, // e =  -130, k =  -29
         0x7EC3DAF941806507, // e =  -128, k =  -28
         0x4F3A68DBC8F03F25, // e =  -125, k =  -27
@@ -1387,14 +1463,14 @@ static inline void MulPow5DivPow2_Single(uint32_t u, uint32_t v, uint32_t w, int
 static inline bool MultipleOfPow5(uint32_t value, int e5)
 {
     RYU_ASSERT(e5 >= 0);
-    RYU_ASSERT(e5 <= 10);
+    RYU_ASSERT(e5 <= 12);
 
     struct MulCmp {
         uint32_t mul;
         uint32_t cmp;
     };
 
-    static constexpr MulCmp Mod5[] = { // 88 bytes
+    static constexpr MulCmp Mod5[] = {
         {0x00000001u, 0xFFFFFFFFu}, // 5^0
         {0xCCCCCCCDu, 0x33333333u}, // 5^1
         {0xC28F5C29u, 0x0A3D70A3u}, // 5^2
@@ -1406,6 +1482,8 @@ static inline bool MultipleOfPow5(uint32_t value, int e5)
         {0x22E90E21u, 0x00002AF3u}, // 5^8
         {0x3A2E9C6Du, 0x00000897u}, // 5^9
         {0x3ED61F49u, 0x000001B7u}, // 5^10
+        {0x0C913975u, 0x00000057u}, // 5^11
+        {0xCF503EB1u, 0x00000011u}, // 5^12
     };
 
     return value * Mod5[e5].mul <= Mod5[e5].cmp;
