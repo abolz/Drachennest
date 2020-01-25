@@ -15,8 +15,10 @@
 
 #pragma once
 
+#include <cstdint>
+
 //--------------------------------------------------------------------------------------------------
-// RyuFtoa and RyuDtoa compute a decimal representation of the floating-point number 'value'
+// RyuDtoa and RyuFtoa compute a decimal representation of the floating-point number 'value'
 // in a format similar to printf %g.
 //
 // The result is optimal, i.e.
@@ -29,11 +31,23 @@
 // Note: +/-Infinity is formatted as "Infinity" and "-Infinity", resp.
 //
 // PRE: The buffer must be large enough, i.e.,
-//      >= RyuFtoaMinBufferLength or RyuDtoaMinBufferLength, resp.
+//      >= RyuDtoaMinBufferLength or RyuFtoaMinBufferLength, resp.
 //--------------------------------------------------------------------------------------------------
 
-static constexpr int RyuFtoaMinBufferLength = 64;
 static constexpr int RyuDtoaMinBufferLength = 64;
+static constexpr int RyuFtoaMinBufferLength = 64;
 
-char* RyuFtoa(char* buffer, float value);
 char* RyuDtoa(char* buffer, double value);
+char* RyuFtoa(char* buffer, float value);
+
+//--------------------------------------------------------------------------------------------------
+// RyuToBinary64 and RyuToBinary32 compute the closest binary representation of the decimal
+// floating-point number m10 * 10^e10.
+//
+// PRE: m10 != 0
+// PRE: m10len = DigitLength(m10) <= 17 and 9, resp.
+// PRE: m10len + e10 must not overflow
+//--------------------------------------------------------------------------------------------------
+
+double RyuToBinary64(uint64_t m10, int m10len, int e10);
+float  RyuToBinary32(uint32_t m10, int m10len, int e10);

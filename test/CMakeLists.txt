@@ -23,3 +23,25 @@ target_link_libraries(
         drachennest
         google_double_conversion
     )
+
+set(test_strtod_sources
+    "catch.hpp"
+    "catch_main.cc"
+    "test_strtod.cc"
+    )
+
+add_executable(test_strtod ${test_strtod_sources})
+
+target_include_directories(
+    test_strtod
+    PUBLIC
+        "${CMAKE_SOURCE_DIR}/src/"
+    )
+
+target_link_libraries(
+    test_strtod
+    INTERFACE
+        ${DN_INTERFACE}
+    PRIVATE
+        drachennest
+    )

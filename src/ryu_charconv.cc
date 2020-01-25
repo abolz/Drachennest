@@ -116,6 +116,16 @@ struct IEEE
 //
 //==================================================================================================
 
+//static inline int Min(int x, int y)
+//{
+//    return y < x ? y : x;
+//}
+
+static inline int Max(int x, int y)
+{
+    return y < x ? x : y;
+}
+
 // Returns floor(x / 2^n).
 static inline int FloorDivPow2(int x, int n)
 {
@@ -2087,4 +2097,167 @@ char* RyuDtoa(char* buffer, double value)
 char* RyuFtoa(char* buffer, float value)
 {
     return ToChars(buffer, value);
+}
+
+//==================================================================================================
+// ToBinary64
+//==================================================================================================
+
+// Returns the number of leading 0-bits in x, starting at the most significant bit position.
+// If x is 0, the result is undefined.
+static inline int CountLeadingZeros64(uint64_t x)
+{
+    RYU_ASSERT(x != 0);
+
+#if RYU_USE_INTRINSICS() && defined(__GNUC__)
+    return __builtin_clzll(x);
+#elif RYU_USE_INTRINSICS() && (defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64)))
+    return static_cast<int>(_CountLeadingZeros64(x));
+#elif RYU_USE_INTRINSICS() && (defined(_MSC_VER) && defined(_M_X64))
+    return static_cast<int>(__lzcnt64(x));
+#elif RYU_USE_INTRINSICS() && (defined(_MSC_VER) && defined(_M_IX86))
+    int lz = static_cast<int>( __lzcnt(static_cast<uint32_t>(x >> 32)) );
+    if (lz == 32) {
+        lz += static_cast<int>( __lzcnt(static_cast<uint32_t>(x)) );
+    }
+    return lz;
+#else
+    int lz = 0;
+    while ((x >> 63) == 0) {
+        x <<= 1;
+        ++lz;
+    }
+    return lz;
+#endif
+}
+
+static inline int FloorLog2(uint64_t x)
+{
+    RYU_ASSERT(x != 0);
+    return 63 - CountLeadingZeros64(x);
+}
+
+static inline int ExtractBit(uint64_t x, int n)
+{
+    RYU_ASSERT(n >= 0);
+    RYU_ASSERT(n <= 63);
+    return (x >> n) & 1;
+}
+
+static inline uint64_t MulPow5DivPow2_Double(uint64_t u, int e5, int e2)
+{
+    static constexpr int BitsPerPow5 = 125;
+
+    const auto k = FloorLog2Pow5(e5) + 1 - BitsPerPow5;
+    const auto j = e2 - k;
+    RYU_ASSERT(j >= 65);
+    RYU_ASSERT(j <= 127);
+
+    const auto pow5 = ComputePow5_Double(e5);
+    return MulShift(u, &pow5, j);
+}
+
+double RyuToBinary64(uint64_t m10, int m10_digits, int e10)
+{
+    using Fp = IEEE<double>;
+    static constexpr int MantissaBits = Fp::SignificandSize - 1;
+    static constexpr int ExponentBias = Fp::ExponentBias - (Fp::SignificandSize - 1);
+
+    RYU_ASSERT(m10 >= 0);
+    RYU_ASSERT(m10_digits == DecimalLength(m10));
+    RYU_ASSERT(m10_digits <= 17);
+
+    if (m10 == 0)
+        return 0;
+
+    if (m10_digits + e10 <= -324) // underflow
+        return 0;
+
+    if (m10_digits + e10 >= 310) // overflow
+        return std::numeric_limits<double>::infinity();
+
+    // Convert to binary float m2 * 2^e2, while retaining information about whether the conversion
+    // was exact.
+    const auto e2 = FloorLog2(m10) + e10 + FloorLog2Pow5(e10) - (MantissaBits + 1);
+    const auto m2 = MulPow5DivPow2_Double(m10, e10, e2 - e10);
+
+    bool is_exact;
+    if (e10 >= 0)
+    {
+        // The length of m10 * 10^e10 in bits is:
+        //  log2(m10 * 10^e10) = log2(m10) + e10 * log2(10) = log2(m10) + e10 + e10 * log2(5)
+        //
+        // We want to compute the MantissaBits + 1 top-most bits (+1 for the implicit leading 1 in
+        // IEEE format). We therefore choose a binary output exponent of
+        //  log2(m10 * 10^e10) - (MantissaBits + 1)
+        //
+        // We use floor(log2(5^e10)) so that we get at least this many bits; better to have an
+        // additional bit than
+        // to not have enough bits.
+
+//      e2 = FloorLog2(m10) + e10 + FloorLog2Pow5(e10) - (MantissaBits + 1);
+//      m2 = MulPow5DivPow2_Double(m10, e10, e2 - e10);
+
+        // We also compute if the result is exact, i.e.,
+        //  [m10 * 10^e10 / 2^e2] == m10 * 10^e10 / 2^e2
+        // This can only be the case if 2^e2 divides m10 * 10^e10, which in turn requires that the
+        // largest power of 2 that divides m10 + e10 is greater than e2. If e2 is less than e10,
+        // then the result must be exact. Otherwise we use the existing MultipleOfPow2() function.
+
+        // 57 = floor(log_2(10^17))
+        is_exact = (e2 < e10) || (e2 - e10 < 57 && MultipleOfPow2(m10, e2 - e10));
+    }
+    else
+    {
+//      e2 = FloorLog2(m10) + e10 + FloorLog2Pow5(e10) - (MANTISSA_BITS + 1);
+//      m2 = MulPow5DivPow2_Double(m10, e10, e2 - e10);
+
+        // 57 = ceil(log_2(10^17))
+        // 24 = floor(log_5(2^57))
+        is_exact = -e10 <= 24 && MultipleOfPow5(m10, -e10);
+    }
+
+    // Compute the final IEEE exponent.
+    int ieee_e2 = Max(0, e2 + ExponentBias + FloorLog2(m2));
+    if (ieee_e2 >= 2 * std::numeric_limits<double>::max_exponent - 1)
+    {
+        // Overflow:
+        // Final IEEE exponent is larger than the maximum representable.
+        return std::numeric_limits<double>::infinity();
+    }
+
+    // We need to figure out how much we need to shift m2.
+    // The tricky part is that we need to take the final IEEE exponent into account, so we need to
+    // reverse the bias and also special-case the value 0.
+    const auto shift = (ieee_e2 == 0 ? 1 : ieee_e2) - e2 - ExponentBias - MantissaBits;
+    RYU_ASSERT(shift > 0);
+
+    // We need to round up if the exact value is more than 0.5 above the value we computed. That's
+    // equivalent to checking if the last removed bit was 1 and either the value was not just
+    // trailing zeros or the result would otherwise be odd.
+    const auto trailing_zeros = is_exact && MultipleOfPow2(m2, shift - 1);
+    const auto last_removed_bit = ExtractBit(m2, shift - 1);
+    const auto round_up = last_removed_bit != 0 && (!trailing_zeros || ExtractBit(m2, shift) != 0);
+
+    const auto significand = (m2 >> shift) + round_up;
+    RYU_ASSERT(significand <= 2*Fp::HiddenBit);
+
+    if (significand == 2*Fp::HiddenBit)
+    {
+        // Due to how the IEEE represents +/-Infinity, we don't need to check for overflow here.
+        ++ieee_e2;
+        RYU_ASSERT(ieee_e2 <= 2 * std::numeric_limits<double>::max_exponent - 1);
+    }
+
+    const auto ieee_m2 = significand & ((uint64_t{1} << MantissaBits) - 1);
+    return ReinterpretBits<double>(static_cast<uint64_t>(ieee_e2) << MantissaBits | ieee_m2);
+}
+
+//==================================================================================================
+// ToBinary32
+//==================================================================================================
+
+float RyuToBinary32(uint32_t m10, int m10_digits, int e10)
+{
+    return 0;
 }
