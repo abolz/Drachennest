@@ -13,7 +13,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#define RYU_ASSUME_LARGE_BUFFER()               1
 #define RYU_KEEP_TRAILING_ZEROS_IN_SMALL_INT()  1
 #define RYU_SCIENTIFIC_NOTATION_ONLY()          0
 #define RYU_USE_INTRINSICS()                    1
@@ -809,6 +808,9 @@ static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 {
     __extension__ using uint128_t = unsigned __int128;
 
+    RYU_ASSERT(j >= 65);
+    RYU_ASSERT(j <= 127);
+
     const uint128_t b0 = uint128_t{m} * mul->lo;
     const uint128_t b2 = uint128_t{m} * mul->hi;
 
@@ -824,6 +826,9 @@ static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 
 static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 {
+    RYU_ASSERT(j >= 65);
+    RYU_ASSERT(j <= 127);
+
     uint64_t b0_hi;
     uint64_t b0_lo = _umul128(m, mul->lo, &b0_hi);
     uint64_t b2_hi;
@@ -865,7 +870,7 @@ static inline uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int n)
     // shift value is always < 64.
     // Check this here in case a future change requires larger shift values. In
     // this case this function needs to be adjusted.
-    RYU_ASSERT(n >= 57);
+    RYU_ASSERT(n >= 1);
     RYU_ASSERT(n <= 63);
 
     const int lshift = -n & 63;
@@ -1334,6 +1339,9 @@ static inline uint64_t ComputePow5_Single(int k)
 
 static inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
 {
+    RYU_ASSERT(j >= 0);
+    RYU_ASSERT(j <= 63);
+
 #if RYU_USE_INTRINSICS() && defined(__SIZEOF_INT128__)
     __extension__ using uint128_t = unsigned __int128;
     const uint64_t shifted_sum = static_cast<uint64_t>((uint128_t{mul} * m) >> (j & 63));
@@ -1827,7 +1835,11 @@ static inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_e
 #if !RYU_SCIENTIFIC_NOTATION_ONLY()
     // single-precision: MaxDigits10 = 9, MaxIntLength = 8. And MaxAdditionalZeros = 4?
     constexpr int MaxIntLength = 16; // 2^53 = 9'007'199'254'740'992
+#if 1
+    constexpr int MaxAdditionalZeros = 1;
+#else
     constexpr int MaxAdditionalZeros = 5;
+#endif
     constexpr int MaxFixedDecimalPoint = MaxIntLength + MaxAdditionalZeros; //   digits[000]
     constexpr int MinFixedDecimalPoint = -MaxAdditionalZeros;               // 0.[000]digits
 
@@ -1837,62 +1849,44 @@ static inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_e
     // Prepare the buffer.
     // Avoid calling memset/memcpy with variable arguments below...
 
-    char* decimal_digits_position;
+    int decimal_digits_position;
 #if !RYU_SCIENTIFIC_NOTATION_ONLY()
     if (use_fixed)
     {
         if (decimal_point <= 0)
         {
             // 0.[000]digits
-
             // -5 <= decimal_point <= 0
             //  ==> 2 <= 2 + -decimal_point <= 7
-            // Pre-filling buffer with 7 '0's is therefore sufficient.
+            // Pre-filling the buffer with 7 '0's is therefore sufficient.
             std::memset(buffer, '0', 8);
-
-            decimal_digits_position = buffer + (2 + (-decimal_point));
+            decimal_digits_position = 2 + (-decimal_point);
         }
-        else if (num_digits > decimal_point)
+        else if (decimal_point < num_digits)
         {
             // dig.its
-
             // 0 < decimal_point <= Min(17 - 1, MaxExp)
-            // We need to move at most 16 bytes to the right or left.
-#if RYU_ASSUME_LARGE_BUFFER()
-            // Move digits to the right.
-            decimal_digits_position = buffer;
-#else
-            // Move digits to the left.
-            decimal_digits_position = buffer + 1;
-#endif
+            // We need to move at most 16 bytes to the right.
+            decimal_digits_position = 0;
         }
         else
         {
             // digits[000]
-
-            //
-            // TODO:
-            // There is some room to make use of RYU_KEEP_TRAILING_ZEROS_IN_SMALL_INT here
-            // and avoid the memset...?!
-            //
-
             // 1 <= num_digits <= 17 <= decimal_point <= 21.
             // Pre-filling buffer with 21 '0's is therefore sufficient.
             std::memset(buffer, '0', 24); // sp: 12
-
-            decimal_digits_position = buffer;
+            decimal_digits_position = 0;
         }
     }
     else
 #endif
     {
-        // dE+123 (or d.0E+123) or d.igitsE+123
-
+        // dE+123 or d.igitsE+123
         // We only need to copy the first digit one position to the left.
-        decimal_digits_position = buffer + 1;
+        decimal_digits_position = 1;
     }
 
-    PrintDecimalDigits(decimal_digits_position, digits, num_digits);
+    PrintDecimalDigits(buffer + decimal_digits_position, digits, num_digits);
 
 #if !RYU_SCIENTIFIC_NOTATION_ONLY()
     if (use_fixed)
@@ -1900,38 +1894,20 @@ static inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_e
         if (decimal_point <= 0)
         {
             // 0.[000]digits
-            // RYU_ASSERT(buffer_capacity >= 2 + (-decimal_point) + length);
-
-            // Decimal digits are already at the correct position.
-            // Prepend some zeros.
-//          std::memset(buffer, '0', static_cast<unsigned>(2 + (-decimal_point)));
-
             buffer[1] = '.';
-            buffer += (2 + (-decimal_point) + num_digits);
+            buffer += 2 + (-decimal_point) + num_digits;
         }
-        else if (num_digits > decimal_point)
+        else if (decimal_point < num_digits)
         {
             // dig.its
-            // RYU_ASSERT(buffer_capacity >= length + 1);
-
-#if RYU_ASSUME_LARGE_BUFFER()
             // We need to move at most 16 bytes one place to the right.
             std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, 16); // sp: 8
-#else
-            // We need to move at most 16 bytes one place to the left.
-            std::memmove(buffer, buffer + 1, static_cast<unsigned>(decimal_point));
-#endif
-
             buffer[decimal_point] = '.';
             buffer += num_digits + 1;
         }
         else // 0 < num_digits <= decimal_point
         {
             // digits[000]
-            // RYU_ASSERT(buffer_capacity >= decimal_point + (force_trailing_dot_zero ? 2 : 0));
-
-//          std::memset(buffer + num_digits, '0', static_cast<unsigned>(decimal_point - num_digits));
-
             buffer += decimal_point;
             if (force_trailing_dot_zero)
             {
@@ -1945,24 +1921,14 @@ static inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_e
     {
         // Copy the first digit one place to the left.
         buffer[0] = buffer[1];
-
         if (num_digits == 1)
         {
             // dE+123
-            // RYU_ASSERT(buffer_capacity >= num_digits + 5);
-
             buffer += 1;
-            if (force_trailing_dot_zero)
-            {
-                std::memcpy(buffer, ".0", 2);
-                buffer += 2;
-            }
         }
         else
         {
             // d.igitsE+123
-            // RYU_ASSERT(buffer_capacity >= num_digits + 1 + 5);
-
             buffer[1] = '.';
             buffer += 1 + num_digits;
         }
@@ -1972,7 +1938,6 @@ static inline char* FormatDigits(char* buffer, UnsignedInt digits, int decimal_e
 
         std::memcpy(buffer, scientific_exponent < 0 ? "e-" : "e+", 2);
         buffer += 2;
-
         const uint32_t k = static_cast<uint32_t>(scientific_exponent < 0 ? -scientific_exponent : scientific_exponent);
         if (k < 10)
         {
@@ -2036,12 +2001,12 @@ static inline char* ToChars(char* buffer, Float value, bool force_trailing_dot_z
 //
 //==================================================================================================
 
-char* RyuFtoa(char* buffer, float value)
+char* RyuDtoa(char* buffer, double value)
 {
     return ToChars(buffer, value);
 }
 
-char* RyuDtoa(char* buffer, double value)
+char* RyuFtoa(char* buffer, float value)
 {
     return ToChars(buffer, value);
 }
