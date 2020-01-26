@@ -2,6 +2,8 @@
 #include "../src/ryu.h"
 #include "../src/ryu_charconv.h"
 
+#include <float.h>
+
 #define CHECK_EQ(X, Y) CHECK(X == Y)
 
 static double Strtod(const std::string& digits, int exponent)
