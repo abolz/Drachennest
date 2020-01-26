@@ -870,7 +870,7 @@ static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 {
     __extension__ using uint128_t = unsigned __int128;
 
-    RYU_ASSERT(j >= 65);
+    RYU_ASSERT(j >= 64);
     RYU_ASSERT(j <= 127);
 
     const uint128_t b0 = uint128_t{m} * mul->lo;
@@ -888,7 +888,7 @@ static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 
 static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 {
-    RYU_ASSERT(j >= 65);
+    RYU_ASSERT(j >= 64);
     RYU_ASSERT(j <= 127);
 
     uint64_t b0_hi;
@@ -2144,15 +2144,13 @@ static inline int ExtractBit(uint64_t x, int n)
     return (x >> n) & 1;
 }
 
-static inline uint64_t MulPow5DivPow2_Double(uint64_t u, int e5, int e2)
+static inline uint64_t MulShift_Double(uint64_t u, int e5, int e2)
 {
-    const auto k = FloorLog2Pow5(e5) + 1 - BitsPerPow5_Double;
-    const auto j = e2 - k;
-    RYU_ASSERT(j >= 65);
-    RYU_ASSERT(j <= 127);
+    RYU_ASSERT(e2 >= 64);
+    RYU_ASSERT(e2 <= 127);
 
     const auto pow5 = ComputePow5_Double(e5);
-    return MulShift(u, &pow5, j);
+    return MulShift(u, &pow5, e2);
 }
 
 double RyuToBinary64(uint64_t m10, int m10_digits, int e10)
@@ -2176,47 +2174,51 @@ double RyuToBinary64(uint64_t m10, int m10_digits, int e10)
 
     // Convert to binary float m2 * 2^e2, while retaining information about whether the conversion
     // was exact.
-    const auto e2 = FloorLog2(m10) + e10 + FloorLog2Pow5(e10) - (MantissaBits + 1);
-    const auto m2 = MulPow5DivPow2_Double(m10, e10, e2 - e10);
+
+    const auto log2_m10 = FloorLog2(m10);
+    RYU_ASSERT(log2_m10 >= 0);
+    RYU_ASSERT(log2_m10 <= 56);
+
+    // Let b = floor(log_2(m10))
+    // Let n = floor(log_2(5^e10))
+    // Then
+    //  j = ( e2 - e10 ) - ( n + 1 - BitsPerPow5 )
+    //    = ( ( b + e10 + n - (MantissaBits + 1) ) - e10 ) - ( n + 1 - BitsPerPow5 )
+    //    = b + BitsPerPow5 - MantissaBits - 2
+    //    = b + 125 - 52 - 2
+    //    = b + 71
+    // Since 0 <= b <= 56, we have
+    //    71 <= j <= 127
+    // The product along with the subsequent shift therefore has (at most)
+    //  b + 125 - (125 - 54 + b) = 54
+    // bits.
+
+    const auto log2_5_e10 = FloorLog2Pow5(e10);
+    const auto e2 = log2_m10 + e10 + log2_5_e10 - (MantissaBits + 1);
+
+    const auto pow5 = ComputePow5_Double(e10);
+    const auto j = log2_m10 + (BitsPerPow5_Double - MantissaBits - 2);
+    const auto m2 = MulShift(m10, &pow5, j);
+
+    const auto log2_m2 = FloorLog2(m2);
+    RYU_ASSERT(log2_m2 >= 53);
+    RYU_ASSERT(log2_m2 <= 54);
 
     bool is_exact;
     if (e10 >= 0)
     {
-        // The length of m10 * 10^e10 in bits is:
-        //  log2(m10 * 10^e10) = log2(m10) + e10 * log2(10) = log2(m10) + e10 + e10 * log2(5)
-        //
-        // We want to compute the MantissaBits + 1 top-most bits (+1 for the implicit leading 1 in
-        // IEEE format). We therefore choose a binary output exponent of
-        //  log2(m10 * 10^e10) - (MantissaBits + 1)
-        //
-        // We use floor(log2(5^e10)) so that we get at least this many bits; better to have an
-        // additional bit than
-        // to not have enough bits.
-
-//      e2 = FloorLog2(m10) + e10 + FloorLog2Pow5(e10) - (MantissaBits + 1);
-//      m2 = MulPow5DivPow2_Double(m10, e10, e2 - e10);
-
-        // We also compute if the result is exact, i.e.,
-        //  [m10 * 10^e10 / 2^e2] == m10 * 10^e10 / 2^e2
-        // This can only be the case if 2^e2 divides m10 * 10^e10, which in turn requires that the
-        // largest power of 2 that divides m10 + e10 is greater than e2. If e2 is less than e10,
-        // then the result must be exact. Otherwise we use the existing MultipleOfPow2() function.
-
-        // 57 = floor(log_2(10^17))
-        is_exact = (e2 < e10) || (e2 - e10 < 57 && MultipleOfPow2(m10, e2 - e10));
+        // 56 = floor(log_2(10^17))
+        is_exact = (e2 < e10) || (e2 - e10 < 64 && MultipleOfPow2(m10, e2 - e10));
     }
     else
     {
-//      e2 = FloorLog2(m10) + e10 + FloorLog2Pow5(e10) - (MantissaBits + 1);
-//      m2 = MulPow5DivPow2_Double(m10, e10, e2 - e10);
-
         // 57 = ceil(log_2(10^17))
         // 24 = floor(log_5(2^57))
         is_exact = -e10 <= 24 && MultipleOfPow5(m10, -e10);
     }
 
     // Compute the final IEEE exponent.
-    int ieee_e2 = Max(0, e2 + ExponentBias + FloorLog2(m2));
+    int ieee_e2 = Max(0, log2_m2 + e2 + ExponentBias);
     if (ieee_e2 >= 2 * std::numeric_limits<double>::max_exponent - 1)
     {
         // Overflow:
@@ -2244,11 +2246,12 @@ double RyuToBinary64(uint64_t m10, int m10_digits, int e10)
     {
         // Due to how the IEEE represents +/-Infinity, we don't need to check for overflow here.
         ++ieee_e2;
-        RYU_ASSERT(ieee_e2 <= 2 * std::numeric_limits<double>::max_exponent - 1);
     }
 
+    RYU_ASSERT(ieee_e2 <= 2 * std::numeric_limits<double>::max_exponent - 1);
     const auto ieee_m2 = significand & ((uint64_t{1} << MantissaBits) - 1);
-    return ReinterpretBits<double>(static_cast<uint64_t>(ieee_e2) << MantissaBits | ieee_m2);
+    const auto ieee = static_cast<uint64_t>(ieee_e2) << MantissaBits | ieee_m2;
+    return ReinterpretBits<double>(ieee);
 }
 
 //==================================================================================================
@@ -2382,8 +2385,8 @@ float RyuToBinary32(uint32_t m10, int m10_digits, int e10)
     }
     else
     {
-        // 29 = floor(log_2(10^9))
-        // 12 = floor(log_5(2^29))
+        // 30 = ceil(log_2(10^9))
+        // 12 = floor(log_5(2^30))
         is_exact = -e10 <= 12 && MultipleOfPow5(m10, -e10);
     }
 
