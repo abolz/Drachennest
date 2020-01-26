@@ -2144,15 +2144,6 @@ static inline int ExtractBit(uint64_t x, int n)
     return (x >> n) & 1;
 }
 
-static inline uint64_t MulShift_Double(uint64_t u, int e5, int e2)
-{
-    RYU_ASSERT(e2 >= 64);
-    RYU_ASSERT(e2 <= 127);
-
-    const auto pow5 = ComputePow5_Double(e5);
-    return MulShift(u, &pow5, e2);
-}
-
 double RyuToBinary64(uint64_t m10, int m10_digits, int e10)
 {
     using Fp = IEEE<double>;
