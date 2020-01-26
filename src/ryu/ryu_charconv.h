@@ -51,3 +51,19 @@ char* RyuFtoa(char* buffer, float value);
 
 double RyuToBinary64(uint64_t m10, int m10len, int e10);
 float  RyuToBinary32(uint32_t m10, int m10len, int e10);
+
+enum class StrtodStatus {
+    invalid, // TODO: more detailed error code...
+    zero,
+    integer,
+    decimal,
+    nan,
+    inf,
+};
+
+struct StrtodResult {
+    const char* next;
+    StrtodStatus status;
+};
+
+StrtodResult RyuStrtod(const char* next, const char* last, double& value);

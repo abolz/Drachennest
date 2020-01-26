@@ -17,6 +17,8 @@
 #define RYU_SCIENTIFIC_NOTATION_ONLY()          0
 #define RYU_USE_INTRINSICS()                    1
 
+#include "ryu_charconv.h"
+
 #include <cassert>
 #include <climits>
 #include <cstdint>
@@ -2226,9 +2228,12 @@ double RyuToBinary64(uint64_t m10, int m10_digits, int e10)
     // We need to round up if the exact value is more than 0.5 above the value we computed. That's
     // equivalent to checking if the last removed bit was 1 and either the value was not just
     // trailing zeros or the result would otherwise be odd.
-    const auto trailing_zeros = is_exact && MultipleOfPow2(m2, shift - 1);
-    const auto last_removed_bit = ExtractBit(m2, shift - 1);
-    const auto round_up = last_removed_bit != 0 && (!trailing_zeros || ExtractBit(m2, shift) != 0);
+    const auto trailing_zeros
+        = is_exact && MultipleOfPow2(m2, shift - 1);
+    const auto last_removed_bit
+        = ExtractBit(m2, shift - 1);
+    const auto round_up
+        = last_removed_bit != 0 && (!trailing_zeros || ExtractBit(m2, shift) != 0);
 
     const auto significand = (m2 >> shift) + round_up;
     RYU_ASSERT(significand <= 2*Fp::HiddenBit);
@@ -2398,9 +2403,12 @@ float RyuToBinary32(uint32_t m10, int m10_digits, int e10)
     // We need to round up if the exact value is more than 0.5 above the value we computed. That's
     // equivalent to checking if the last removed bit was 1 and either the value was not just
     // trailing zeros or the result would otherwise be odd.
-    const auto trailing_zeros = is_exact && MultipleOfPow2(m2, shift - 1);
-    const auto last_removed_bit = ExtractBit(m2, shift - 1);
-    const auto round_up = last_removed_bit != 0 && (!trailing_zeros || ExtractBit(m2, shift) != 0);
+    const auto trailing_zeros
+        = is_exact && MultipleOfPow2(m2, shift - 1);
+    const auto last_removed_bit
+        = ExtractBit(m2, shift - 1);
+    const auto round_up
+        = last_removed_bit != 0 && (!trailing_zeros || ExtractBit(m2, shift) != 0);
 
     const auto significand = (m2 >> shift) + round_up;
     RYU_ASSERT(significand <= 2*Fp::HiddenBit);
@@ -2414,4 +2422,292 @@ float RyuToBinary32(uint32_t m10, int m10_digits, int e10)
     RYU_ASSERT(ieee_e2 <= 2 * std::numeric_limits<float>::max_exponent - 1);
     const auto ieee = static_cast<uint32_t>(ieee_e2) << MantissaBits | (significand & Fp::SignificandMask);
     return ReinterpretBits<float>(ieee);
+}
+
+//==================================================================================================
+//
+//==================================================================================================
+
+static inline bool IsDigit(char ch)
+{
+    return '0' <= ch && ch <= '9';
+}
+
+static inline int DigitValue(char ch)
+{
+    RYU_ASSERT(IsDigit(ch));
+    return ch - '0';
+}
+
+struct ParsedNumber
+{
+    int64_t significand;
+    int     num_digits;
+    int     exponent;
+    int     negative;
+};
+
+// template: SignificandType, MaxSignificandDigits
+static inline StrtodResult ParseNumber(const char* next, const char* last, ParsedNumber& result)
+{
+    static constexpr int MaxNumberLength = 99999999; // < INT_MAX / 4
+    static constexpr int MaxSignificandDigits = 17;
+    static constexpr int MaxExponentDigits = 3;
+
+    if (next == last)
+    {
+        return {next, StrtodStatus::invalid}; // invalid (empty) input
+    }
+    if (last - next > MaxNumberLength)
+    {
+        return {next, StrtodStatus::invalid}; // input too large
+    }
+
+    ParsedNumber number;
+
+    number.significand = 0;
+    number.num_digits = 0;
+    number.exponent = 0;
+
+// [-]
+
+    number.negative = (*next == '-');
+    if (number.negative || *next == '+')
+    {
+        ++next;
+        if (next == last)
+        {
+            return {next, StrtodStatus::invalid};
+        }
+    }
+
+// int
+
+    if (*next == '0')
+    {
+        // Number must be of the form 0[.xxx][e+nnn].
+        // The leading zero here is not a significant digit.
+        ++next;
+        if (next == last)
+        {
+            return {next, StrtodStatus::zero};
+        }
+
+        // 0 followed by another digit is invalid in JSON.
+        // Note that a 0 digit may be followed by anything else here!
+        if (IsDigit(*next))
+        {
+            return {next, StrtodStatus::invalid};
+        }
+    }
+    else if (IsDigit(*next)) // non-0
+    {
+        for (;;)
+        {
+            if (number.num_digits == MaxSignificandDigits)
+            {
+                return {next, StrtodStatus::invalid};
+            }
+
+            number.significand = 10 * number.significand + DigitValue(*next);
+            ++number.num_digits;
+
+            ++next;
+            if (next == last)
+            {
+                result = number;
+                return {next, StrtodStatus::integer};
+            }
+
+            if (!IsDigit(*next))
+            {
+                break;
+            }
+        }
+    }
+    else if (last - next >= 3 && *next == 'n' && std::memcmp(next, "an", 2) == 0)
+    {
+        return {next + 3, StrtodStatus::nan};
+    }
+    else if (last - next >= 3 && *next == 'i' && std::memcmp(next, "nf", 2) == 0)
+    {
+        return {next + 3, StrtodStatus::inf};
+    }
+    else
+    {
+        return {next, StrtodStatus::invalid};
+    }
+
+// frac
+
+    const bool has_decimal_point = (*next == '.');
+    if (*next == '.')
+    {
+        ++next; // skip '.'
+
+        // JSON requires at least one digit in the fraction
+        if (next == last || !IsDigit(*next))
+        {
+            return {next, StrtodStatus::invalid};
+        }
+
+        if (number.num_digits == 0)
+        {
+            // Number must be of the form 0.xxx[e+nnn].
+            // Ignore leading zeros in the fractional part and adjust the exponent instead.
+            for (;;)
+            {
+                if (*next != '0')
+                {
+                    break;
+                }
+
+                --number.exponent;
+
+                ++next;
+                if (next == last)
+                {
+                    result = number;
+                    return {next, StrtodStatus::zero};
+                }
+            }
+        }
+
+        // We might get here after scanning the leading zeros in fraction,
+        // so we need to re-check for a decimal digit here.
+        RYU_ASSERT(next != last);
+        while (IsDigit(*next))
+        {
+            if (number.num_digits == MaxSignificandDigits)
+            {
+                return {next, StrtodStatus::invalid};
+            }
+
+            number.significand = 10 * number.significand + DigitValue(*next);
+            ++number.num_digits;
+
+            ++next;
+            if (next == last)
+            {
+                break;
+            }
+        }
+    }
+
+// exp
+
+    const bool has_exponent = (next != last && (*next == 'e' || *next == 'E'));
+    if (has_exponent)
+    {
+        // If we didn't consume any significant digits, the number can only be 0.
+        // But we want to check for syntax errors, so we continue parsing the exponent.
+//      if (number.num_digits == 0)
+//      {
+//          return {next, NumberClass::zero};
+//      }
+
+        ++next;
+        if (next == last)
+        {
+            return {next, StrtodStatus::invalid}; // incomplete exponent
+        }
+
+        const bool parsed_exponent_is_negative = (*next == '-');
+        if (parsed_exponent_is_negative || *next == '+')
+        {
+            ++next;
+            if (next == last)
+            {
+                return {next, StrtodStatus::invalid}; // incomplete exponent
+            }
+        }
+
+        if (!IsDigit(*next))
+        {
+            return {next, StrtodStatus::invalid}; // incomplete exponent
+        }
+
+        // Ignore leading zeros.
+        // The exponent is always decimal, not octal.
+        for (;;)
+        {
+            if (*next != '0')
+            {
+                break;
+            }
+            ++next;
+            if (next == last)
+            {
+                result = number;
+                return {next, StrtodStatus::decimal};
+            }
+        }
+
+        RYU_ASSERT(next != last);
+        if (IsDigit(*next))
+        {
+            int parsed_exponent = DigitValue(*next);
+            int parsed_exponent_length = 1;
+            for (;;)
+            {
+                ++next;
+                if (next == last || !IsDigit(*next)) // done
+                {
+                    break;
+                }
+
+                if (parsed_exponent_length == MaxExponentDigits)
+                {
+                    return {next, StrtodStatus::invalid};
+                }
+
+                parsed_exponent = 10 * parsed_exponent + DigitValue(*next);
+                ++parsed_exponent_length;
+            }
+
+            number.exponent += parsed_exponent_is_negative ? -parsed_exponent : parsed_exponent;
+        }
+    }
+
+    const StrtodStatus status = has_decimal_point || has_exponent
+        ? StrtodStatus::decimal
+        : StrtodStatus::integer;
+
+    result = number;
+    return {next, status};
+}
+
+StrtodResult RyuStrtod(const char* next, const char* last, double& value)
+{
+    ParsedNumber number;
+    const auto res = ParseNumber(next, last, number);
+
+    double d;
+    switch (res.status)
+    {
+    case StrtodStatus::invalid:
+        return res;
+    case StrtodStatus::zero:
+        d = 0.0;
+        break;
+    case StrtodStatus::integer:
+        if (number.num_digits <= 15)
+        {
+            d = static_cast<double>(number.significand);
+            break;
+        }
+        // [[fallthrough]]
+    case StrtodStatus::decimal:
+        d = RyuToBinary64(static_cast<uint64_t>(number.significand), number.num_digits, number.exponent);
+        break;
+    case StrtodStatus::nan:
+        value = std::numeric_limits<double>::quiet_NaN();
+        return res;
+    case StrtodStatus::inf:
+        d = std::numeric_limits<double>::infinity();
+        break;
+    }
+
+    value = number.negative ? -d : d;
+    return res;
 }
