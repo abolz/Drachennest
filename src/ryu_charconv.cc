@@ -2249,8 +2249,7 @@ double RyuToBinary64(uint64_t m10, int m10_digits, int e10)
     }
 
     RYU_ASSERT(ieee_e2 <= 2 * std::numeric_limits<double>::max_exponent - 1);
-    const auto ieee_m2 = significand & ((uint64_t{1} << MantissaBits) - 1);
-    const auto ieee = static_cast<uint64_t>(ieee_e2) << MantissaBits | ieee_m2;
+    const auto ieee = static_cast<uint64_t>(ieee_e2) << MantissaBits | (significand & Fp::SignificandMask);
     return ReinterpretBits<double>(ieee);
 }
 
@@ -2326,8 +2325,8 @@ static inline uint32_t MulShift_Single(uint32_t m, int e5, int e2)
 float RyuToBinary32(uint32_t m10, int m10_digits, int e10)
 {
     using Fp = IEEE<float>;
-    constexpr int MantissaBits = Fp::SignificandSize - 1;
-    constexpr int ExponentBias = Fp::ExponentBias - (Fp::SignificandSize - 1);
+    static constexpr int MantissaBits = Fp::SignificandSize - 1;
+    static constexpr int ExponentBias = Fp::ExponentBias - (Fp::SignificandSize - 1);
 
     RYU_ASSERT(m10 >= 0);
 //  RYU_ASSERT(m10 < 268'435'456); // 2^28
@@ -2422,7 +2421,6 @@ float RyuToBinary32(uint32_t m10, int m10_digits, int e10)
     }
 
     RYU_ASSERT(ieee_e2 <= 2 * std::numeric_limits<float>::max_exponent - 1);
-    const auto ieee_m2 = significand & ((uint32_t{1} << MantissaBits) - 1);
-    const auto ieee = static_cast<uint32_t>(ieee_e2) << MantissaBits | ieee_m2;
+    const auto ieee = static_cast<uint32_t>(ieee_e2) << MantissaBits | (significand & Fp::SignificandMask);
     return ReinterpretBits<float>(ieee);
 }
