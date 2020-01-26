@@ -1891,3 +1891,60 @@ TEST_CASE("Double - Looks like pow5")
     CheckDoubleBits(0x4840F0CF064DD592, "1.152921504606847e+40");
     CheckDoubleBits(0x4850F0CF064DD592, "2.305843009213694e+40");
 }
+
+#if 0
+static inline float FloatFromBits(uint32_t bits)
+{
+    float f;
+    std::memcpy(&f, &bits, sizeof(uint32_t));
+    return f;
+}
+
+static inline uint32_t BitsFromFloat(float f)
+{
+    uint32_t u;
+    std::memcpy(&u, &f, sizeof(uint32_t));
+    return u;
+}
+
+TEST_CASE("Ftoa - all of them")
+{
+    constexpr int P = 24;
+    constexpr uint32_t MaxF = (1u << (P - 1)) - 1;
+    constexpr int ExpBias     = std::numeric_limits<float>::max_exponent - 1 + (P - 1);
+    constexpr int MaxExponent = std::numeric_limits<float>::max_exponent - 1 - (P - 1);
+    constexpr int MinExponent = std::numeric_limits<float>::min_exponent - 1 - (P - 1);
+    constexpr int MinExp = 0; // 2 + ExpBias; // 0;
+    constexpr int MaxExp = 255 - 1;
+    //constexpr int MinExp = -40 + 2 + ExpBias;
+    //constexpr int MaxExp =  -1 + 2 + ExpBias;
+
+    for (int e = MinExp; e <= MaxExp; ++e)
+    {
+        printf("e = %3d ...\n", e);
+
+        for (uint32_t f = 0; f <= MaxF; ++f)
+        {
+            const uint32_t bits = ((uint32_t)e << (P-1)) | f;
+            if (bits == 0)
+                continue;
+
+            const auto value = FloatFromBits(bits);
+
+            char buf[256];
+            char* end = RyuFtoa(buf, value);
+            end[0] = '\0';
+
+            double_conversion::StringToDoubleConverter s2f(0, 0.0, 0.0, "inf", "nan");
+            int unused;
+            const float value_out = s2f.StringToFloat(buf, (int)(end - buf), &unused);
+
+            const uint32_t bits_out = BitsFromFloat(value_out);
+            if (bits != bits_out)
+            {
+                CHECK(false);
+            }
+        }
+    }
+}
+#endif

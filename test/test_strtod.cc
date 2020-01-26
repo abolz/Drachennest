@@ -23,6 +23,22 @@ static void CheckStrtod(double value)
     CHECK_EQ(value, value2);
 }
 
+static void CheckStrtof(float value)
+{
+    const auto dec = ryu::ToDecimal(value);
+    const auto m10 = dec.digits;
+    const auto m10len = dtoa::impl::DecimalLength(m10);
+    const auto e10 = dec.exponent;
+    const auto value2 = RyuToBinary32(m10, m10len, e10);
+    CHECK_EQ(value, value2);
+}
+
+TEST_CASE("Strtof - 0")
+{
+    const auto value = RyuToBinary32(999999999, 9, 0);
+    CHECK_EQ(999999999.0f, value);
+}
+
 TEST_CASE("Strtod - 0")
 {
     constexpr auto Inf = std::numeric_limits<double>::infinity();
@@ -38,6 +54,9 @@ TEST_CASE("Strtod - 0")
     CHECK_EQ(3e-324, Strtod("3", -324));
     CHECK_EQ(4e-324, Strtod("4", -324));
     CHECK_EQ(5e-324, Strtod("5", -324));
+
+    const auto value = RyuToBinary64(99999999999999999ull, 17, 0);
+    CHECK_EQ(99999999999999999.0, value);
 }
 
 TEST_CASE("Strtod - Paxson, Kahan")
@@ -202,3 +221,59 @@ TEST_CASE("Strtod - 2")
     CheckStrtod(5708990770823839207320493820740630171355185151999e-3);
     CheckStrtod(5708990770823839207320493820740630171355185152001e-3);
 }
+
+#if 0
+static inline float FloatFromBits(uint32_t bits)
+{
+    float f;
+    std::memcpy(&f, &bits, sizeof(uint32_t));
+    return f;
+}
+
+static inline uint32_t BitsFromFloat(float f)
+{
+    uint32_t u;
+    std::memcpy(&u, &f, sizeof(uint32_t));
+    return u;
+}
+
+TEST_CASE("Strtof - all of them")
+{
+    constexpr int P = 24;
+    constexpr uint32_t MaxF = (1u << (P - 1)) - 1;
+    constexpr int ExpBias     = std::numeric_limits<float>::max_exponent - 1 + (P - 1);
+    constexpr int MaxExponent = std::numeric_limits<float>::max_exponent - 1 - (P - 1);
+    constexpr int MinExponent = std::numeric_limits<float>::min_exponent - 1 - (P - 1);
+    constexpr int MinExp = 0; // 2 + ExpBias; // 0;
+    constexpr int MaxExp = 255 - 1;
+    //constexpr int MinExp = -40 + 2 + ExpBias;
+    //constexpr int MaxExp =  -1 + 2 + ExpBias;
+
+    for (int e = MinExp; e <= MaxExp; ++e)
+    {
+        printf("e = %3d ...\n", e);
+
+        for (uint32_t f = 0; f <= MaxF; ++f)
+        {
+            const uint32_t bits = ((uint32_t)e << (P-1)) | f;
+            if (bits == 0)
+                continue;
+
+            const auto value = FloatFromBits(bits);
+
+            const auto dec = ryu::ToDecimal(value);
+            const auto m10 = dec.digits;
+            const auto m10len = dtoa::impl::DecimalLength(m10);
+            const auto e10 = dec.exponent;
+
+            const auto value_out = RyuToBinary32(m10, m10len, e10);
+            const auto bits_out = BitsFromFloat(value_out);
+
+            if (bits != bits_out)
+            {
+                CHECK(false);
+            }
+        }
+    }
+}
+#endif
