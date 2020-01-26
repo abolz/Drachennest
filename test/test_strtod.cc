@@ -2,7 +2,7 @@
 #include "../src/ryu.h"
 #include "../src/ryu_charconv.h"
 
-#include <float.h>
+#include <limits>
 
 #define CHECK_EQ(X, Y) CHECK(X == Y)
 
@@ -37,6 +37,11 @@ static void CheckStrtof(float value)
 
 TEST_CASE("Strtof - 0")
 {
+    CheckStrtof(std::numeric_limits<float>::min());
+    CheckStrtof(std::numeric_limits<float>::max());
+    CheckStrtof(std::numeric_limits<float>::denorm_min());
+    CheckStrtof(std::numeric_limits<float>::epsilon());
+
     const auto value = RyuToBinary32(999999999, 9, 0);
     CHECK_EQ(999999999.0f, value);
 }
@@ -47,10 +52,10 @@ TEST_CASE("Strtod - 0")
 
     CHECK_EQ(5e-324, Strtod("5", -324));
     CHECK_EQ(Inf, Strtod("1", 309));
-    CheckStrtod(DBL_MIN);
-    CheckStrtod(DBL_MAX);
-    CheckStrtod(DBL_TRUE_MIN);
-    CheckStrtod(DBL_EPSILON);
+    CheckStrtod(std::numeric_limits<double>::min());
+    CheckStrtod(std::numeric_limits<double>::max());
+    CheckStrtod(std::numeric_limits<double>::denorm_min());
+    CheckStrtod(std::numeric_limits<double>::epsilon());
     CHECK_EQ(1e-324, Strtod("1", -324));
     CHECK_EQ(2e-324, Strtod("2", -324));
     CHECK_EQ(3e-324, Strtod("3", -324));
