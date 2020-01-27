@@ -2585,6 +2585,7 @@ static inline StrtodResult ParseNumber(const char* next, const char* last, Parse
 
             number.significand = 10 * number.significand + DigitValue(*next);
             ++number.num_digits;
+            ++number.exponent;
 
             ++next;
             if (next == last)
