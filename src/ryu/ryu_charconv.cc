@@ -2454,6 +2454,9 @@ static inline StrtodResult ParseNumber(const char* next, const char* last, Parse
     static constexpr int MaxSignificandDigits = 17;
     static constexpr int MaxExponentDigits = 3;
 
+    static_assert(MaxSignificandDigits <= 19, "invalid parameter");
+    static_assert(MaxExponentDigits <= 8, "invalid parameter");
+
     if (next == last)
     {
         return {next, StrtodStatus::invalid}; // invalid (empty) input
@@ -2604,7 +2607,7 @@ static inline StrtodResult ParseNumber(const char* next, const char* last, Parse
     if (has_exponent)
     {
         // If we didn't consume any significant digits, the number can only be 0.
-        // But we want to check for syntax errors, so we continue parsing the exponent.
+        // But we want to parse the complete number, so we continue parsing the exponent.
 //      if (number.num_digits == 0)
 //      {
 //          return {next, NumberClass::zero};
@@ -2681,6 +2684,108 @@ static inline StrtodResult ParseNumber(const char* next, const char* last, Parse
     return {next, status};
 }
 
+// Determine whether 'double' operations are correctly rounded.
+// If the floating-point stack is 80 bits wide, operations induce double rounding, which in turn
+// leads to wrong results.
+#if 0 // defined(_M_X64) || defined(__x86_64__)
+#define RYU_CORRECT_DOUBLE_OPERATIONS() 1
+#else
+#define RYU_CORRECT_DOUBLE_OPERATIONS() 0
+#endif
+
+#if RYU_CORRECT_DOUBLE_OPERATIONS()
+
+// 2^53 = 9007199254740992.
+// Any integer with at most 15 decimal digits will hence fit into a 'double'.
+static constexpr int MaxExactDoubleIntegerDecimalDigits = 15;
+static constexpr int MaxExactDoublePowerOfTen = 22;
+
+static inline bool UseFastPath(int num_digits, int exponent)
+{
+    if (num_digits > MaxExactDoubleIntegerDecimalDigits)
+        return false;
+    if (exponent < -MaxExactDoublePowerOfTen)
+        return false;
+    if (exponent > (MaxExactDoubleIntegerDecimalDigits - num_digits) + MaxExactDoublePowerOfTen)
+        return false;
+
+    return true;
+}
+
+static inline double FastPath(int64_t significand, int num_digits, int exponent)
+{
+    RYU_ASSERT(UseFastPath(num_digits, exponent));
+
+    static constexpr double ExactPowersOfTen[] = {
+        1.0e+00,
+        1.0e+01,
+        1.0e+02,
+        1.0e+03,
+        1.0e+04,
+        1.0e+05,
+        1.0e+06,
+        1.0e+07,
+        1.0e+08,
+        1.0e+09,
+        1.0e+10,
+        1.0e+11,
+        1.0e+12,
+        1.0e+13,
+        1.0e+14,
+        1.0e+15, // 10^15 < 9007199254740992 = 2^53
+        1.0e+16, // 10^16 = 5000000000000000 * 2^1  = (10^15 * 5^1 ) * 2^1
+        1.0e+17, // 10^17 = 6250000000000000 * 2^4  = (10^13 * 5^4 ) * 2^4
+        1.0e+18, // 10^18 = 7812500000000000 * 2^7  = (10^11 * 5^7 ) * 2^7
+        1.0e+19, // 10^19 = 4882812500000000 * 2^11 = (10^8  * 5^11) * 2^11
+        1.0e+20, // 10^20 = 6103515625000000 * 2^14 = (10^6  * 5^14) * 2^14
+        1.0e+21, // 10^21 = 7629394531250000 * 2^17 = (10^4  * 5^17) * 2^17
+        1.0e+22, // 10^22 = 4768371582031250 * 2^21 = (10^1  * 5^21) * 2^21
+    };
+
+    // IEEE guarantees that operations are correctly rounded. Since the significand fits into a
+    // double and 10^exponent (or 10^-exponent) fits into a double too, we can compute the result
+    // simply by multiplying (or dividing) the two numbers.
+
+    const int remaining_digits = MaxExactDoubleIntegerDecimalDigits - num_digits; // 0 <= rd <= 15
+
+    RYU_ASSERT(digits <= INT64_MAX);
+    double d = static_cast<double>(significand);
+    if (exponent < 0)
+    {
+        d /= ExactPowersOfTen[-exponent];
+    }
+    else if (exponent <= MaxExactDoublePowerOfTen)
+    {
+        d *= ExactPowersOfTen[exponent];
+    }
+    else
+    {
+        // The exponent does not fit into a double. But we can move a factor of the exponent into
+        // the significand and and multiply the two numbers.
+        //
+        // Eg. 123 * 10^25 = (123*1000) * 10^22
+
+        d *= ExactPowersOfTen[remaining_digits]; // This is exact.
+        d *= ExactPowersOfTen[exponent - remaining_digits];
+    }
+
+    return d;
+}
+
+#else // ^^^ RYU_CORRECT_DOUBLE_OPERATIONS()
+
+static inline bool UseFastPath(int /*num_digits*/, int /*exponent*/)
+{
+    return false;
+}
+
+static inline double FastPath(int64_t /*significand*/, int /*num_digits*/, int /*exponent*/)
+{
+    return 0;
+}
+
+#endif // ^^^ !RYU_CORRECT_DOUBLE_OPERATIONS()
+
 StrtodResult RyuStrtod(const char* next, const char* last, double& value)
 {
     ParsedNumber number;
@@ -2691,9 +2796,11 @@ StrtodResult RyuStrtod(const char* next, const char* last, double& value)
     {
     case StrtodStatus::invalid:
         return res;
+
     case StrtodStatus::zero:
         d = 0.0;
         break;
+
     case StrtodStatus::integer:
         if (number.num_digits <= 15)
         {
@@ -2701,12 +2808,18 @@ StrtodResult RyuStrtod(const char* next, const char* last, double& value)
             break;
         }
         // [[fallthrough]]
+
     case StrtodStatus::decimal:
-        d = RyuToBinary64(static_cast<uint64_t>(number.significand), number.num_digits, number.exponent);
+        if (UseFastPath(number.num_digits, number.exponent))
+            d = FastPath(number.significand, number.num_digits, number.exponent);
+        else
+            d = RyuToBinary64(static_cast<uint64_t>(number.significand), number.num_digits, number.exponent);
         break;
+
     case StrtodStatus::nan:
         value = std::numeric_limits<double>::quiet_NaN();
         return res;
+
     case StrtodStatus::inf:
         d = std::numeric_limits<double>::infinity();
         break;
