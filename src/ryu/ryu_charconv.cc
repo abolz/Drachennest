@@ -2458,9 +2458,12 @@ static inline StrtodResult ParseNumber(const char* next, const char* last, Parse
     {
         return {next, StrtodStatus::invalid}; // invalid (empty) input
     }
+
+    // We don't handle numbers larger than MaxNumberLength.
+    // But we still need to handle inputs larger than MaxNumberLength.
     if (last - next > MaxNumberLength)
     {
-        return {next, StrtodStatus::invalid}; // input too large
+        last = next + MaxNumberLength;
     }
 
     ParsedNumber number;
