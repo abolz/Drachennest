@@ -9,7 +9,6 @@
 #include <limits>
 #include <string>
 
-#include "ryu/ryu_charconv.h"
 #include "scan_number.h"
 
 #define TEST_OPTIMAL 0
@@ -96,19 +95,8 @@ struct D2S_Ryu
 {
     bool Optimal() const { return true; }
     const char* Name() const { return "ryu"; }
-#if 1
-    char* operator()(char* buf, int buflen, float f) {
-        assert(buflen >= RyuFtoaMinBufferLength);
-        return RyuFtoa(buf, f);
-    }
-    char* operator()(char* buf, int buflen, double f) {
-        assert(buflen >= RyuDtoaMinBufferLength);
-        return RyuDtoa(buf, f);
-    }
-#else
     char* operator()(char* buf, int buflen, float f) { return drachennest::ftoa_ryu(buf, f); }
     char* operator()(char* buf, int buflen, double f) { return drachennest::dtoa_ryu(buf, f); }
-#endif
 };
 
 //==================================================================================================
