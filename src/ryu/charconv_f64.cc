@@ -1653,9 +1653,9 @@ static RYU_NEVER_INLINE StrtodResult ParseNaN(const char* next, const char* last
 namespace {
 struct ParsedNumber
 {
-    static constexpr int MaxInputLength = 128;
+    static constexpr int MaxDecimalDigits = 128;
 
-    int8_t digits[MaxInputLength];
+    int8_t digits[MaxDecimalDigits];
     int    num_digits;
     int    exponent;
     int    negative;
@@ -1664,11 +1664,6 @@ struct ParsedNumber
     {
         if (next == last)
             return {next, StrtodStatus::invalid}; // invalid (empty) input
-
-        // We don't handle numbers larger than MaxInputLength.
-        // But we still need to handle *inputs* larger than MaxInputLength.
-        if (last - next > MaxInputLength)
-            last = next + MaxInputLength;
 
         num_digits = 0;
         exponent = 0;
@@ -1703,6 +1698,9 @@ struct ParsedNumber
         {
             for (;;)
             {
+                if (num_digits == MaxDecimalDigits)
+                    return {next, StrtodStatus::invalid}; // input too long
+
                 digits[num_digits] = static_cast<int8_t>(DigitValue(*next));
                 ++num_digits;
 
@@ -1737,31 +1735,26 @@ struct ParsedNumber
             is_decimal = true;
             ++next; // skip '.'
 
-#if 1
+#if 0
+            if (num_digits == 0)
+            {
+                // Number is of the form "0.xxx..."
+                // Ignore leading zeros in the fractional part and adjust the exponent.
+                for ( ; next != last && *next == '0'; ++next)
+                    --exponent;
+            }
+#endif
+
             // Scan the fractional part
             for ( ; next != last && IsDigit(*next); ++next)
             {
+                if (num_digits == MaxDecimalDigits)
+                    return {next, StrtodStatus::invalid}; // input too long
+
                 digits[num_digits] = static_cast<int8_t>(DigitValue(*next));
                 ++num_digits;
                 --exponent;
             }
-#else
-            // JSON requires at least one digit in the fraction
-            if (next == last || !IsDigit(*next))
-                return {next, StrtofStatus::invalid};
-
-            // Scan the rest of the fractional part.
-            for (;;)
-            {
-                digits[num_digits] = static_cast<int8_t>(DigitValue(*next));
-                ++num_digits;
-                --exponent;
-
-                ++next;
-                if (next == last || !IsDigit(*next))
-                    break;
-            }
-#endif
         }
 
     // exp
