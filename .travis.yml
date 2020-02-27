@@ -138,3 +138,5 @@ install:
 script:
   - make test_dtoa
   - ./test/test_dtoa
+  - make test_strtod
+  - ./test/test_strtod
