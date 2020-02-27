@@ -101,6 +101,11 @@ TEST_CASE("Strtof - Regression")
     CheckStrtof(FloatFromBits(0x00800000u));
     CheckStrtof(FloatFromBits(0x00800001u));
     CheckStrtof(FloatFromBits(0x01000000u));
+
+    CheckStrtof(16777215.0f);
+    CheckStrtof(16777216.0f);
+    CheckStrtof(16777217.0f); // == 16777216.0f
+    CheckStrtof(16777218.0f);
 }
 
 TEST_CASE("Strtof - 1")
@@ -119,6 +124,28 @@ TEST_CASE("Strtof - 1")
     CHECK(9999.0009f == Strtof("9999.000900000000000000000000000e+0"));
     CHECK(999999999.0f == Strtof("999999999.0"));
     CHECK(999999999.0f == Strtof("999999999.0000000000000000000000000000000000000000000000000000000000000000000000e+00"));
+}
+
+TEST_CASE("Strtof - Special")
+{
+    CHECK( 0.0f == Strtof("0"));
+    CHECK( 0.0f == Strtof("0.0000000000000000000000000000000"));
+    CHECK(-0.0f == Strtof("-0"));
+    CHECK( 0.0f == Strtof("+0"));
+
+    CheckStrtof(0.0f);
+    CheckStrtof(-0.0f);
+    CheckStrtof(std::numeric_limits<float>::infinity());
+    CheckStrtof(-std::numeric_limits<float>::infinity());
+    CheckStrtof(std::numeric_limits<float>::quiet_NaN());
+
+    CHECK(std::isnan(Strtof("nan")));
+    CHECK(std::isnan(Strtof("NaN")));
+    CHECK(std::isnan(Strtof("nAn(_nananana123)")));
+
+    CHECK(std::isinf(Strtof("Inf")));
+    CHECK(std::isinf(Strtof("Infinity")));
+    CHECK(std::isinf(Strtof("-INF")));
 }
 
 #if 0
@@ -169,18 +196,18 @@ static uint64_t BitsFromFloat(double f)
     return u;
 }
 
-static double MakeDouble(uint32_t e, uint64_t f)
-{
-    return FloatFromBits(uint64_t{e} << 52 | f);
-}
-
-//static double Strtod(const std::string& str)
+//static double MakeDouble(uint32_t e, uint64_t f)
 //{
-//    double flt;
-//    const auto res = charconv::Strtod(str.data(), str.data() + str.size(), flt);
-//    CHECK(res.status != charconv::StrtodStatus::invalid);
-//    return flt;
+//    return FloatFromBits(uint64_t{e} << 52 | f);
 //}
+
+static double Strtod(const std::string& str)
+{
+    double flt;
+    const auto res = charconv::Strtod(str.data(), str.data() + str.size(), flt);
+    CHECK(res.status != charconv::StrtodStatus::invalid);
+    return flt;
+}
 
 struct Dtoa1 {
     char* operator()(char* buf, int /*buflen*/, double value) const {
@@ -249,6 +276,33 @@ TEST_CASE("Strtod - 1")
     CheckStrtod(std::numeric_limits<double>::max());
     CheckStrtod(std::numeric_limits<double>::denorm_min());
     CheckStrtod(std::numeric_limits<double>::epsilon());
+
+    CheckStrtod(9007199254740991.0);
+    CheckStrtod(9007199254740992.0);
+    CheckStrtod(9007199254740993.0); // == 9007199254740992.0
+    CheckStrtod(9007199254740994.0);
+}
+
+TEST_CASE("Strtod - Special")
+{
+    CHECK( 0.0 == Strtod("0"));
+    CHECK( 0.0 == Strtod("0.0000000000000000000000000000000"));
+    CHECK(-0.0 == Strtod("-0"));
+    CHECK( 0.0 == Strtod("+0"));
+
+    CheckStrtod(0.0f);
+    CheckStrtod(-0.0f);
+    CheckStrtod(std::numeric_limits<double>::infinity());
+    CheckStrtod(-std::numeric_limits<double>::infinity());
+    CheckStrtod(std::numeric_limits<double>::quiet_NaN());
+
+    CHECK(std::isnan(Strtod("nan")));
+    CHECK(std::isnan(Strtod("NaN")));
+    CHECK(std::isnan(Strtod("nAn(_nananana123)")));
+
+    CHECK(std::isinf(Strtod("Inf")));
+    CHECK(std::isinf(Strtod("Infinity")));
+    CHECK(std::isinf(Strtod("-INF")));
 }
 
 TEST_CASE("Strtod - Paxson, Kahan")
