@@ -106,6 +106,10 @@ TEST_CASE("Strtof - Regression")
     CheckStrtof(16777216.0f);
     CheckStrtof(16777217.0f); // == 16777216.0f
     CheckStrtof(16777218.0f);
+
+    CheckStrtof(100000000.0f);
+    CheckStrtof(10000000.0f);
+    CheckStrtof(1000000.0f);
 }
 
 TEST_CASE("Strtof - 1")
@@ -291,6 +295,10 @@ TEST_CASE("Strtod - 1")
     CheckStrtod(9007199254740992.0);
     CheckStrtod(9007199254740993.0); // == 9007199254740992.0
     CheckStrtod(9007199254740994.0);
+
+    CheckStrtod(10000000000000000.0);
+    CheckStrtod(1000000000000000.0);
+    CheckStrtod(100000000000000.0);
 }
 
 TEST_CASE("Strtod - Special")
