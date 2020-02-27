@@ -1735,7 +1735,6 @@ struct ParsedNumber
             is_decimal = true;
             ++next; // skip '.'
 
-#if 0
             if (num_digits == 0)
             {
                 // Number is of the form "0.xxx..."
@@ -1743,7 +1742,6 @@ struct ParsedNumber
                 for ( ; next != last && *next == '0'; ++next)
                     --exponent;
             }
-#endif
 
             // Scan the fractional part
             for ( ; next != last && IsDigit(*next); ++next)
@@ -2036,11 +2034,7 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
         int           num_digits = dec.num_digits;
         int           exponent   = dec.exponent;
 
-        // Ignore leading zeros.
-        while (num_digits > 0 && digits[0] == 0) {
-            ++digits;
-            --num_digits;
-        }
+        RYU_ASSERT(num_digits == 0 || digits[0] != 0);
 
         // Trim trailing zeros.
         const int min_digits = 16; // 17; // 0;
