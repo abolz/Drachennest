@@ -663,16 +663,6 @@ static inline char* Utoa_4Digits(char* buf, uint32_t digits)
     return buf + 4;
 }
 
-static inline char* Utoa_8Digits(char* buf, uint32_t digits)
-{
-    RYU_ASSERT(digits <= 99999999);
-    const uint32_t q = digits / 10000;
-    const uint32_t r = digits % 10000;
-    Utoa_4Digits(buf + 0, q);
-    Utoa_4Digits(buf + 4, r);
-    return buf + 8;
-}
-
 static inline int DecimalLength(uint32_t v)
 {
     RYU_ASSERT(v >= 1);
