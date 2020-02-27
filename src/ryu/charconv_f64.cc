@@ -172,10 +172,10 @@ static inline uint32_t Lo32(uint64_t x)
     return static_cast<uint32_t>(x);
 }
 
-//static inline uint32_t Hi32(uint64_t x)
-//{
-//    return static_cast<uint32_t>(x >> 32);
-//}
+static inline uint32_t Hi32(uint64_t x)
+{
+    return static_cast<uint32_t>(x >> 32);
+}
 
 //==================================================================================================
 // ToDecimal
