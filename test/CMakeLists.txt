@@ -1,14 +1,15 @@
-set(test_dtoa_sources
+set(test_all_sources
     "catch.hpp"
     "catch_main.cc"
     "scan_number.h"
     "test_dtoa.cc"
+    "test_strtod.cc"
     )
 
-add_executable(test_dtoa ${test_dtoa_sources})
+add_executable(test_all ${test_all_sources})
 
 target_include_directories(
-    test_dtoa
+    test_all
     PUBLIC
         "${CMAKE_SOURCE_DIR}/ext/google_benchmark/"
         "${CMAKE_SOURCE_DIR}/ext/google_double_conversion/"
@@ -16,32 +17,10 @@ target_include_directories(
     )
 
 target_link_libraries(
-    test_dtoa
+    test_all
     INTERFACE
         ${DN_INTERFACE}
     PRIVATE
         drachennest
         google_double_conversion
-    )
-
-set(test_strtod_sources
-    "catch.hpp"
-    "catch_main.cc"
-    "test_strtod.cc"
-    )
-
-add_executable(test_strtod ${test_strtod_sources})
-
-target_include_directories(
-    test_strtod
-    PUBLIC
-        "${CMAKE_SOURCE_DIR}/src/"
-    )
-
-target_link_libraries(
-    test_strtod
-    INTERFACE
-        ${DN_INTERFACE}
-    PRIVATE
-        drachennest
     )
