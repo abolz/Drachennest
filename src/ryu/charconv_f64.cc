@@ -15,7 +15,7 @@
 
 #include "charconv_f64.h"
 
-#undef NDEBUG
+//#undef NDEBUG
 #include <cassert>
 #include <climits>
 #include <cstdint>
