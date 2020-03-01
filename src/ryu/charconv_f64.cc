@@ -1443,7 +1443,7 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int decimal_expo
             // digits[000]
             // 1 <= num_digits <= 17 decimal_point <= 21.
             // Pre-filling buffer with 21 '0's is therefore sufficient.
-            static_assert(MaxFixedDecimalPoint <= 24, "invaalid parameter");
+            static_assert(MaxFixedDecimalPoint <= 24, "invalid parameter");
             std::memset(buffer, '0', 24);
             decimal_digits_position = 0;
         }

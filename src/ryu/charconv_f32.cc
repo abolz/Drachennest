@@ -755,7 +755,7 @@ static inline char* FormatDigits(char* buffer, uint32_t digits, int decimal_expo
             // digits[000]
             // 1 <= num_digits <= 9 <= decimal_point <= 13.
             // Pre-filling buffer with 13 '0's is therefore sufficient.
-            static_assert(MaxFixedDecimalPoint <= 16, "invaalid parameter");
+            static_assert(MaxFixedDecimalPoint <= 16, "invalid parameter");
             std::memset(buffer, '0', 16);
             decimal_digits_position = 0;
         }
