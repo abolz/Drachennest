@@ -1205,7 +1205,9 @@ static inline ToDecimalResultDouble ToDecimal(double value)
     uint64_t mask = 1;
     // mask = 10^(number of digits removed),
     // i.e., (bq % mask) contains the actual digits removed from bq.
+    // Since c < 2^62, which has 19 decimal digits, we remove at most 18 decimal digits.
 
+#if 0
     while (a / 10000 < c / 10000)
     {
         mask *= 10000;
@@ -1214,6 +1216,55 @@ static inline ToDecimalResultDouble ToDecimal(double value)
         c /= 10000;
         e10 += 4;
     }
+#else
+#if 0
+    // The condition i < 4 is actually redundant here, but saves an expensive test if we remove 16 digits.
+    // And the compiler might apply some other optimizations...
+    for (int i = 0; i < 4; ++i)
+    {
+        if (a / 10000 >= c / 10000)
+            break;
+        mask *= 10000;
+        a /= 10000;
+        b /= 10000;
+        c /= 10000;
+        e10 += 4;
+    }
+#else
+    if (a / 10000 < c / 10000) // 4
+    {
+        mask = 10000;
+        a /= 10000;
+        b /= 10000;
+        c /= 10000;
+        e10 += 4;
+        if (a / 10000 < c / 10000) // 8
+        {
+            mask = 100000000;
+            a /= 10000;
+            b /= 10000;
+            c /= 10000;
+            e10 += 4;
+            if (a / 10000 < c / 10000) // 12
+            {
+                mask = 1000000000000;
+                a /= 10000;
+                b /= 10000;
+                c /= 10000;
+                e10 += 4;
+                if (a / 10000 < c / 10000) // 16
+                {
+                    mask = 10000000000000000;
+                    a /= 10000;
+                    b /= 10000;
+                    c /= 10000;
+                    e10 += 4;
+                }
+            }
+        }
+    }
+#endif
+#endif
 
     if (a / 100 < c / 100)
     {

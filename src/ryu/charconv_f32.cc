@@ -562,6 +562,7 @@ static inline ToDecimalResultSingle ToDecimal(float value)
         ++e10;
     }
 
+#if 0
     while (a / 100 < c / 100)
     {
         mask *= 100;
@@ -570,6 +571,55 @@ static inline ToDecimalResultSingle ToDecimal(float value)
         c /= 100;
         e10 += 2;
     }
+#else
+#if 0
+    // The condition i < 4 is actually redundant here, but saves an expensive test if we remove 8 digits.
+    // And the compiler might apply some other optimizations...
+    for (int i = 0; i < 4; ++i)
+    {
+        if (a / 100 >= c / 100)
+            break;
+        mask *= 100;
+        a /= 100;
+        b /= 100;
+        c /= 100;
+        e10 += 2;
+    }
+#else
+    if (a / 100 < c / 100) // 2
+    {
+        mask *= 100;
+        a /= 100;
+        b /= 100;
+        c /= 100;
+        e10 += 2;
+        if (a / 100 < c / 100) // 4
+        {
+            mask *= 100;
+            a /= 100;
+            b /= 100;
+            c /= 100;
+            e10 += 2;
+            if (a / 100 < c / 100) // 6
+            {
+                mask *= 100;
+                a /= 100;
+                b /= 100;
+                c /= 100;
+                e10 += 2;
+                if (a / 100 < c / 100) // 8
+                {
+                    mask *= 100;
+                    a /= 100;
+                    b /= 100;
+                    c /= 100;
+                    e10 += 2;
+                }
+            }
+        }
+    }
+#endif
+#endif
 
     if (a / 10 < c / 10)
     {
