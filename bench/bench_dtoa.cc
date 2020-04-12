@@ -46,23 +46,14 @@ struct D2S
 };
 #endif
 #if BENCH_RYU
-#if 1
-#include "ryu/ryu_charconv.h"
+#include "ryu/charconv_f32.h"
+#include "ryu/charconv_f64.h"
 struct D2S
 {
     static char const* Name() { return "Ryu"; }
-    char* operator()(char* buf, int /*buflen*/, float f) const { return RyuFtoa(buf, f); }
-    char* operator()(char* buf, int /*buflen*/, double f) const { return RyuDtoa(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, float f) const { return charconv::Ftoa(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, double f) const { return charconv::Dtoa(buf, f); }
 };
-#else
-#include "ryu.h"
-struct D2S
-{
-    static char const* Name() { return "Ryu"; }
-    char* operator()(char* buf, int /*buflen*/, float f) const { return ryu::ToChars(buf, f); }
-    char* operator()(char* buf, int /*buflen*/, double f) const { return ryu::ToChars(buf, f); }
-};
-#endif
 #endif
 #if BENCH_RYU_UPSTREAM
 #include "ryu/ryu/ryu.h"
