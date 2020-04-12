@@ -19,15 +19,15 @@ namespace charconv {
 
 static constexpr int DtoaMinBufferLength = 64;
 
+// Converts the given double-precision number into decimal form and store the result in
+// the given buffer.
+// The buffer must be large enough, i.e. >= DtoaMinBufferLength.
+// The output format is similar to printf("%g").
 char* Dtoa(char* buffer, double value);
 
 enum class StrtodStatus {
+    ok,
     invalid, // TODO: more detailed error code...
-    zero,
-    integer,
-    decimal,
-    nan,
-    inf,
 };
 
 struct StrtodResult {

@@ -19,15 +19,15 @@ namespace charconv {
 
 static constexpr int FtoaMinBufferLength = 32;
 
+// Converts the given single-precision number into decimal form and store the result in
+// the given buffer.
+// The buffer must be large enough, i.e. >= FtoaMinBufferLength.
+// The output format is similar to printf("%g").
 char* Ftoa(char* buffer, float value);
 
 enum class StrtofStatus {
+    ok,
     invalid, // TODO: more detailed error code...
-    zero,
-    integer,
-    decimal,
-    nan,
-    inf,
 };
 
 struct StrtofResult {

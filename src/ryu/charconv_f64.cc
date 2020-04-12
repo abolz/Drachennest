@@ -15,13 +15,13 @@
 
 #include "charconv_f64.h"
 
-//#undef NDEBUG
 #include <cassert>
 #include <climits>
 #include <cstdint>
 #include <cstring>
 #include <limits>
-#if defined(_MSC_VER)
+#include <string>
+#if _MSC_VER
 #include <intrin.h>
 #endif
 
@@ -31,20 +31,22 @@
 
 #ifndef RYU_NEVER_INLINE
 #if _MSC_VER
-#define RYU_NEVER_INLINE __declspec(noinline)
+#define RYU_NEVER_INLINE __declspec(noinline) inline
 #elif __GNUC__
-#define RYU_NEVER_INLINE __attribute((noinline))
+#define RYU_NEVER_INLINE __attribute__((noinline)) inline
 #else
-#define RYU_NEVER_INLINE
+#define RYU_NEVER_INLINE inline
 #endif
 #endif
 
-#ifndef RYU_USE_SSE41
-#define RYU_USE_SSE41() 0
+#ifndef RYU_FORCE_INLINE
+#if _MSC_VER
+#define RYU_FORCE_INLINE __forceinline
+#elif __GNUC__
+#define RYU_FORCE_INLINE __attribute__((always_inline)) inline
+#else
+#define RYU_FORCE_INLINE inline
 #endif
-
-#if RYU_USE_SSE41()
-#include <smmintrin.h> // SSE4.1
 #endif
 
 //==================================================================================================
@@ -172,6 +174,7 @@ static inline uint32_t Lo32(uint64_t x)
     return static_cast<uint32_t>(x);
 }
 
+//[[maybe_unused]]
 static inline uint32_t Hi32(uint64_t x)
 {
     return static_cast<uint32_t>(x >> 32);
@@ -986,9 +989,6 @@ static inline void MulPow5DivPow2_Double(uint64_t u, uint64_t v, uint64_t w, int
 // Returns whether value is divisible by 5^e5
 static inline bool MultipleOfPow5(uint64_t value, int e5)
 {
-    RYU_ASSERT(e5 >= 0);
-    RYU_ASSERT(e5 <= 24);
-
     struct MulCmp {
         uint64_t mul;
         uint64_t cmp;
@@ -1022,7 +1022,11 @@ static inline bool MultipleOfPow5(uint64_t value, int e5)
         {0x2C2AD1AB7BFA3661u, 0x0000000000000135u}, // 5^24
     };
 
-    return value * Mod5[e5].mul <= Mod5[e5].cmp;
+    RYU_ASSERT(e5 >= 0);
+    RYU_ASSERT(e5 <= 24);
+    const auto m5 = Mod5[static_cast<unsigned>(e5)];
+
+    return value * m5.mul <= m5.cmp;
 }
 
 // Returns whether value is divisible by 2^e2
@@ -1034,10 +1038,12 @@ static inline bool MultipleOfPow2(uint64_t value, int e2)
     return (value & ((uint64_t{1} << e2) - 1)) == 0;
 }
 
+namespace {
 struct ToDecimalResultDouble {
     uint64_t digits; // num_digits <= 17
     int exponent;
 };
+}
 
 static inline ToDecimalResultDouble ToDecimal(double value)
 {
@@ -1136,9 +1142,6 @@ static inline ToDecimalResultDouble ToDecimal(double value)
 
         if (q <= 22) // 22 = floor(log_5(2^53))
         {
-            // NB: q <= 22 implies e2 <= 79.
-            // NB: Since w - u <= 4, only one of u, v, and w can be a multiple of 5, if any.
-
             za = MultipleOfPow5(u, q);
             zb = MultipleOfPow5(v, q);
             zc = MultipleOfPow5(w, q);
@@ -1171,59 +1174,36 @@ static inline ToDecimalResultDouble ToDecimal(double value)
 
         if (q <= Double::SignificandSize + 2)
         {
-            // NB: q <= 1 implies -4 <= e2 <= -1
-            // NB: 2 <= q <= 55 implies -81 <= e2 <= -5
-
             za = MultipleOfPow2(u, q);
             zb = MultipleOfPow2(v, q);
             zc = MultipleOfPow2(w, q);
         }
     }
 
-    uint64_t a;
-    uint64_t b;
-    uint64_t c;
-    MulPow5DivPow2_Double(u, v, w, -e10, e10 - e2, a, b, c);
+    uint64_t aq;
+    uint64_t bq;
+    uint64_t cq;
+    MulPow5DivPow2_Double(u, v, w, -e10, e10 - e2, aq, bq, cq);
 
     //
     // Step 4:
-    // Find the shortest decimal representation in the interval of valid
-    // representations.
+    // Find the shortest decimal representation in the interval of valid representations.
     //
 
-    //
-    // TODO:
-    //  Use Theorem 6.2 from Floitsch's Grisu paper here?
-    //  Might be at least beneficial for 32-bit platforms...
-    //
+    cq -= !accept_upper && zc;
 
-    c -= !accept_upper && zc;
-
-    const uint64_t aq = a;
-    const uint64_t bq = b;
-
-    uint64_t mask = 1;
     // mask = 10^(number of digits removed),
     // i.e., (bq % mask) contains the actual digits removed from bq.
     // Since c < 2^62, which has 19 decimal digits, we remove at most 18 decimal digits.
+    uint64_t mask = 1;
+
+    uint64_t a = aq;
+    uint64_t b = bq;
+    uint64_t c = cq;
 
 #if 0
     while (a / 10000 < c / 10000)
     {
-        mask *= 10000;
-        a /= 10000;
-        b /= 10000;
-        c /= 10000;
-        e10 += 4;
-    }
-#else
-#if 0
-    // The condition i < 4 is actually redundant here, but saves an expensive test if we remove 16 digits.
-    // And the compiler might apply some other optimizations...
-    for (int i = 0; i < 4; ++i)
-    {
-        if (a / 10000 >= c / 10000)
-            break;
         mask *= 10000;
         a /= 10000;
         b /= 10000;
@@ -1263,7 +1243,6 @@ static inline ToDecimalResultDouble ToDecimal(double value)
             }
         }
     }
-#endif
 #endif
 
     if (a / 100 < c / 100)
@@ -1462,8 +1441,10 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int decimal_expo
     const int num_digits = DecimalLength(digits);
     const int decimal_point = num_digits + decimal_exponent;
 
-    constexpr int MaxFixedDecimalPoint = 21;
-    constexpr int MinFixedDecimalPoint = -6;
+    // In order to successfully parse all numbers output by Dtoa using the Strtod implementation
+    // below, we have to make sure to never emit more than 17 (significant) digits.
+    static constexpr int MaxFixedDecimalPoint =  17;
+    static constexpr int MinFixedDecimalPoint = -6;
 
     const bool use_fixed = MinFixedDecimalPoint <= decimal_point && decimal_point <= MaxFixedDecimalPoint;
 
@@ -1561,7 +1542,7 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int decimal_expo
         {
             *buffer++ = static_cast<char>('0' + k);
         }
-        else if (/* sp || */ k < 100)
+        else if (k < 100)
         {
             buffer = Utoa_2Digits(buffer, k);
         }
@@ -1596,6 +1577,7 @@ static inline char* ToChars(char* buffer, double value, bool force_trailing_dot_
         return buffer + 3;
     }
 
+
     if (v.SignBit())
     {
         value = v.AbsValue();
@@ -1623,277 +1605,39 @@ char* charconv::Dtoa(char* buffer, double value)
 }
 
 //==================================================================================================
-// ParseNumber
-//==================================================================================================
-
-using charconv::StrtodStatus;
-using charconv::StrtodResult;
-
-static inline bool IsDigit(char ch)
-{
-    return '0' <= ch && ch <= '9';
-}
-
-static inline int DigitValue(char ch)
-{
-    RYU_ASSERT(IsDigit(ch));
-    return ch - '0';
-}
-
-static inline bool IsLowerASCII(char ch)
-{
-    return 'a' <= ch && ch <= 'z';
-}
-
-static inline bool IsUpperASCII(char ch)
-{
-    return 'A' <= ch && ch <= 'Z';
-}
-
-static /*RYU_NEVER_INLINE*/ bool StartsWith_case_insensitive(const char* next, const char* last, const char* lower_case_prefix)
-{
-    for ( ; next != last && *lower_case_prefix != '\0'; ++next, ++lower_case_prefix)
-    {
-        if ((static_cast<unsigned char>(*next) | 0x20) != *lower_case_prefix)
-            return false;
-    }
-
-    return *lower_case_prefix == '\0';
-}
-
-static RYU_NEVER_INLINE StrtodResult ParseInfinity(const char* next, const char* last)
-{
-    RYU_ASSERT((*next == 'i' || *next == 'I'));
-
-    if (!StartsWith_case_insensitive(next + 1, last, "nf"))
-        return {next, StrtodStatus::invalid};
-
-    next += 3;
-    if (StartsWith_case_insensitive(next, last, "inity"))
-        next += 5;
-
-    return {next, StrtodStatus::inf};
-}
-
-static RYU_NEVER_INLINE StrtodResult ParseNaN(const char* next, const char* last)
-{
-    RYU_ASSERT((*next == 'n' || *next == 'N'));
-    const char* const first = next;
-
-    if (!StartsWith_case_insensitive(next + 1, last, "an"))
-        return {next, StrtodStatus::invalid};
-
-    next += 3;
-    if (next != last && *next == '(')
-    {
-        for (const char* p = next + 1; p != last; ++p)
-        {
-            if (*p == ')')
-                return {p + 1, StrtodStatus::nan};
-
-            if (*p == '_' || IsDigit(*p) || IsUpperASCII(*p) || IsLowerASCII(*p))
-                continue;
-
-            return {first, StrtodStatus::invalid}; // invalid/incomplete nan-sequence
-        }
-    }
-
-    return {next, StrtodStatus::nan};
-}
-
-namespace {
-struct ParsedNumber
-{
-    static constexpr int MaxDecimalDigits = 128;
-
-    int8_t digits[MaxDecimalDigits];
-    int    num_digits;
-    int    exponent;
-    int    negative;
-
-    StrtodResult Parse(const char* next, const char* last)
-    {
-        if (next == last)
-            return {next, StrtodStatus::invalid}; // invalid (empty) input
-
-        num_digits = 0;
-        exponent = 0;
-
-    // [-]
-
-        negative = (*next == '-');
-        if (negative || *next == '+')
-        {
-            ++next;
-            if (next == last)
-                return {next, StrtodStatus::invalid};
-        }
-
-    // int
-
-        // (We don't accept numbers with a leading '.' here!)
-
-        if (*next == '0')
-        {
-            ++next;
-            if (next == last)
-                return {next, StrtodStatus::zero};
-
-#if 0
-            // 0 followed by another digit is invalid in JSON.
-            if (IsDigit(*next))
-                return {next, StrtofStatus::invalid};
-#endif
-        }
-        else if (IsDigit(*next)) // non-0
-        {
-            for (;;)
-            {
-                if (num_digits == MaxDecimalDigits)
-                    return {next, StrtodStatus::invalid}; // input too long
-
-                digits[num_digits] = static_cast<int8_t>(DigitValue(*next));
-                ++num_digits;
-
-                ++next;
-                if (next == last)
-                    return {next, StrtodStatus::integer};
-
-                if (!IsDigit(*next))
-                    break;
-            }
-        }
-        else if (last - next >= 3 && (*next == 'i' || *next == 'I'))
-        {
-            return ParseInfinity(next, last);
-        }
-        else if (last - next >= 3 && (*next == 'n' || *next == 'N'))
-        {
-            return ParseNaN(next, last);
-        }
-        else
-        {
-            return {next, StrtodStatus::invalid};
-        }
-
-    // frac
-
-        bool is_decimal = false;
-
-        RYU_ASSERT(next != last);
-        if (*next == '.')
-        {
-            is_decimal = true;
-            ++next; // skip '.'
-
-            if (num_digits == 0)
-            {
-                // Number is of the form "0.xxx..."
-                // Ignore leading zeros in the fractional part and adjust the exponent.
-                for ( ; next != last && *next == '0'; ++next)
-                    --exponent;
-            }
-
-            // Scan the fractional part
-            for ( ; next != last && IsDigit(*next); ++next)
-            {
-                if (num_digits == MaxDecimalDigits)
-                    return {next, StrtodStatus::invalid}; // input too long
-
-                digits[num_digits] = static_cast<int8_t>(DigitValue(*next));
-                ++num_digits;
-                --exponent;
-            }
-        }
-
-    // exp
-
-        if (next != last && (*next == 'e' || *next == 'E'))
-        {
-            // TODO:
-            // Accept - and ignore! - incomplete exponents...
-
-            is_decimal = true;
-            ++next; // skip 'e' or 'E'
-
-            // If we didn't consume any significant digits, the number can only be 0.
-            // But we want to parse the complete number, so we continue parsing the exponent.
-
-            if (next == last)
-                return {next, StrtodStatus::invalid}; // incomplete exponent
-
-            const bool parsed_exponent_is_negative = (*next == '-');
-            if (parsed_exponent_is_negative || *next == '+')
-            {
-                ++next;
-                if (next == last)
-                    return {next, StrtodStatus::invalid}; // incomplete exponent
-            }
-
-            if (!IsDigit(*next))
-                return {next, StrtodStatus::invalid}; // incomplete exponent
-
-            // Parse up to 3 digits of the exponent.
-            //  (This includes leading zeros, which should probably be ignored.)
-            int parsed_exponent = DigitValue(*next);
-            ++next;
-            if (next != last && IsDigit(*next))
-            {
-                parsed_exponent = 10 * parsed_exponent + DigitValue(*next);
-                ++next;
-            }
-            if (next != last && IsDigit(*next))
-            {
-                parsed_exponent = 10 * parsed_exponent + DigitValue(*next);
-                ++next;
-            }
-            if (next != last && IsDigit(*next))
-                return {next, StrtodStatus::invalid}; // too many digits in exponent
-
-            exponent += parsed_exponent_is_negative ? -parsed_exponent : parsed_exponent;
-        }
-
-        return {next, is_decimal ? StrtodStatus::decimal : StrtodStatus::integer};
-    }
-};
-} // namespace
-
-//==================================================================================================
 // ToBinary64
 //==================================================================================================
 
-// Returns the number of leading 0-bits in x, starting at the most significant bit position.
-// If x is 0, the result is undefined.
-static inline int CountLeadingZeros64(uint64_t x)
-{
-    RYU_ASSERT(x != 0);
+// Maximum number of decimal digits in the significand the fast ToBinary method can handle.
+// Inputs with more significant digits must be processed using another algorithm.
+static constexpr int ToBinaryMaxDecimalDigits = 17;
 
-#if defined(__GNUC__)
-    return __builtin_clzll(x);
-#elif defined(_MSC_VER) && (defined(_M_ARM) || defined(_M_ARM64))
-    return static_cast<int>(_CountLeadingZeros64(x));
-#elif defined(_MSC_VER) && defined(_M_X64)
-    return static_cast<int>(__lzcnt64(x));
-#elif defined(_MSC_VER) && defined(_M_IX86)
-    int lz = static_cast<int>( __lzcnt(static_cast<uint32_t>(x >> 32)) );
-    if (lz == 32) {
-        lz += static_cast<int>( __lzcnt(static_cast<uint32_t>(x)) );
-    }
-    return lz;
-#else
-    int lz = 0;
-    while ((x >> 63) == 0) {
-        x <<= 1;
-        ++lz;
-    }
-    return lz;
-#endif
-}
+// Any input <= 10^MinDecimalExponent is interpreted as 0.
+// Any input >  10^MaxDecimalExponent is interpreted as +Infinity.
+static constexpr int MinDecimalExponent = -324; // denorm_min = 4.9406564584124654e-324 >=  1 * 10^-324
+static constexpr int MaxDecimalExponent =  309; //        max = 1.7976931348623158e+308 <= 10 * 10^+308
 
 static inline int FloorLog2(uint64_t x)
 {
     RYU_ASSERT(x != 0);
-    return 63 - CountLeadingZeros64(x);
+
+#if defined(__GNUC__) || defined(__clang__)
+    return 63 - __builtin_clzll(x);
+#elif defined(_MSC_VER) && defined(_M_X64)
+    unsigned long index;
+    _BitScanReverse64(&index, x);
+    return static_cast<int>(index);
+#else
+    int l2 = 0;
+    for (;;)
+    {
+        x >>= 1;
+        if (x == 0)
+            break;
+        ++l2;
+    }
+    return l2;
+#endif
 }
 
 static inline int FloorLog2Pow10(int e)
@@ -1907,7 +1651,7 @@ static inline int ExtractBit(uint64_t x, int n)
 {
     RYU_ASSERT(n >= 0);
     RYU_ASSERT(n <= 63);
-    return (x >> n) & 1;
+    return (x & (uint64_t{1} << n)) != 0;
 }
 
 static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
@@ -1915,18 +1659,91 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
     static constexpr int MantissaBits = Double::SignificandSize - 1;
     static constexpr int ExponentBias = Double::ExponentBias - (Double::SignificandSize - 1);
 
-    RYU_ASSERT(m10 >= 0);
+    RYU_ASSERT(m10 > 0);
     RYU_ASSERT(m10_digits == DecimalLength(m10));
-    RYU_ASSERT(m10_digits <= 17);
+    RYU_ASSERT(m10_digits <= ToBinaryMaxDecimalDigits);
+    RYU_ASSERT(e10 >  MinDecimalExponent - m10_digits);
+    RYU_ASSERT(e10 <= MaxDecimalExponent - m10_digits);
+    static_cast<void>(m10_digits);
 
-    if (m10 == 0)
-        return 0;
+#if defined(_M_X64) || defined(__x86_64__)
+    // If the significand fits into a double (m10 <= 2^53) and the exponent 10^e10 (or 10^-e10)
+    // fits into a double too (-22 <= e10 <= 22), we can compute the result simply by multiplying,
+    // resp. dividing, the two numbers.
+    // This is possible since IEEE guarantees that the result is correctly rounded in this case.
+    //
+    // If there are less than 15 decimal digits in the significand, we can extend the upper bound
+    // for e10 slightly to 22 + (15 - m10_digits) by moving some zeros from the exponent into the
+    // significand before the multiplication. E.g., we can write
+    //      123 * 10^25 = (123 * 10^3) * 10^22,
+    // since the product inside the parantheses will be < 2^53 and therefore will be exactly
+    // representable as double.
 
-    if (m10_digits + e10 <= -324) // underflow
-        return 0;
+    static constexpr double ExactPowersOfTen[23] = {
+        1e+00,
+        1e+01,
+        1e+02,
+        1e+03,
+        1e+04,
+        1e+05,
+        1e+06,
+        1e+07,
+        1e+08,
+        1e+09,
+        1e+10,
+        1e+11,
+        1e+12,
+        1e+13,
+        1e+14,
+        1e+15, // 10^15 < 9007199254740992 = 2^53
+        1e+16, // 10^16 = 5000000000000000 * 2^1  = (10^15 * 5^1 ) * 2^1
+        1e+17, // 10^17 = 6250000000000000 * 2^4  = (10^13 * 5^4 ) * 2^4
+        1e+18, // 10^18 = 7812500000000000 * 2^7  = (10^11 * 5^7 ) * 2^7
+        1e+19, // 10^19 = 4882812500000000 * 2^11 = (10^8  * 5^11) * 2^11
+        1e+20, // 10^20 = 6103515625000000 * 2^14 = (10^6  * 5^14) * 2^14
+        1e+21, // 10^21 = 7629394531250000 * 2^17 = (10^4  * 5^17) * 2^17
+        1e+22, // 10^22 = 4768371582031250 * 2^21 = (10^1  * 5^21) * 2^21
+    };
 
-    if (m10_digits + e10 >= 310) // overflow
-        return std::numeric_limits<double>::infinity();
+#if 0
+    if (m10 <= (uint64_t{1} << 53) && -22 <= e10 && e10 <= 22 + Max(0, 15 - m10_digits))
+    {
+        double flt = static_cast<double>(static_cast<int64_t>(m10));
+        if (e10 < 0)
+        {
+            flt /= ExactPowersOfTen[static_cast<uint32_t>(-e10)];
+        }
+        else if (e10 <= 22)
+        {
+            flt *= ExactPowersOfTen[static_cast<uint32_t>( e10)];
+        }
+        else
+        {
+            RYU_ASSERT(m10_digits < 15);
+
+            const int zeros = 15 - m10_digits;
+            flt *= ExactPowersOfTen[static_cast<uint32_t>(zeros)];
+            flt *= ExactPowersOfTen[static_cast<uint32_t>(e10 - zeros)];
+        }
+
+        return flt;
+    }
+#else
+    // NB:
+    // num_digits is unused...
+
+    if (m10 <= (uint64_t{1} << 53) && -22 <= e10 && e10 <= 22)
+    {
+        double flt = static_cast<double>(static_cast<int64_t>(m10));
+        if (e10 < 0)
+            flt /= ExactPowersOfTen[static_cast<uint32_t>(-e10)];
+        else
+            flt *= ExactPowersOfTen[static_cast<uint32_t>( e10)];
+
+        return flt;
+    }
+#endif
+#endif
 
     // Convert to binary float m2 * 2^e2, while retaining information about whether the conversion
     // was exact.
@@ -2007,7 +1824,7 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
         significand >>= 1;
         ++ieee_e2;
     }
-    if (significand >= 1 * Double::HiddenBit && ieee_e2 == 0)
+    else if (significand >= 1 * Double::HiddenBit && ieee_e2 == 0)
     {
         RYU_ASSERT((significand & 1) == 0);
         ++ieee_e2;
@@ -2022,109 +1839,336 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
 // Strtod
 //==================================================================================================
 
-#if RYU_USE_SSE41()
-static inline int32_t Parse8Digits(const int8_t* digits)
+#define RYU_ASSUME_NULL_TERMINATED_INPUT() 0
+
+using charconv::StrtodStatus;
+using charconv::StrtodResult;
+
+static inline bool IsDigit(char ch)
 {
-    // From:
-    // https://github.com/lemire/simdjson/
-
-    // This actually computes *16* values so we are being wasteful.
-
-    const __m128i mul_1_10 = _mm_setr_epi8(10, 1, 10, 1, 10, 1, 10, 1, 10, 1, 10, 1, 10, 1, 10, 1);
-    const __m128i mul_1_100 = _mm_setr_epi16(100, 1, 100, 1, 100, 1, 100, 1);
-    const __m128i mul_1_10000 = _mm_setr_epi16(10000, 1, 10000, 1, 10000, 1, 10000, 1);
-
-    const __m128i input = _mm_loadu_si128(reinterpret_cast<const __m128i*>(digits));
-    const __m128i t1 = _mm_maddubs_epi16(input, mul_1_10);
-    const __m128i t2 = _mm_madd_epi16(t1, mul_1_100);
-    const __m128i t3 = _mm_packus_epi32(t2, t2);
-    const __m128i t4 = _mm_madd_epi16(t3, mul_1_10000);
-
-    // This only captures the sum of the first 8 digits, drop the rest.
-    return _mm_cvtsi128_si32(t4);
+    return static_cast<unsigned>(ch - '0') <= 9u;
 }
-#endif
 
-static inline int64_t ReadInt64(const int8_t* next, const int8_t* last)
+static inline int DigitValue(char ch)
 {
-    RYU_ASSERT(last - next <= std::numeric_limits<int64_t>::digits10);
+    RYU_ASSERT(IsDigit(ch));
+    return ch - '0';
+}
 
-    int64_t v = 0;
-#if RYU_USE_SSE41()
-    if (last - next >= 8) {
-        v = Parse8Digits(next);
-        next += 8;
+static inline bool IsLowerASCII(char ch)
+{
+    return 'a' <= ch && ch <= 'z';
+}
+
+static inline bool IsUpperASCII(char ch)
+{
+    return 'A' <= ch && ch <= 'Z';
+}
+
+static inline char ToLowerASCII(char ch)
+{
+//  return IsUpperASCII(ch) ? static_cast<char>(ch - 'A' + 'a') : ch;
+    return static_cast<char>(static_cast<unsigned char>(ch) | 0x20);
+}
+
+static inline bool StartsWith(const char* next, const char* last, const char* lower_case_prefix)
+{
+    for ( ; next != last && *lower_case_prefix != '\0'; ++next, ++lower_case_prefix)
+    {
+        RYU_ASSERT(IsLowerASCII(*lower_case_prefix));
+        if (ToLowerASCII(*next) != *lower_case_prefix)
+            return false;
     }
-    if (last - next >= 8) {
-        v = Parse8Digits(next) + v * 100000000;
-        next += 8;
+
+    return *lower_case_prefix == '\0';
+}
+
+static inline StrtodResult ParseInfinity(const char* next, const char* last)
+{
+    RYU_ASSERT((*next == 'i' || *next == 'I'));
+
+    if (!StartsWith(next + 1, last, "nf"))
+        return {next, StrtodStatus::invalid};
+
+    next += 3;
+    if (StartsWith(next, last, "inity"))
+        next += 5;
+
+    return {next, StrtodStatus::ok};
+}
+
+// FIXME:
+// Don't ignore the nan-sequence!!!
+static inline StrtodResult ParseNaN(const char* next, const char* last)
+{
+    RYU_ASSERT((*next == 'n' || *next == 'N'));
+
+    if (!StartsWith(next + 1, last, "an"))
+        return {next, StrtodStatus::invalid};
+
+    next += 3;
+    if (next != last && *next == '(')
+    {
+        const char* const first = next;
+        for (const char* p = next + 1; p != last; ++p)
+        {
+            if (*p == ')')
+                return {p + 1, StrtodStatus::ok};
+
+            if (*p == '_' || IsDigit(*p) || IsUpperASCII(*p) || IsLowerASCII(*p))
+                continue;
+
+            return {first, StrtodStatus::invalid}; // invalid/incomplete nan-sequence
+        }
     }
+
+    return {next, StrtodStatus::ok};
+}
+
+static RYU_NEVER_INLINE StrtodResult ParseSpecial(bool is_negative, const char* next, const char* last, double& value)
+{
+    if (*next == 'i' || *next == 'I')
+    {
+        const auto res = ParseInfinity(next, last);
+        if (res.status != StrtodStatus::invalid)
+        {
+            value = is_negative ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
+        }
+        return res;
+    }
+
+    if (*next == 'n' || *next == 'N')
+    {
+        const auto res = ParseNaN(next, last);
+        if (res.status != StrtodStatus::invalid)
+        {
+            value = std::numeric_limits<double>::quiet_NaN();
+        }
+        return res;
+    }
+
+    return {next, StrtodStatus::invalid};
+}
+
+static RYU_NEVER_INLINE StrtodResult StdStrtod(const char* next, const char* last, double& value)
+{
+    //
+    // FIXME:
+    // _strtod_l( ..., C_LOCALE )
+    //
+
+#if RYU_ASSUME_NULL_TERMINATED_INPUT()
+    const char* const ptr = next;
+#else
+    // std::strtod expects null-terminated inputs. So we need to make a copy and null-terminate the input.
+    // This function is actually almost never going to be called, so that should be ok.
+    const std::string inp(next, last);
+
+    const char* const ptr = inp.c_str();
 #endif
-    for ( ; next != last; ++next) {
-        v = 10 * v + *next;
-    }
-    return v;
+    char* end;
+    const auto flt = ::strtod(ptr, &end);
+
+    if (ptr == end)
+        return {next, StrtodStatus::invalid}; // invalid argument (this shouldn't happen here...)
+#if 0
+    if (errno == ERANGE)
+        return {next, StrtodStatus::invalid};
+#endif
+
+    // std::strtod should have consumed all of the input.
+    RYU_ASSERT(last - next == end - ptr);
+
+    value = flt;
+    return {last, StrtodStatus::ok};
 }
 
 StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
 {
-    ParsedNumber dec;
-    const auto res = dec.Parse(next, last);
+    const char* const start = next;
 
-    if (res.status == StrtodStatus::invalid) {
-        return res;
+    if (next == last)
+        return {next, StrtodStatus::invalid};
+
+    // Decompose the input into the form significand * 10^exponent,
+    // where significand has num_digits decimal digits.
+
+    uint64_t significand = 0; // only valid iff num_digits <= 19
+    int64_t  num_digits  = 0; // 64-bit to avoid overflow...
+    int64_t  exponent    = 0; // 64-bit to avoid overflow...
+
+// [-]
+
+    const bool is_negative = (*next == '-');
+    if (is_negative || *next == '+')
+    {
+        ++next;
+        if (next == last)
+            return {next, StrtodStatus::invalid};
     }
 
-    if (res.status == StrtodStatus::zero) {
-        value = dec.negative ? -0.0f : 0.0f;
-        return res;
+// int
+
+    const bool has_leading_zero = (*next == '0');
+    const bool has_leading_dot  = (*next == '.');
+
+    if (has_leading_zero)
+    {
+        for (;;)
+        {
+            ++next;
+            if (next == last || *next != '0')
+                break;
+        }
     }
 
-    if (res.status == StrtodStatus::integer || res.status == StrtodStatus::decimal) {
-        const int8_t* digits     = dec.digits;
-        int           num_digits = dec.num_digits;
-        int           exponent   = dec.exponent;
+    if (next != last && IsDigit(*next)) // non-0
+    {
+        const char* const p = next;
 
-        RYU_ASSERT(num_digits == 0 || digits[0] != 0);
-
-        // Trim trailing zeros.
-        const int min_digits = 16; // 17; // 0;
-        while (num_digits > min_digits && digits[num_digits - 1] == 0) {
-            --num_digits;
-            ++exponent;
+        significand = DigitValue(*next);
+        ++next;
+        while (next != last && IsDigit(*next))
+        {
+            significand = 10 * significand + DigitValue(*next);
+            ++next;
         }
 
-        if (num_digits > 17) {
-            // We refuse to parse such "long" inputs...
-            return {res.next, StrtodStatus::invalid};
+        num_digits = next - p;
+    }
+    else if (!has_leading_zero && !has_leading_dot)
+    {
+        return ParseSpecial(is_negative, next, last, value);
+    }
+
+// frac
+
+    if (has_leading_dot || (next != last && *next == '.'))
+    {
+        ++next; // skip '.'
+        if (next != last && IsDigit(*next))
+        {
+            // TODO:
+            // Ignore trailing zeros...
+
+            const char* const p = next;
+
+            significand = 10 * significand + DigitValue(*next);
+            ++next;
+            while (next != last && IsDigit(*next))
+            {
+                significand = 10 * significand + DigitValue(*next);
+                ++next;
+            }
+
+            const char* nz = p;
+            if (num_digits == 0)
+            {
+                // Number is of the form "0.xxx...".
+                // Move the leading zeros in the fractional part into the exponent.
+                while (nz != next && *nz == '0')
+                    ++nz;
+            }
+
+            num_digits += next - nz;
+            exponent = -(next - p);
         }
-
-        double flt = 0;
-        if (num_digits != 0) {
-            const int64_t significand = ReadInt64(digits, digits + num_digits);
-            const int64_t max_int = 9007199254740992ll; // 2^53
-
-            if (exponent == 0 && significand <= max_int)
-                flt = static_cast<double>(significand);
-            else
-                flt = ToBinary64(static_cast<uint64_t>(significand), num_digits, exponent);
+        else
+        {
+            // No digits in the fractional part.
+            // But at least one digit must appear in either the integral or the fractional part.
+            if (has_leading_dot)
+                return {next, StrtodStatus::invalid};
         }
-
-        value = dec.negative ? -flt : flt;
-        return res;
     }
 
-    if (res.status == StrtodStatus::nan) {
-        value = std::numeric_limits<double>::quiet_NaN();
-        return res;
+// exp
+
+    // Exponents larger than this limit will be treated as +Infinity.
+    // But we must still scan all the digits if this happens to be the case.
+    static constexpr int MaxExp = 999999;
+    static_assert(MaxExp >= 999, "invalid parameter");
+    static_assert(MaxExp <= (INT_MAX - 9) / 10, "invalid parameter");
+
+    int parsed_exponent = 0;
+    if (next != last && (*next == 'e' || *next == 'E'))
+    {
+        // Possibly the start of an exponent...
+        // We accept (and ignore!) invalid or incomplete exponents.
+        // The 'next' pointer is updated if and only if a valid exponent has been found.
+        const char* p = next;
+
+        ++p; // skip 'e' or 'E'
+        if (p != last)
+        {
+            const bool parsed_exponent_is_negative = (*p == '-');
+            if (parsed_exponent_is_negative || *p == '+')
+                ++p;
+
+            if (p != last && IsDigit(*p))
+            {
+                next = p; // Found a valid exponent.
+
+                parsed_exponent = DigitValue(*next);
+                ++next;
+                if (next != last && IsDigit(*next))
+                {
+                    parsed_exponent = 10 * parsed_exponent + DigitValue(*next);
+                    ++next;
+                }
+                if (next != last && IsDigit(*next))
+                {
+                    parsed_exponent = 10 * parsed_exponent + DigitValue(*next);
+                    ++next;
+                }
+                while (next != last && IsDigit(*next))
+                {
+                    if (parsed_exponent <= MaxExp)
+                        parsed_exponent = 10 * parsed_exponent + DigitValue(*next);
+                    ++next;
+                }
+
+                parsed_exponent = parsed_exponent_is_negative ? -parsed_exponent : parsed_exponent;
+
+                // (Assume overflow does not happen here...)
+                exponent += parsed_exponent;
+            }
+        }
     }
 
-    if (res.status == StrtodStatus::inf) {
-        value = dec.negative ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::infinity();
-        return res;
+    RYU_ASSERT(num_digits >= 0);
+
+    double flt;
+    if (num_digits == 0)
+    {
+        flt = 0;
+    }
+    else if (parsed_exponent < -MaxExp || exponent + num_digits <= MinDecimalExponent)
+    {
+        // input = x * 10^-inf = 0
+        // or
+        // input < 10^MinDecimalExponent, which rounds to +-0.
+        flt = 0;
+    }
+    else if (parsed_exponent > +MaxExp || exponent + num_digits > MaxDecimalExponent)
+    {
+        // input = x * 10^+inf = +inf
+        // or
+        // input >= 10^MaxDecimalExponent, which rounds to +-infinity.
+        flt = std::numeric_limits<double>::infinity();
+    }
+    else if (num_digits <= ToBinaryMaxDecimalDigits)
+    {
+        RYU_ASSERT(exponent >= INT_MIN);
+        RYU_ASSERT(exponent <= INT_MAX);
+        flt = ToBinary64(significand, static_cast<int>(num_digits), static_cast<int>(exponent));
+    }
+    else
+    {
+        // We need to fall back to another algorithm if the input is too long.
+        return StdStrtod(start, next, value);
     }
 
-    RYU_ASSERT(false && "unreachable");
-    value = 0;
-    return {res.next, StrtodStatus::invalid};
+    value = is_negative ? -flt : flt;
+    return {next, StrtodStatus::ok};
 }
