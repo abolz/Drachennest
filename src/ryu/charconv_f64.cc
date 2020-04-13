@@ -15,6 +15,7 @@
 
 #include "charconv_f64.h"
 
+//#undef NDEBUG
 #include <cassert>
 #include <climits>
 #include <cstdint>
@@ -1750,8 +1751,18 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
 
     const auto log2_m10 = FloorLog2(m10);
     RYU_ASSERT(log2_m10 >= 0);
-    RYU_ASSERT(log2_m10 <= 56);
+    RYU_ASSERT(log2_m10 <= 56); // 56 = floor(log_2(10^17))
 
+    // The length of m10 * 10^e10 in bits is: log2(m10 * 10^e10) = log2(m10) + log2(10^e10).
+    // We want to compute the (MantissaBits + 1) top-most bits (+1 for the implicit leading
+    // one in IEEE format). We therefore choose a binary output exponent of
+    //   e2 = log2(m10 * 10^e10) - (MantissaBits + 1).
+    //
+    // We use floor(log2(5^e10)) so that we get at least this many bits; better to have an
+    // additional bit than to not have enough bits.
+
+    // We compute [m10 * 10^e10 / 2^e2] == [m10 * 5^e10 / 2^(e2 - e10)]
+    //
     // Let b = floor(log_2(m10))
     // Let n = floor(log_2(5^e10))
     // Then
@@ -1777,14 +1788,29 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
     RYU_ASSERT(log2_m2 >= 53);
     RYU_ASSERT(log2_m2 <= 54);
 
+    // We also compute if the result is exact, i.e., [m10 * 10^e10 / 2^e2] == m10 * 10^e10 / 2^e2.
+    //  (See: Ryu Revisited, Section 4.3)
     bool is_exact;
     if (e10 >= 0)
     {
-        // 56 = floor(log_2(10^17))
-        is_exact = (e2 < e10) || (e2 - e10 < 64 && MultipleOfPow2(m10, e2 - e10));
+        // 2^(e2 - e10) | m10 5^e10
+        //  <==> p2(m10 5^e10)       >= e2 - e10
+        //  <==> p2(m10) + e10 p2(5) >= e2 - e10
+        //  <==> p2(m10)             >= e2 - e10
+
+        is_exact = (e2 <= e10) || (e2 - e10 < 64 && MultipleOfPow2(m10, e2 - e10));
     }
     else
     {
+        // m10 10^e10 / 2^e2
+        //  == m10 2^e10 5^e10 / 2^e2
+        //  == m10 2^(e10 - e2) / 5^(-e10)
+
+        // 5^(-e10) | m10 2^(e10 - e2)
+        //  <==> p5(m10 2^(e10 - e2))       >= -e10
+        //  <==> p5(m10) + (e10 - e2) p5(2) >= -e10
+        //  <==> p5(m10)                    >= -e10
+
         // 57 = ceil(log_2(10^17))
         // 24 = floor(log_5(2^57))
         is_exact = -e10 <= 24 && MultipleOfPow5(m10, -e10);
@@ -1802,7 +1828,7 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
     // We need to figure out how much we need to shift m2.
     // The tricky part is that we need to take the final IEEE exponent into account, so we need to
     // reverse the bias and also special-case the value 0.
-    const auto shift = (ieee_e2 == 0 ? 1 : ieee_e2) - e2 - ExponentBias - MantissaBits;
+    const auto shift = (ieee_e2 == 0 ? 1 : ieee_e2) - e2 - (ExponentBias + MantissaBits);
     RYU_ASSERT(shift > 0);
 
     // We need to round up if the exact value is more than 0.5 above the value we computed. That's
@@ -1816,17 +1842,25 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
         = last_removed_bit != 0 && (!trailing_zeros || ExtractBit(m2, shift) != 0);
 
     auto significand = (m2 >> shift) + round_up;
-    RYU_ASSERT(significand <= 2 * Double::HiddenBit);
+    RYU_ASSERT(significand <= 2 * Double::HiddenBit); // significand <= 2^(p+1) = 2^54
 
+    // Rounding up may cause overflow.
     if (significand == 2 * Double::HiddenBit)
     {
+        RYU_ASSERT(round_up);
+
+        // Move a trailing zero of the significand into the exponent.
         // Due to how the IEEE represents +/-Infinity, we don't need to check for overflow here.
-        significand >>= 1;
+        // We don't need to shift the significand here because we only use the lower 52 bits below.
         ++ieee_e2;
     }
-    else if (significand >= 1 * Double::HiddenBit && ieee_e2 == 0)
+    else if (significand == Double::HiddenBit && ieee_e2 == 0)
     {
-        RYU_ASSERT((significand & 1) == 0);
+        RYU_ASSERT(round_up);
+
+        // Subnormal number shifted into the normal range.
+        // We need to adjust the IEEE exponent in this case.
+        // We don't need to shift the significand here because we only use the lower 52 bits below.
         ++ieee_e2;
     }
 
@@ -2111,11 +2145,6 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
 
                 parsed_exponent = DigitValue(*next);
                 ++next;
-                if (next != last && IsDigit(*next))
-                {
-                    parsed_exponent = 10 * parsed_exponent + DigitValue(*next);
-                    ++next;
-                }
                 if (next != last && IsDigit(*next))
                 {
                     parsed_exponent = 10 * parsed_exponent + DigitValue(*next);
