@@ -50,6 +50,9 @@
 #endif
 #endif
 
+#define RYU_FROM_CHARS_FALLBACK() 1
+#define RYU_ASSUME_NULL_TERMINATED_INPUT() 0
+
 //==================================================================================================
 //
 //==================================================================================================
@@ -1683,6 +1686,9 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
     RYU_ASSERT(e10 <= MaxDecimalExponent - m10_digits);
     static_cast<void>(m10_digits);
 
+    // e10 >= -323 - m10_digits >= -323 - 17 = -340
+    // e10 <=  309 - m10_digits <=  309 -  1 =  308
+
 #if defined(_M_X64) || defined(__x86_64__)
     // If the significand fits into a double (m10 <= 2^53) and the exponent 10^e10 (or 10^-e10)
     // fits into a double too (-22 <= e10 <= 22), we can compute the result simply by multiplying,
@@ -1888,10 +1894,56 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
 }
 
 //==================================================================================================
-// Strtod
+// ToBinary64Slow
 //==================================================================================================
 
-#define RYU_ASSUME_NULL_TERMINATED_INPUT() 0
+#if RYU_FROM_CHARS_FALLBACK()
+#include <charconv>
+#endif
+
+static RYU_NEVER_INLINE double ToBinary64Slow(const char* next, const char* last, uint64_t /*significand*/, int64_t /*num_digits*/, int64_t /*exponent*/)
+{
+    //RYU_ASSERT(exponent + num_digits >  MinDecimalExponent);
+    //RYU_ASSERT(exponent + num_digits <= MaxDecimalExponent);
+
+#if RYU_FROM_CHARS_FALLBACK()
+    double value;
+    const auto result = std::from_chars(next, last, value);
+
+//  RYU_ASSERT(result.ec == std::errc{});
+
+    // std::from_chars should have consumed all of the input.
+    RYU_ASSERT(last == result.ptr);
+
+    return value;
+#else
+    //
+    // FIXME:
+    // _strtod_l( ..., C_LOCALE )
+    //
+
+#if RYU_ASSUME_NULL_TERMINATED_INPUT()
+    const char* const ptr = next;
+#else
+    // std::strtod expects null-terminated inputs. So we need to make a copy and null-terminate the input.
+    // This function is actually almost never going to be called, so that should be ok.
+    const std::string inp(next, last);
+
+    const char* const ptr = inp.c_str();
+#endif
+    char* end;
+    const double value = ::strtod(ptr, &end);
+
+    // std::strtod should have consumed all of the input.
+    RYU_ASSERT(last - next == end - ptr);
+
+    return value;
+#endif
+}
+
+//==================================================================================================
+// Strtod
+//==================================================================================================
 
 using charconv::StrtodStatus;
 using charconv::StrtodResult;
@@ -2002,43 +2054,8 @@ static RYU_NEVER_INLINE StrtodResult ParseSpecial(bool is_negative, const char* 
     return {next, StrtodStatus::invalid};
 }
 
-static RYU_NEVER_INLINE StrtodResult StdStrtod(const char* next, const char* last, double& value)
-{
-    //
-    // FIXME:
-    // _strtod_l( ..., C_LOCALE )
-    //
-
-#if RYU_ASSUME_NULL_TERMINATED_INPUT()
-    const char* const ptr = next;
-#else
-    // std::strtod expects null-terminated inputs. So we need to make a copy and null-terminate the input.
-    // This function is actually almost never going to be called, so that should be ok.
-    const std::string inp(next, last);
-
-    const char* const ptr = inp.c_str();
-#endif
-    char* end;
-    const auto flt = ::strtod(ptr, &end);
-
-    if (ptr == end)
-        return {next, StrtodStatus::invalid}; // invalid argument (this shouldn't happen here...)
-#if 0
-    if (errno == ERANGE)
-        return {next, StrtodStatus::invalid};
-#endif
-
-    // std::strtod should have consumed all of the input.
-    RYU_ASSERT(last - next == end - ptr);
-
-    value = flt;
-    return {last, StrtodStatus::ok};
-}
-
 StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
 {
-    const char* const start = next;
-
     if (next == last)
         return {next, StrtodStatus::invalid};
 
@@ -2061,6 +2078,8 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
 
 // int
 
+    const char* const digits_start = next;
+
     const bool has_leading_zero = (*next == '0');
     const bool has_leading_dot  = (*next == '.');
 
@@ -2076,6 +2095,8 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
 
     if (next != last && IsDigit(*next)) // non-0
     {
+//      digits_start = next;
+
         const char* const p = next;
 
         significand = DigitValue(*next);
@@ -2120,6 +2141,8 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
                 // Move the leading zeros in the fractional part into the exponent.
                 while (nz != next && *nz == '0')
                     ++nz;
+
+//              digits_start = nz;
             }
 
             num_digits += next - nz;
@@ -2133,6 +2156,8 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
                 return {next, StrtodStatus::invalid};
         }
     }
+
+//  const char* const digits_end = next;
 
 // exp
 
@@ -2213,7 +2238,7 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
     else
     {
         // We need to fall back to another algorithm if the input is too long.
-        return StdStrtod(start, next, value);
+        flt = ToBinary64Slow(digits_start, next /*digits_end*/, significand, num_digits, exponent);
     }
 
     value = is_negative ? -flt : flt;
