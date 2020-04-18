@@ -308,7 +308,7 @@ static inline uint64_t ComputePow5_Single(int k)
 static inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
 {
     RYU_ASSERT(j >= 32);
-    RYU_ASSERT(j <= 127);
+    RYU_ASSERT(j <= 95);
 
 #if defined(__SIZEOF_INT128__)
     __extension__ using uint128_t = unsigned __int128;
@@ -320,17 +320,12 @@ static inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
     const uint64_t h = __ull_rshift(hi, j); // Assume j >= 64: j - 64 == j % 64
     const uint64_t shifted_sum = (j & 64) ? h : l;
 #else
-#error "not implemented"
-
     const uint64_t bits0 = uint64_t{m} * Lo32(mul);
     const uint64_t bits1 = uint64_t{m} * Hi32(mul);
     const uint64_t sum = bits1 + Hi32(bits0);
-#if defined(_MSC_VER) && defined(_M_IX86) && !defined(__clang__)
-    const uint64_t shifted_sum = __ull_rshift(sum, j);
-#else
-    const int shift = j & 31;
+
+    const int shift = j - 32;
     const uint64_t shifted_sum = sum >> shift;
-#endif
 #endif
 
     return shifted_sum;

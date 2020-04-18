@@ -934,7 +934,6 @@ static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 }
 
 #else
-#error "not implemented"
 
 static inline Uint64x2 Mul128(uint64_t a, uint64_t b)
 {
@@ -962,12 +961,15 @@ static inline uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int n)
     RYU_ASSERT(n <= 63);
 
     const int lshift = -n & 63;
-    const int rshift =  n & 63;
+    const int rshift =  n;
     return (hi << lshift) | (lo >> rshift);
 }
 
 static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 {
+    RYU_ASSERT(j >= 64);
+    RYU_ASSERT(j <= 64 + 96 - 1);
+
     auto b0 = Mul128(m, mul->lo);
     auto b2 = Mul128(m, mul->hi);
 
@@ -975,8 +977,10 @@ static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
     b2.lo += b0.hi;
     b2.hi += b2.lo < b0.hi;
 
-    const int shift = j & 63;
-    return ShiftRight128(b2.lo, b2.hi, shift);
+    const int shift = j - 64; // [0, 128)
+    // NB:
+    // shift >= 64 ==> 0 <= shift - 64 <= 31 (use 32-bit intrinsics?)
+    return shift <= 63 ? ShiftRight128(b2.lo, b2.hi, shift) : b2.hi >> (shift - 64);
 }
 
 #endif
