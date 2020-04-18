@@ -50,7 +50,7 @@
 #endif
 #endif
 
-#define RYU_FROM_CHARS_FALLBACK() 1
+#define RYU_FROM_CHARS_FALLBACK() 0
 #define RYU_ASSUME_NULL_TERMINATED_INPUT() 0
 
 //==================================================================================================
