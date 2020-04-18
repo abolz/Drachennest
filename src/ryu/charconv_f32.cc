@@ -307,17 +307,21 @@ static inline uint64_t ComputePow5_Single(int k)
 
 static inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
 {
-    RYU_ASSERT(j >= 0);
-    RYU_ASSERT(j <= 63);
+    RYU_ASSERT(j >= 32);
+    RYU_ASSERT(j <= 127);
 
 #if defined(__SIZEOF_INT128__)
     __extension__ using uint128_t = unsigned __int128;
-    const uint64_t shifted_sum = static_cast<uint64_t>((uint128_t{mul} * m) >> (j & 63));
+    const uint64_t shifted_sum = static_cast<uint64_t>((uint128_t{mul} * m) >> j);
 #elif defined(_MSC_VER) && defined(_M_X64)
     uint64_t hi;
     uint64_t lo = _umul128(m, mul, &hi);
-    const uint64_t shifted_sum = __shiftright128(lo, hi, static_cast<unsigned char>(j));
+    const uint64_t l = __shiftright128(lo, hi, static_cast<unsigned char>(j));
+    const uint64_t h = __ull_rshift(hi, j); // Assume j >= 64: j - 64 == j % 64
+    const uint64_t shifted_sum = (j & 64) ? h : l;
 #else
+#error "not implemented"
+
     const uint64_t bits0 = uint64_t{m} * Lo32(mul);
     const uint64_t bits1 = uint64_t{m} * Hi32(mul);
     const uint64_t sum = bits1 + Hi32(bits0);
@@ -972,44 +976,6 @@ static inline int ExtractBit(uint32_t x, int n)
     return (x & (uint32_t{1} << n)) != 0;
 }
 
-// We cannot use the existing MulShift implementation here,
-// because we need to handle the case e2 >= 64 here.
-static inline uint32_t MulShift_ToBinary32(uint32_t m, int e5, int e2)
-{
-    RYU_ASSERT(e2 >= 32);
-    RYU_ASSERT(e2 <= 32 + 63);
-
-    const auto mul = ComputePow5_Single(e5);
-
-#if defined(__SIZEOF_INT128__)
-    __extension__ using uint128_t = unsigned __int128;
-    const uint64_t q = static_cast<uint64_t>((uint128_t{m} * mul) >> e2);
-#elif defined(_MSC_VER) && defined(_M_X64)
-    uint64_t hi;
-    uint64_t lo = _umul128(m, mul, &hi);
-#if 0
-    const uint64_t l = __shiftright128(lo, hi, static_cast<unsigned char>(e2));
-    const uint64_t h = __ull_rshift(hi, e2); // Assume e2 >= 64: e2 - 64 == e2 % 64
-    const uint64_t q = (e2 & 64) ? h : l;
-#else
-    const uint64_t q
-        = (e2 < 64)
-            ? __shiftright128(lo, hi, static_cast<unsigned char>(e2))
-                : (hi >> (e2 - 64));
-#endif
-#else
-    const uint64_t bits0 = uint64_t{m} * Lo32(mul);
-    const uint64_t bits1 = uint64_t{m} * Hi32(mul);
-    const uint64_t sum = bits1 + Hi32(bits0);
-    RYU_ASSERT(e2 - 32 >= 0);
-    RYU_ASSERT(e2 - 32 <= 63);
-    const uint64_t q = sum >> (e2 - 32);
-#endif
-
-    RYU_ASSERT(q <= UINT32_MAX);
-    return static_cast<uint32_t>(q);
-}
-
 static inline float ToBinary32(uint32_t m10, int m10_digits, int e10)
 {
     static constexpr int MantissaBits = Single::SignificandSize - 1;
@@ -1056,11 +1022,13 @@ static inline float ToBinary32(uint32_t m10, int m10_digits, int e10)
     const auto log2_10_e10 = FloorLog2Pow10(e10);
     const auto e2 = log2_m10 + log2_10_e10 - (MantissaBits + 1);
 
-    // NB:
-    // We cannot use the existing MulShift implementation here, because this function requires the
-    // binary exponent to be < 64.
+    const auto pow5 = ComputePow5_Single(e10);
     const auto j = log2_m10 + (BitsPerPow5_Single - MantissaBits - 2);
-    const auto m2 = MulShift_ToBinary32(m10, e10, j);
+    RYU_ASSERT(j >= 39);
+    RYU_ASSERT(j <= 68);
+    const auto product = MulShift(m10, pow5, j);
+    RYU_ASSERT(product <= UINT32_MAX);
+    const auto m2 = static_cast<uint32_t>(product);
 
     const auto log2_m2 = FloorLog2(m2);
     RYU_ASSERT(log2_m2 >= 24);
