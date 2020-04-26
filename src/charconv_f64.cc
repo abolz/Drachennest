@@ -139,6 +139,281 @@ struct Double
 //
 //==================================================================================================
 
+namespace {
+
+struct U128
+{
+#if defined(__SIZEOF_INT128__)
+    __extension__ using uint128_t = unsigned __int128;
+#endif
+
+    uint64_t hi;
+    uint64_t lo;
+
+    U128() noexcept = default;
+
+    constexpr explicit U128(unsigned char      value) noexcept : hi(0), lo(value) {}
+    constexpr explicit U128(unsigned short     value) noexcept : hi(0), lo(value) {}
+    constexpr explicit U128(unsigned int       value) noexcept : hi(0), lo(value) {}
+    constexpr explicit U128(unsigned long      value) noexcept : hi(0), lo(value) {}
+    constexpr explicit U128(unsigned long long value) noexcept : hi(0), lo(value) {}
+
+    constexpr U128(uint64_t hi_, uint64_t lo_) noexcept : hi(hi_), lo(lo_)
+    {
+    }
+
+#if defined(__SIZEOF_INT128__)
+    constexpr explicit U128(uint128_t value) noexcept
+        : hi(static_cast<uint64_t>(value >> 64))
+        , lo(static_cast<uint64_t>(value))
+    {
+    }
+
+    constexpr explicit operator uint128_t() const noexcept
+    {
+        return uint128_t{hi} << 64 | lo;
+    }
+#endif
+
+    constexpr explicit operator uint64_t() const noexcept
+    {
+        return lo;
+    }
+
+    friend bool operator==(U128 lhs, U128 rhs) noexcept
+    {
+        return lhs.hi == rhs.hi && lhs.lo == rhs.lo;
+    }
+
+    friend bool operator!=(U128 lhs, U128 rhs) noexcept
+    {
+        return !(lhs == rhs);
+    }
+
+    friend bool operator<(U128 lhs, U128 rhs) noexcept
+    {
+#if defined(__SIZEOF_INT128__)
+        return static_cast<uint128_t>(lhs) < static_cast<uint128_t>(rhs);
+#else
+        return lhs.hi < rhs.hi || (lhs.hi == rhs.hi && lhs.lo < rhs.lo);
+#endif
+    }
+
+    friend bool operator>(U128 lhs, U128 rhs) noexcept
+    {
+        return rhs < lhs;
+    }
+
+    friend bool operator<=(U128 lhs, U128 rhs) noexcept
+    {
+        return !(rhs < lhs);
+    }
+
+    friend bool operator>=(U128 lhs, U128 rhs) noexcept
+    {
+        return !(lhs < rhs);
+    }
+
+    friend U128 operator<<(U128 lhs, int amount) noexcept
+    {
+        RYU_ASSERT(amount >= 0);
+        RYU_ASSERT(amount <= 127);
+
+#if defined(__SIZEOF_INT128__)
+        return U128(static_cast<uint128_t>(lhs) << amount);
+#elif defined(_MSC_VER) && defined(_M_X64)
+        const uint64_t x = __shiftleft128(lhs.lo, lhs.hi, amount);
+        const uint64_t y = __ll_lshift(lhs.lo, amount);
+        const uint64_t h = (amount & 64) ? y : 0;
+        const uint64_t l = (amount & 64) ? x : y;
+        return U128(h, l);
+#else
+        if (amount < 64) {
+            if (amount != 0)
+                return U128(lhs.hi << amount | lhs.lo >> (64 - amount), lhs.lo << amount);
+            return lhs;
+        }
+        return U128(lhs.lo << (amount - 64), 0);
+#endif
+    }
+
+    friend U128& operator<<=(U128& lhs, int amount) noexcept
+    {
+        lhs = lhs << amount;
+        return lhs;
+    }
+
+    friend uint64_t ShiftLeft128_Lo64(U128 lhs, int amount) noexcept
+    {
+        RYU_ASSERT(amount >= 0);
+        RYU_ASSERT(amount <= 127);
+
+        if (amount < 64)
+            return lhs.lo << amount;
+
+        return 0;
+    }
+
+    friend uint64_t ShiftLeft128_Hi64(U128 lhs, int amount) noexcept
+    {
+        return (lhs << amount).hi;
+    }
+
+    friend U128 operator>>(U128 lhs, int amount) noexcept
+    {
+        RYU_ASSERT(amount >= 0);
+        RYU_ASSERT(amount <= 127);
+
+#if defined(__SIZEOF_INT128__)
+        return U128(static_cast<uint128_t>(lhs) >> amount);
+#elif defined(_MSC_VER) && defined(_M_X64)
+        const uint64_t x = __shiftright128(lhs.lo, lhs.hi, amount);
+        const uint64_t y = __ull_rshift(lhs.hi, amount);
+        const uint64_t h = (amount & 64) ? 0 : y;
+        const uint64_t l = (amount & 64) ? y : x;
+        return U128(h, l);
+#else
+        if (amount < 64) {
+            if (amount != 0)
+                return U128(lhs.hi >> amount, lhs.lo >> amount | lhs.hi << (64 - amount));
+            return lhs;
+        }
+        return U128(0, lhs.hi >> (amount - 64));
+#endif
+    }
+
+    friend U128& operator>>=(U128& lhs, int amount) noexcept
+    {
+        lhs = lhs >> amount;
+        return lhs;
+    }
+
+    friend uint64_t ShiftRight128_Lo64(U128 lhs, int amount) noexcept
+    {
+        return (lhs >> amount).lo;
+    }
+
+    friend uint64_t ShiftRight128_Hi64(U128 lhs, int amount)
+    {
+        RYU_ASSERT(amount >= 0);
+        RYU_ASSERT(amount <= 127);
+
+        if (amount < 64)
+            return lhs.hi >> amount;
+
+        return 0;
+    }
+
+    friend U128 operator&(U128 lhs, U128 rhs)
+    {
+#if defined(__SIZEOF_INT128__)
+        return U128(static_cast<uint128_t>(lhs) & static_cast<uint128_t>(rhs));
+#else
+        return U128(lhs.hi & rhs.hi, lhs.lo & rhs.lo);
+#endif
+    }
+
+    friend U128& operator&=(U128& lhs, U128 rhs) noexcept
+    {
+        lhs = lhs & rhs;
+        return lhs;
+    }
+
+    friend U128 operator+(U128 lhs, uint64_t rhs) noexcept
+    {
+#if defined(__SIZEOF_INT128__)
+        return U128(static_cast<uint128_t>(lhs) + rhs);
+#elif defined(_MSC_VER) && defined(_M_X64)
+        uint64_t lo;
+        uint64_t hi;
+        _addcarry_u64(_addcarry_u64(0, lhs.lo, rhs, &lo), lhs.hi, 0, &hi);
+        return U128(hi, lo);
+#else
+        const uint64_t lo = lhs.lo + rhs;
+        const uint64_t hi = lhs.hi + (lo < rhs);
+        return U128(hi, lo);
+#endif
+    }
+
+    friend U128 operator-(U128 lhs, uint64_t rhs) noexcept
+    {
+#if defined(__SIZEOF_INT128__)
+        return U128(static_cast<uint128_t>(lhs) - rhs);
+#elif defined(_MSC_VER) && defined(_M_X64)
+        uint64_t lo;
+        uint64_t hi;
+        _subborrow_u64(_subborrow_u64(0, lhs.lo, rhs, &lo), lhs.hi, 0, &hi);
+        return U128(hi, lo);
+#else
+        const uint64_t lo = lhs.lo - rhs;
+        const uint64_t hi = lhs.hi - (lhs.lo < rhs);
+        return U128(hi, lo);
+#endif
+    }
+};
+
+// Returns 2^e.
+static constexpr inline U128 MakePow2(int e)
+{
+    RYU_ASSERT(e >= 0);
+    RYU_ASSERT(e <= 127);
+
+    return (e < 64)
+        ? U128(0, uint64_t{1} << e)
+        : U128(uint64_t{1} << (e - 64), 0);
+}
+
+// Returns 2^e - 1.
+static constexpr inline U128 MakeMask(int e)
+{
+    RYU_ASSERT(e >= 0);
+    RYU_ASSERT(e <= 127);
+
+    return (e < 64)
+        ? U128(0, (uint64_t{1} << e) - 1)
+        : U128(e == 64 ? 0 : ((uint64_t{1} << (e - 64)) - 1), 0xFFFFFFFFFFFFFFFF);
+}
+
+// Returns the 128-bit product of a and b.
+static inline U128 Mul128(uint64_t a, uint64_t b) noexcept
+{
+#if defined(__SIZEOF_INT128__)
+    using uint128_t = U128::uint128_t;
+    return U128(uint128_t{a} * b);
+#elif defined(_MSC_VER) && defined(_M_X64)
+    uint64_t hi;
+    uint64_t lo = _umul128(a, b, &hi);
+    return {hi, lo};
+#else
+    const uint64_t b00 = uint64_t{Lo32(a)} * Lo32(b);
+    const uint64_t b01 = uint64_t{Lo32(a)} * Hi32(b);
+    const uint64_t b10 = uint64_t{Hi32(a)} * Lo32(b);
+    const uint64_t b11 = uint64_t{Hi32(a)} * Hi32(b);
+
+    const uint64_t mid1 = b10 + Hi32(b00);
+    const uint64_t mid2 = b01 + Lo32(mid1);
+
+    const uint64_t hi = b11 + Hi32(mid1) + Hi32(mid2);
+    const uint64_t lo = Lo32(b00) | uint64_t{Lo32(mid2)} << 32;
+    return {hi, lo};
+#endif
+}
+
+// Returns the upper 128 bits of the product lhs * rhs.
+static inline U128 MulHi(U128 lhs, uint64_t rhs) noexcept
+{
+    const U128 p1 = Mul128(lhs.hi, rhs);
+    const U128 p0 = Mul128(lhs.lo, rhs);
+
+    return p1 + p0.hi;
+}
+
+} // namespace
+
+//==================================================================================================
+//
+//==================================================================================================
+
 static inline int Min(int x, int y)
 {
     return y < x ? y : x;
@@ -202,21 +477,14 @@ static inline uint32_t Hi32(uint64_t x)
 
 static constexpr int BitsPerPow5_Double = 128;
 
-namespace {
-struct Uint64x2 {
-    uint64_t hi;
-    uint64_t lo;
-};
-}
-
-static inline Uint64x2 ComputePow5_Double(int k)
+static inline U128 ComputePow5_Double(int k)
 {
     // Let e = FloorLog2Pow5(k) + 1 - 128
     // For k >= 0, stores 5^k in the form: ceil( 5^k / 2^e )
     // For k <= 0, stores 5^k in the form: ceil(2^-e / 5^-k)
     static constexpr int MinDecExp = -342;
     static constexpr int MaxDecExp =  325;
-    static constexpr Uint64x2 Pow5[MaxDecExp - MinDecExp + 1] = {
+    static constexpr U128 Pow5[MaxDecExp - MinDecExp + 1] = {
         {0xEEF453D6923BD65A, 0x113FAA2906A13B40}, // e =  -922, k = -342
         {0x9558B4661B6565F8, 0x4AC7CA59A424C508}, // e =  -919, k = -341
         {0xBAAEE17FA23EBF76, 0x5D79BCF00D2DF64A}, // e =  -917, k = -340
@@ -892,95 +1160,17 @@ static inline Uint64x2 ComputePow5_Double(int k)
     return Pow5[static_cast<unsigned>(k - MinDecExp)];
 }
 
-#if defined(__SIZEOF_INT128__)
+#if defined(__SIZEOF_INT128__) || (defined(_MSC_VER) && defined(_M_X64))
 
-static inline Uint64x2 Mul128(uint64_t a, uint64_t b)
-{
-    __extension__ using uint128_t = unsigned __int128;
-
-    const uint128_t p = uint128_t{a} * b;
-
-    const uint64_t hi = static_cast<uint64_t>(p >> 64);
-    const uint64_t lo = static_cast<uint64_t>(p);
-    return {hi, lo};
-}
-
-static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
-{
-    __extension__ using uint128_t = unsigned __int128;
-
-    RYU_ASSERT(j >= 64);
-    RYU_ASSERT(j <= 64 + 127);
-
-    const uint128_t b0 = uint128_t{m} * mul->lo;
-    const uint128_t b2 = uint128_t{m} * mul->hi;
-
-#if 1
-    const int shift = j - 64;
-#else
-    // We need shift = j - 64 here.
-    // Since 64 < j < 128, this is equivalent to shift = (j - 64) % 64 = j % 64.
-    // When written as shift = j & 63, clang can optimize the 128-bit shift into
-    // a simple funnel shift.
-    const int shift = j & 63;
-#endif
-    return static_cast<uint64_t>((b2 + static_cast<uint64_t>(b0 >> 64)) >> shift);
-}
-
-#elif defined(_MSC_VER) && defined(_M_X64)
-
-static inline Uint64x2 Mul128(uint64_t a, uint64_t b)
-{
-    uint64_t hi;
-    uint64_t lo = _umul128(a, b, &hi);
-    return {hi, lo};
-}
-
-static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
+static inline uint64_t MulShift(uint64_t m, const U128* mul, int j)
 {
     RYU_ASSERT(j >= 64);
     RYU_ASSERT(j <= 64 + 127);
 
-    uint64_t b0_hi;
-    uint64_t b0_lo = _umul128(m, mul->lo, &b0_hi);
-    uint64_t b2_hi;
-    uint64_t b2_lo = _umul128(m, mul->hi, &b2_hi);
-    static_cast<void>(b0_lo);
-
-    // b2 + (b0 >> 64)
-    // b2_lo += b0_hi;
-    // b2_hi += b2_lo < b0_hi;
-    _addcarry_u64(_addcarry_u64(0, b2_lo, b0_hi, &b2_lo), b2_hi, 0, &b2_hi);
-
-#if 1
-    const int shift = j - 64;
-    const uint64_t l = __shiftright128(b2_lo, b2_hi, static_cast<unsigned char>(shift));
-    const uint64_t h = __ull_rshift(b2_hi, shift);
-    return (shift & 64) ? h : l;
-#else
-    // We need shift = j - 64 here.
-    // For the __shiftright128 intrinsic, the shift value is always modulo 64.
-    // Since (j - 64) % 64 = j, we can simply use j here.
-    return __shiftright128(b2_lo, b2_hi, static_cast<unsigned char>(j));
-#endif
+    return ShiftRight128_Lo64(MulHi(*mul, m), j - 64);
 }
 
 #else
-
-static inline Uint64x2 Mul128(uint64_t a, uint64_t b)
-{
-    const uint64_t b00 = uint64_t{Lo32(a)} * Lo32(b);
-    const uint64_t b01 = uint64_t{Lo32(a)} * Hi32(b);
-    const uint64_t b10 = uint64_t{Hi32(a)} * Lo32(b);
-    const uint64_t b11 = uint64_t{Hi32(a)} * Hi32(b);
-
-    const uint64_t mid1 = b10 + Hi32(b00);
-    const uint64_t mid2 = b01 + Lo32(mid1);
-
-    const uint64_t hi = b11 + Hi32(mid1) + Hi32(mid2);
-    const uint64_t lo = Lo32(b00) | uint64_t{Lo32(mid2)} << 32;
-    return {hi, lo};
-}
 
 static inline uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int n)
 {
@@ -997,7 +1187,7 @@ static inline uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int n)
     return (hi << lshift) | (lo >> rshift);
 }
 
-static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
+static inline uint64_t MulShift(uint64_t m, const U128* mul, int j)
 {
     RYU_ASSERT(j >= 64);
     RYU_ASSERT(j <= 64 + 96 - 1);
@@ -1984,219 +2174,6 @@ static RYU_NEVER_INLINE double ToBinary64Slow(const char* next, const char* last
 // all the digits.
 static constexpr int MaxSignificantDigits = 767 + 1;
 
-namespace {
-struct uint128
-{
-#if defined(__SIZEOF_INT128__)
-    __extension__ using uint128_t = unsigned __int128;
-#endif
-
-    uint64_t hi;
-    uint64_t lo;
-
-    uint128() noexcept = default;
-
-    constexpr explicit uint128(unsigned char      value) noexcept : hi(0), lo(value) {}
-    constexpr explicit uint128(unsigned short     value) noexcept : hi(0), lo(value) {}
-    constexpr explicit uint128(unsigned int       value) noexcept : hi(0), lo(value) {}
-    constexpr explicit uint128(unsigned long      value) noexcept : hi(0), lo(value) {}
-    constexpr explicit uint128(unsigned long long value) noexcept : hi(0), lo(value) {}
-
-    constexpr explicit uint128(uint64_t hi_, uint64_t lo_) noexcept : hi(hi_), lo(lo_)
-    {
-    }
-
-    /*implicit*/
-    constexpr uint128(Uint64x2 value) noexcept : hi(value.hi), lo(value.lo)
-    {
-    }
-
-#if defined(__SIZEOF_INT128__)
-    constexpr explicit uint128(uint128_t value) noexcept
-        : hi(static_cast<uint64_t>(value >> 64))
-        , lo(static_cast<uint64_t>(value))
-    {
-    }
-
-    constexpr explicit operator uint128_t() const noexcept
-    {
-        return uint128_t{hi} << 64 | lo;
-    }
-#endif
-
-    // Returns 2^exponent, i.e., 1 << exponent
-    //static uint128 Pow2(int exponent)
-    //{
-    //    return uint128{1u} << exponent;
-    //}
-
-    // Returns 2^exponent - 1, i.e., (1 << exponent) - 1
-    //static uint128 Pow2Minus1(int exponent)
-    //{
-    //    return (uint128{1u} << exponent) - 1;
-    //}
-
-    friend bool operator==(uint128 lhs, uint128 rhs)
-    {
-        return lhs.hi == rhs.hi && lhs.lo == rhs.lo;
-    }
-
-    //friend bool operator!=(uint128 lhs, uint128 rhs)
-    //{
-    //    return !(lhs == rhs);
-    //}
-
-    friend bool operator<(uint128 lhs, uint128 rhs)
-    {
-#if defined(__SIZEOF_INT128__)
-        return static_cast<uint128_t>(lhs) < static_cast<uint128_t>(rhs);
-#else
-        return lhs.hi < rhs.hi || (lhs.hi == rhs.hi && lhs.lo < rhs.lo);
-#endif
-    }
-
-    friend bool operator>(uint128 lhs, uint128 rhs)
-    {
-        return rhs < lhs;
-    }
-
-    //friend bool operator<=(uint128 lhs, uint128 rhs)
-    //{
-    //    return !(rhs < lhs);
-    //}
-
-    //friend bool operator>=(uint128 lhs, uint128 rhs)
-    //{
-    //    return !(lhs < rhs);
-    //}
-
-    friend uint64_t ShiftLeft128(uint128 lhs, int amount)
-    {
-#if defined(__SIZEOF_INT128__)
-        return static_cast<uint64_t>(static_cast<uint128_t>(lhs) << amount);
-#elif defined(_MSC_VER) && defined(_M_X64)
-        const uint64_t x = __shiftleft128(lhs.lo, lhs.hi, amount);
-        const uint64_t y = __ll_lshift(lhs.hi, amount);
-        return (amount & 64) ? x : y;
-#else
-        if (amount < 64) {
-            if (amount != 0)
-                return lhs.lo >> amount | lhs.hi << (64 - amount);
-            return lhs.lo;
-        }
-        return lhs.hi >> (amount - 64);
-#endif
-    }
-
-    friend uint128 operator<<(uint128 lhs, int amount)
-    {
-#if defined(__SIZEOF_INT128__)
-        return uint128(static_cast<uint128_t>(lhs) << amount);
-#elif defined(_MSC_VER) && defined(_M_X64)
-        const uint64_t x = __shiftleft128(lhs.lo, lhs.hi, amount);
-        const uint64_t y = __ll_lshift(lhs.lo, amount);
-        const uint64_t h = (amount & 64) ? y : 0;
-        const uint64_t l = (amount & 64) ? x : y;
-        return uint128(h, l);
-#else
-        if (amount < 64) {
-            if (amount != 0)
-                return uint128(lhs.hi << amount | lhs.lo >> (64 - amount), lhs.lo << amount);
-            return lhs;
-        }
-        return uint128(lhs.lo << (amount - 64), 0);
-#endif
-    }
-
-    friend uint64_t ShiftRight128(uint128 lhs, int amount)
-    {
-#if defined(__SIZEOF_INT128__)
-        return static_cast<uint64_t>(static_cast<uint128_t>(lhs) >> amount);
-#elif defined(_MSC_VER) && defined(_M_X64)
-        const uint64_t x = __shiftright128(lhs.lo, lhs.hi, amount);
-        const uint64_t y = __ull_rshift(lhs.hi, amount);
-        return (amount & 64) ? y : x;
-#else
-        if (amount < 64) {
-            if (amount != 0)
-                return lhs.lo >> amount | lhs.hi << (64 - amount);
-            return lhs.lo;
-        }
-        return lhs.hi >> (amount - 64);
-#endif
-    }
-
-    friend uint128 operator>>(uint128 lhs, int amount)
-    {
-#if defined(__SIZEOF_INT128__)
-        return uint128(static_cast<uint128_t>(lhs) >> amount);
-#elif defined(_MSC_VER) && defined(_M_X64)
-        const uint64_t x = __shiftright128(lhs.lo, lhs.hi, amount);
-        const uint64_t y = __ull_rshift(lhs.hi, amount);
-        const uint64_t h = (amount & 64) ? 0 : y;
-        const uint64_t l = (amount & 64) ? y : x;
-        return uint128(h, l);
-#else
-        if (amount < 64) {
-            if (amount != 0)
-                return uint128(lhs.hi >> amount, lhs.lo >> amount | lhs.hi << (64 - amount));
-            return lhs;
-        }
-        return uint128(0, lhs.hi >> (amount - 64));
-#endif
-    }
-
-    friend uint128& operator>>=(uint128& lhs, int amount)
-    {
-        lhs = lhs >> amount;
-        return lhs;
-    }
-
-    friend uint128 operator&(uint128 lhs, uint128 rhs)
-    {
-#if defined(__SIZEOF_INT128__)
-        return uint128(static_cast<uint128_t>(lhs) & static_cast<uint128_t>(rhs));
-#else
-        return uint128(lhs.hi & rhs.hi, lhs.lo & rhs.lo);
-#endif
-    }
-
-//    friend uint128 operator+(uint128 lhs, uint64_t rhs)
-//    {
-//#if defined(__SIZEOF_INT128__)
-//        const uint128_t n = uint128_t{lhs.hi} << 64 | lhs.lo;
-//        return uint128(n + rhs);
-//#elif defined(_MSC_VER) && defined(_M_X64)
-//        uint64_t lo;
-//        uint64_t hi;
-//        _addcarry_u64(_addcarry_u64(0, lhs.lo, rhs, &lo), lhs.hi, 0, &hi);
-//        return uint128(hi, lo);
-//#else
-//        const uint64_t lo = lhs.lo + rhs;
-//        const uint64_t hi = lhs.hi + (lo < rhs);
-//        return uint128(hi, lo);
-//#endif
-//    }
-
-    friend uint128 operator-(uint128 lhs, uint64_t rhs)
-    {
-#if defined(__SIZEOF_INT128__)
-        const uint128_t n = uint128_t{lhs.hi} << 64 | lhs.lo;
-        return uint128(n - rhs);
-#elif defined(_MSC_VER) && defined(_M_X64)
-        uint64_t lo;
-        uint64_t hi;
-        _subborrow_u64(_subborrow_u64(0, lhs.lo, rhs, &lo), lhs.hi, 0, &hi);
-        return uint128(hi, lo);
-#else
-        const uint64_t lo = lhs.lo - rhs;
-        const uint64_t hi = lhs.hi - (lhs.lo < rhs);
-        return uint128(hi, lo);
-#endif
-    }
-};
-}
-
 // Builds a nonzero floating point number out of the provided parts.
 //
 // This is intended to do the same operation as ldexp(mantissa, exponent),
@@ -2274,9 +2251,9 @@ static inline int CountLeadingZeros64(uint64_t x)
     return 63 - FloorLog2(x);
 }
 
-// Returns the bit width of the given uint128.  (Equivalently, returns 128
+// Returns the bit width of the given U128.  (Equivalently, returns 128
 // minus the number of leading zero bits.)
-static inline int BitWidth(uint128 value)
+static inline int BitWidth(U128 value)
 {
     if (value.hi == 0)
         return 64 - CountLeadingZeros64(value.lo);
@@ -2284,12 +2261,12 @@ static inline int BitWidth(uint128 value)
     return 128 - CountLeadingZeros64(value.hi);
 }
 
-// Right shifts a uint128 so that it has the requested bit width.  (The
+// Right shifts a U128 so that it has the requested bit width.  (The
 // resulting value will have 128 - bit_width leading zeroes.)  The initial
 // `value` must be wider than the requested bit width.
 //
 // Returns the number of bits shifted.
-static inline int TruncateToBitWidth(int bit_width, uint128& value)
+static inline int TruncateToBitWidth(int bit_width, U128& value)
 {
     RYU_ASSERT(bit_width >= 0);
     RYU_ASSERT(bit_width <= 63);
@@ -2315,7 +2292,7 @@ static inline int NormalizedShiftSize(int mantissa_width, int binary_exponent)
     return Max(normal_shift, minimum_shift);
 }
 
-// Returns the given uint128 shifted to the right by `shift` bits, and rounds
+// Returns the given U128 shifted to the right by `shift` bits, and rounds
 // the remaining bits using round_to_nearest logic.  The value is returned as a
 // uint64_t, since this is the type used by this library for storing calculated
 // floating point mantissas.
@@ -2343,12 +2320,12 @@ static inline int NormalizedShiftSize(int mantissa_width, int binary_exponent)
 //
 // Zero and negative values of `shift` are accepted, in which case the word is
 // shifted left, as necessary.
-static inline uint64_t ShiftRightAndRound(uint128 value, int shift, bool input_exact, bool& output_exact)
+static inline uint64_t ShiftRightAndRound(U128 value, int shift, bool input_exact, bool& output_exact)
 {
     if (shift <= 0)
     {
         output_exact = input_exact;
-        return ShiftLeft128(value, -shift);
+        return ShiftLeft128_Lo64(value, -shift);
     }
 
     if (shift >= 128)
@@ -2362,16 +2339,11 @@ static inline uint64_t ShiftRightAndRound(uint128 value, int shift, bool input_e
 
     output_exact = true;
 
-    const uint128 halfway_point = uint128{1u} << (shift - 1);
-    const uint128 shift_mask = (uint128{1u} << shift) - 1;
-    const uint128 shifted_bits = value & shift_mask;
+    const U128 halfway_point = MakePow2(shift - 1); // U128{1u} << (shift - 1);
+    const U128 shift_mask    = MakeMask(shift);     // (U128{1u} << shift) - 1;
+    const U128 shifted_bits  = value & shift_mask;
 
-#if 1
-    const uint64_t shifted_value = ShiftRight128(value, shift);
-#else
-    value >>= shift;
-    const uint64_t shifted_value = static_cast<uint64_t>(value);
-#endif
+    const uint64_t shifted_value = ShiftRight128_Lo64(value, shift);
 
     if (shifted_bits > halfway_point)
     {
@@ -2907,7 +2879,7 @@ static inline CalculatedFloat CalculateFromParsedDecimal(const ParsedDecimal& de
 
     // Otherwise convert our power of 10 into a power of 2 times an integer
     // mantissa, and multiply this by our parsed decimal mantissa.
-    uint128 wide_binary_mantissa = Mul128(decimal_digits, Power10Mantissa(decimal_exponent));
+    U128 wide_binary_mantissa = Mul128(decimal_digits, Power10Mantissa(decimal_exponent));
     int binary_exponent = Power10Exponent(decimal_exponent);
 
     // Discard bits that are inaccurate due to truncation error.  The magic
