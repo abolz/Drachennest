@@ -2589,7 +2589,7 @@ static inline const char* FindNonZeroDigit(const char* next, const char* last)
     return next;
 }
 
-static inline void AssignDecimalDigits(DiyInt& x, const char* next, const char* last, int64_t& orig_num_digits, int64_t& orig_exponent)
+static inline void AssignDecimalDigits(DiyInt& x, const char* next, const char* last, int& orig_num_digits, int& orig_exponent)
 {
     //
     // TODO:
@@ -2600,8 +2600,8 @@ static inline void AssignDecimalDigits(DiyInt& x, const char* next, const char* 
     RYU_ASSERT('0' <= *next && *next <= '9');
     RYU_ASSERT(orig_num_digits > 19);
 
-    int64_t num_digits = 0;
-    int64_t exponent = orig_exponent;
+    int num_digits = 0;
+    int exponent = orig_exponent;
 
     DigitAccumulator acc(x);
     for ( ; next != last && num_digits < MaxSignificantDigits; ++next)
@@ -2836,8 +2836,8 @@ static inline bool MustRoundUp(uint64_t binary_mantissa, int binary_exponent, co
 {
     DiyInt lhs;
 
-    int64_t num_digits = dec.num_digits;
-    int64_t exponent = dec.exponent;
+    int num_digits = dec.num_digits;
+    int exponent = dec.exponent;
     if (num_digits > 19)
     {
         AssignDecimalDigits(lhs, dec.digits_start, dec.digits_end, num_digits, exponent);
@@ -2951,8 +2951,8 @@ static RYU_NEVER_INLINE double ToBinary64Slow(const char* digits_start, const ch
     dec.digits_start = digits_start;
     dec.digits_end   = digits_end;
     dec.digits       = digits;
-    dec.num_digits   = num_digits;
-    dec.exponent     = exponent;
+    dec.num_digits   = static_cast<int>(num_digits);
+    dec.exponent     = static_cast<int>(exponent);
 
     const CalculatedFloat calculated = CalculateFromParsedDecimal(dec);
     return EncodeResult(calculated);
