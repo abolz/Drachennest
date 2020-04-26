@@ -1,5 +1,6 @@
-// Copyright 2019 Ulf Adams
 // Copyright 2019 Alexander Bolz
+// Copyright 2019 Ulf Adams
+// Copyright 2018 The Abseil Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,9 +22,15 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
-#include <string>
 #if _MSC_VER
 #include <intrin.h>
+#endif
+
+#define RYU_STD_FALLBACK() 0
+#define RYU_STD_FROM_CHARS_FALLBACK() 1
+
+#if RYU_STD_FALLBACK() && !RYU_STD_FROM_CHARS_FALLBACK()
+#include <string>
 #endif
 
 #ifndef RYU_ASSERT
@@ -49,9 +56,6 @@
 #define RYU_FORCE_INLINE inline
 #endif
 #endif
-
-#define RYU_FROM_CHARS_FALLBACK() 0
-#define RYU_ASSUME_NULL_TERMINATED_INPUT() 0
 
 //==================================================================================================
 //
@@ -81,8 +85,8 @@ struct Double
 //  static constexpr int       MaxDigits10     = std::numeric_limits<value_type>::max_digits10;
     static constexpr int       SignificandSize = std::numeric_limits<value_type>::digits; // = p   (includes the hidden bit)
     static constexpr int       ExponentBias    = std::numeric_limits<value_type>::max_exponent - 1 + (SignificandSize - 1);
-//  static constexpr int       MaxExponent     = std::numeric_limits<value_type>::max_exponent - 1 - (SignificandSize - 1);
-//  static constexpr int       MinExponent     = std::numeric_limits<value_type>::min_exponent - 1 - (SignificandSize - 1);
+    static constexpr int       MaxExponent     = std::numeric_limits<value_type>::max_exponent - 1 - (SignificandSize - 1);
+    static constexpr int       MinExponent     = std::numeric_limits<value_type>::min_exponent - 1 - (SignificandSize - 1);
     static constexpr bits_type HiddenBit       = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
     static constexpr bits_type SignificandMask = HiddenBit - 1;                           // = 2^(p-1) - 1
     static constexpr bits_type ExponentMask    = (bits_type{2 * std::numeric_limits<value_type>::max_exponent - 1}) << (SignificandSize - 1);
@@ -134,6 +138,11 @@ struct Double
 //==================================================================================================
 //
 //==================================================================================================
+
+static inline int Min(int x, int y)
+{
+    return y < x ? y : x;
+}
 
 static inline int Max(int x, int y)
 {
@@ -205,9 +214,11 @@ static inline Uint64x2 ComputePow5_Double(int k)
     // Let e = FloorLog2Pow5(k) + 1 - 128
     // For k >= 0, stores 5^k in the form: ceil( 5^k / 2^e )
     // For k <= 0, stores 5^k in the form: ceil(2^-e / 5^-k)
-    static constexpr int MinDecExp = -340;
+    static constexpr int MinDecExp = -342;
     static constexpr int MaxDecExp =  325;
     static constexpr Uint64x2 Pow5[MaxDecExp - MinDecExp + 1] = {
+        {0xEEF453D6923BD65A, 0x113FAA2906A13B40}, // e =  -922, k = -342
+        {0x9558B4661B6565F8, 0x4AC7CA59A424C508}, // e =  -919, k = -341
         {0xBAAEE17FA23EBF76, 0x5D79BCF00D2DF64A}, // e =  -917, k = -340
         {0xE95A99DF8ACE6F53, 0xF4D82C2C107973DD}, // e =  -915, k = -339
         {0x91D8A02BB6C10594, 0x79071B9B8A4BE86A}, // e =  -912, k = -338
@@ -883,6 +894,17 @@ static inline Uint64x2 ComputePow5_Double(int k)
 
 #if defined(__SIZEOF_INT128__)
 
+static inline Uint64x2 Mul128(uint64_t a, uint64_t b)
+{
+    __extension__ using uint128_t = unsigned __int128;
+
+    const uint128_t p = uint128_t{a} * b;
+
+    const uint64_t hi = static_cast<uint64_t>(p >> 64);
+    const uint64_t lo = static_cast<uint64_t>(p);
+    return {hi, lo};
+}
+
 static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 {
     __extension__ using uint128_t = unsigned __int128;
@@ -906,6 +928,13 @@ static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 }
 
 #elif defined(_MSC_VER) && defined(_M_X64)
+
+static inline Uint64x2 Mul128(uint64_t a, uint64_t b)
+{
+    uint64_t hi;
+    uint64_t lo = _umul128(a, b, &hi);
+    return {hi, lo};
+}
 
 static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 {
@@ -1897,7 +1926,9 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
 // ToBinary64Slow
 //==================================================================================================
 
-#if RYU_FROM_CHARS_FALLBACK()
+#if RYU_STD_FALLBACK()
+
+#if RYU_STD_FROM_CHARS_FALLBACK()
 #include <charconv>
 #endif
 
@@ -1906,7 +1937,7 @@ static RYU_NEVER_INLINE double ToBinary64Slow(const char* next, const char* last
     //RYU_ASSERT(exponent + num_digits >  MinDecimalExponent);
     //RYU_ASSERT(exponent + num_digits <= MaxDecimalExponent);
 
-#if RYU_FROM_CHARS_FALLBACK()
+#if RYU_STD_FROM_CHARS_FALLBACK()
     double value;
     const auto result = std::from_chars(next, last, value);
 
@@ -1940,6 +1971,1022 @@ static RYU_NEVER_INLINE double ToBinary64Slow(const char* next, const char* last
     return value;
 #endif
 }
+
+#else
+
+// Maximum number of significant digits in decimal representation.
+//
+// The longest possible double in decimal representation is (2^53 - 1) * 5^1074 / 10^1074,
+// which has 767 digits.
+// If we parse a number whose first digits are equal to a mean of 2 adjacent
+// doubles (that could have up to 768 digits) the result must be rounded to the
+// bigger one unless the tail consists of zeros, so we don't need to preserve
+// all the digits.
+static constexpr int MaxSignificantDigits = 767 + 1;
+
+namespace {
+struct uint128
+{
+#if defined(__SIZEOF_INT128__)
+    __extension__ using uint128_t = unsigned __int128;
+#endif
+
+    uint64_t hi;
+    uint64_t lo;
+
+    uint128() noexcept = default;
+
+    constexpr explicit uint128(unsigned char      value) noexcept : hi(0), lo(value) {}
+    constexpr explicit uint128(unsigned short     value) noexcept : hi(0), lo(value) {}
+    constexpr explicit uint128(unsigned int       value) noexcept : hi(0), lo(value) {}
+    constexpr explicit uint128(unsigned long      value) noexcept : hi(0), lo(value) {}
+    constexpr explicit uint128(unsigned long long value) noexcept : hi(0), lo(value) {}
+
+    constexpr explicit uint128(uint64_t hi_, uint64_t lo_) noexcept : hi(hi_), lo(lo_)
+    {
+    }
+
+    /*implicit*/
+    constexpr uint128(Uint64x2 value) noexcept : hi(value.hi), lo(value.lo)
+    {
+    }
+
+#if defined(__SIZEOF_INT128__)
+    constexpr explicit uint128(uint128_t value) noexcept
+        : hi(static_cast<uint64_t>(value >> 64))
+        , lo(static_cast<uint64_t>(value))
+    {
+    }
+
+    constexpr explicit operator uint128_t() const noexcept
+    {
+        return uint128_t{hi} << 64 | lo;
+    }
+#endif
+
+    // Returns 2^exponent, i.e., 1 << exponent
+    //static uint128 Pow2(int exponent)
+    //{
+    //    return uint128{1u} << exponent;
+    //}
+
+    // Returns 2^exponent - 1, i.e., (1 << exponent) - 1
+    //static uint128 Pow2Minus1(int exponent)
+    //{
+    //    return (uint128{1u} << exponent) - 1;
+    //}
+
+    friend bool operator==(uint128 lhs, uint128 rhs)
+    {
+        return lhs.hi == rhs.hi && lhs.lo == rhs.lo;
+    }
+
+    //friend bool operator!=(uint128 lhs, uint128 rhs)
+    //{
+    //    return !(lhs == rhs);
+    //}
+
+    friend bool operator<(uint128 lhs, uint128 rhs)
+    {
+#if defined(__SIZEOF_INT128__)
+        return static_cast<uint128_t>(lhs) < static_cast<uint128_t>(rhs);
+#else
+        return lhs.hi < rhs.hi || (lhs.hi == rhs.hi && lhs.lo < rhs.lo);
+#endif
+    }
+
+    friend bool operator>(uint128 lhs, uint128 rhs)
+    {
+        return rhs < lhs;
+    }
+
+    //friend bool operator<=(uint128 lhs, uint128 rhs)
+    //{
+    //    return !(rhs < lhs);
+    //}
+
+    //friend bool operator>=(uint128 lhs, uint128 rhs)
+    //{
+    //    return !(lhs < rhs);
+    //}
+
+    friend uint64_t ShiftLeft128(uint128 lhs, int amount)
+    {
+#if defined(__SIZEOF_INT128__)
+        return static_cast<uint64_t>(static_cast<uint128_t>(lhs) << amount);
+#elif defined(_MSC_VER) && defined(_M_X64)
+        const uint64_t x = __shiftleft128(lhs.lo, lhs.hi, amount);
+        const uint64_t y = __ll_lshift(lhs.hi, amount);
+        return (amount & 64) ? x : y;
+#else
+        if (amount < 64) {
+            if (amount != 0)
+                return lhs.lo >> amount | lhs.hi << (64 - amount);
+            return lhs.lo;
+        }
+        return lhs.hi >> (amount - 64);
+#endif
+    }
+
+    friend uint128 operator<<(uint128 lhs, int amount)
+    {
+#if defined(__SIZEOF_INT128__)
+        return uint128(static_cast<uint128_t>(lhs) << amount);
+#elif defined(_MSC_VER) && defined(_M_X64)
+        const uint64_t x = __shiftleft128(lhs.lo, lhs.hi, amount);
+        const uint64_t y = __ll_lshift(lhs.lo, amount);
+        const uint64_t h = (amount & 64) ? y : 0;
+        const uint64_t l = (amount & 64) ? x : y;
+        return uint128(h, l);
+#else
+        if (amount < 64) {
+            if (amount != 0)
+                return uint128(lhs.hi << amount | lhs.lo >> (64 - amount), lhs.lo << amount);
+            return lhs;
+        }
+        return uint128(lhs.lo << (amount - 64), 0);
+#endif
+    }
+
+    friend uint64_t ShiftRight128(uint128 lhs, int amount)
+    {
+#if defined(__SIZEOF_INT128__)
+        return static_cast<uint64_t>(static_cast<uint128_t>(lhs) >> amount);
+#elif defined(_MSC_VER) && defined(_M_X64)
+        const uint64_t x = __shiftright128(lhs.lo, lhs.hi, amount);
+        const uint64_t y = __ull_rshift(lhs.hi, amount);
+        return (amount & 64) ? y : x;
+#else
+        if (amount < 64) {
+            if (amount != 0)
+                return lhs.lo >> amount | lhs.hi << (64 - amount);
+            return lhs.lo;
+        }
+        return lhs.hi >> (amount - 64);
+#endif
+    }
+
+    friend uint128 operator>>(uint128 lhs, int amount)
+    {
+#if defined(__SIZEOF_INT128__)
+        return uint128(static_cast<uint128_t>(lhs) >> amount);
+#elif defined(_MSC_VER) && defined(_M_X64)
+        const uint64_t x = __shiftright128(lhs.lo, lhs.hi, amount);
+        const uint64_t y = __ull_rshift(lhs.hi, amount);
+        const uint64_t h = (amount & 64) ? 0 : y;
+        const uint64_t l = (amount & 64) ? y : x;
+        return uint128(h, l);
+#else
+        if (amount < 64) {
+            if (amount != 0)
+                return uint128(lhs.hi >> amount, lhs.lo >> amount | lhs.hi << (64 - amount));
+            return lhs;
+        }
+        return uint128(0, lhs.hi >> (amount - 64));
+#endif
+    }
+
+    friend uint128& operator>>=(uint128& lhs, int amount)
+    {
+        lhs = lhs >> amount;
+        return lhs;
+    }
+
+    friend uint128 operator&(uint128 lhs, uint128 rhs)
+    {
+#if defined(__SIZEOF_INT128__)
+        return uint128(static_cast<uint128_t>(lhs) & static_cast<uint128_t>(rhs));
+#else
+        return uint128(lhs.hi & rhs.hi, lhs.lo & rhs.lo);
+#endif
+    }
+
+//    friend uint128 operator+(uint128 lhs, uint64_t rhs)
+//    {
+//#if defined(__SIZEOF_INT128__)
+//        const uint128_t n = uint128_t{lhs.hi} << 64 | lhs.lo;
+//        return uint128(n + rhs);
+//#elif defined(_MSC_VER) && defined(_M_X64)
+//        uint64_t lo;
+//        uint64_t hi;
+//        _addcarry_u64(_addcarry_u64(0, lhs.lo, rhs, &lo), lhs.hi, 0, &hi);
+//        return uint128(hi, lo);
+//#else
+//        const uint64_t lo = lhs.lo + rhs;
+//        const uint64_t hi = lhs.hi + (lo < rhs);
+//        return uint128(hi, lo);
+//#endif
+//    }
+
+    friend uint128 operator-(uint128 lhs, uint64_t rhs)
+    {
+#if defined(__SIZEOF_INT128__)
+        const uint128_t n = uint128_t{lhs.hi} << 64 | lhs.lo;
+        return uint128(n - rhs);
+#elif defined(_MSC_VER) && defined(_M_X64)
+        uint64_t lo;
+        uint64_t hi;
+        _subborrow_u64(_subborrow_u64(0, lhs.lo, rhs, &lo), lhs.hi, 0, &hi);
+        return uint128(hi, lo);
+#else
+        const uint64_t lo = lhs.lo - rhs;
+        const uint64_t hi = lhs.hi - (lhs.lo < rhs);
+        return uint128(hi, lo);
+#endif
+    }
+};
+}
+
+// Builds a nonzero floating point number out of the provided parts.
+//
+// This is intended to do the same operation as ldexp(mantissa, exponent),
+// but using purely integer math, to avoid -ffastmath and floating
+// point environment issues.  Using type punning is also faster. We fall back
+// to ldexp on a per-platform basis for portability.
+//
+// `exponent` must be between kMinNormalExponent and kMaxExponent.
+//
+// `mantissa` must either be exactly kTargetMantissaBits wide, in which case
+// a normal value is made, or it must be less narrow than that, in which case
+// `exponent` must be exactly kMinNormalExponent, and a subnormal value is
+// made.
+static inline double MakeDouble(uint64_t mantissa, int exponent)
+{
+    static constexpr uint64_t MantissaMask = (uint64_t{1} << (Double::SignificandSize - 1)) - 1;
+
+    uint64_t dbl = 0;
+    if (mantissa > MantissaMask)
+    {
+        // Normal value.
+        // Adjust by 1023 for the exponent representation bias, and an additional
+        // 52 due to the implied decimal point in the IEEE mantissa represenation.
+        dbl = uint64_t{exponent + 1023u + Double::SignificandSize - 1} << 52;
+        mantissa &= MantissaMask;
+    }
+    else
+    {
+        // Subnormal value
+        RYU_ASSERT(exponent == Double::MinExponent);
+    }
+
+    dbl += mantissa;
+    return ReinterpretBits<double>(dbl);
+}
+
+static inline uint64_t Read19Digits(const char* next, const char* last)
+{
+    uint64_t mantissa = 0;
+
+    // We alread know that there are at least 19 decial digits in [next, last)
+    for (int n = 0; /*next != last &&*/ n < 19; ++next)
+    {
+        if (*next == '.')
+            continue;
+        RYU_ASSERT(*next >= '0');
+        RYU_ASSERT(*next <= '9');
+        mantissa = 10 * mantissa + *next - '0';
+        ++n;
+    }
+
+    return mantissa;
+}
+
+static inline uint64_t Power10Mantissa(int k)
+{
+    return ComputePow5_Double(k).hi;
+}
+
+static inline int Power10Exponent(int k)
+{
+    return FloorLog2Pow10(k) + 1 - 64;
+}
+
+static inline bool Power10Exact(int n)
+{
+    return 0 <= n && n <= 27;
+}
+
+static inline int CountLeadingZeros64(uint64_t x)
+{
+    if (x == 0)
+        return 64;
+
+    return 63 - FloorLog2(x);
+}
+
+// Returns the bit width of the given uint128.  (Equivalently, returns 128
+// minus the number of leading zero bits.)
+static inline int BitWidth(uint128 value)
+{
+    if (value.hi == 0)
+        return 64 - CountLeadingZeros64(value.lo);
+
+    return 128 - CountLeadingZeros64(value.hi);
+}
+
+// Right shifts a uint128 so that it has the requested bit width.  (The
+// resulting value will have 128 - bit_width leading zeroes.)  The initial
+// `value` must be wider than the requested bit width.
+//
+// Returns the number of bits shifted.
+static inline int TruncateToBitWidth(int bit_width, uint128& value)
+{
+    RYU_ASSERT(bit_width >= 0);
+    RYU_ASSERT(bit_width <= 63);
+
+    const int shift = BitWidth(value) - bit_width;
+    value >>= shift;
+    return shift;
+}
+
+// Calculates how far to the right a mantissa needs to be shifted to create a
+// properly adjusted mantissa for an IEEE floating point number.
+//
+// `mantissa_width` is the bit width of the mantissa to be shifted, and
+// `binary_exponent` is the exponent of the number before the shift.
+//
+// This accounts for subnormal values, and will return a larger-than-normal
+// shift if binary_exponent would otherwise be too low.
+static inline int NormalizedShiftSize(int mantissa_width, int binary_exponent)
+{
+    const int normal_shift = mantissa_width - Double::SignificandSize;
+    const int minimum_shift = Double::MinExponent - binary_exponent;
+
+    return Max(normal_shift, minimum_shift);
+}
+
+// Returns the given uint128 shifted to the right by `shift` bits, and rounds
+// the remaining bits using round_to_nearest logic.  The value is returned as a
+// uint64_t, since this is the type used by this library for storing calculated
+// floating point mantissas.
+//
+// It is expected that the width of the input value shifted by `shift` will
+// be the correct bit-width for the target mantissa, which is strictly narrower
+// than a uint64_t.
+//
+// If `input_exact` is false, then a nonzero error epsilon is assumed.  For
+// rounding purposes, the true value being rounded is strictly greater than the
+// input value.  The error may represent a single lost carry bit.
+//
+// When input_exact, shifted bits of the form 1000000... represent a tie, which
+// is broken by rounding to even -- the rounding direction is chosen so the low
+// bit of the returned value is 0.
+//
+// When !input_exact, shifted bits of the form 10000000... represent a value
+// strictly greater than one half (due to the error epsilon), and so ties are
+// always broken by rounding up.
+//
+// When !input_exact, shifted bits of the form 01111111... are uncertain;
+// the true value may or may not be greater than 10000000..., due to the
+// possible lost carry bit.  The correct rounding direction is unknown.  In this
+// case, the result is rounded down, and `output_exact` is set to false.
+//
+// Zero and negative values of `shift` are accepted, in which case the word is
+// shifted left, as necessary.
+static inline uint64_t ShiftRightAndRound(uint128 value, int shift, bool input_exact, bool& output_exact)
+{
+    if (shift <= 0)
+    {
+        output_exact = input_exact;
+        return ShiftLeft128(value, -shift);
+    }
+
+    if (shift >= 128)
+    {
+        // Exponent is so small that we are shifting away all significant bits.
+        // Answer will not be representable, even as a subnormal, so return a zero
+        // mantissa (which represents underflow).
+        output_exact = true;
+        return 0;
+    }
+
+    output_exact = true;
+
+    const uint128 halfway_point = uint128{1u} << (shift - 1);
+    const uint128 shift_mask = (uint128{1u} << shift) - 1;
+    const uint128 shifted_bits = value & shift_mask;
+
+#if 1
+    const uint64_t shifted_value = ShiftRight128(value, shift);
+#else
+    value >>= shift;
+    const uint64_t shifted_value = static_cast<uint64_t>(value);
+#endif
+
+    if (shifted_bits > halfway_point)
+    {
+        // Shifted bits greater than 10000... require rounding up.
+        return shifted_value + 1;
+    }
+
+    if (shifted_bits == halfway_point)
+    {
+        // In exact mode, shifted bits of 10000... mean we're exactly halfway
+        // between two numbers, and we must round to even.  So only round up if
+        // the low bit of `value` is set.
+        //
+        // In inexact mode, the nonzero error means the actual value is greater
+        // than the halfway point and we must alway round up.
+        const bool round_up = ((shifted_value & 1) == 1 || !input_exact);
+        return shifted_value + round_up;
+    }
+
+    if (!input_exact && shifted_bits == halfway_point - 1)
+    {
+        // Rounding direction is unclear, due to error.
+        output_exact = false;
+    }
+
+    // Otherwise, round down.
+    return shifted_value;
+}
+
+// Struct representing the calculated conversion result of a positive (nonzero)
+// floating point number.
+//
+// The calculated number is mantissa * 2**exponent (mantissa is treated as an
+// integer.)  `mantissa` is chosen to be the correct width for the IEEE float
+// representation being calculated.  (`mantissa` will always have the same bit
+// width for normal values, and narrower bit widths for subnormals.)
+//
+// If the result of conversion was an underflow or overflow, exponent is set
+// to INT_MIN or INT_MAX.
+namespace {
+struct CalculatedFloat
+{
+    uint64_t significand = 0;
+    int exponent = 0;
+};
+}
+
+// Constructs a CalculatedFloat from a given mantissa and exponent, but
+// with the following normalizations applied:
+//
+// If rounding has caused mantissa to increase just past the allowed bit
+// width, shift and adjust exponent.
+//
+// If exponent is too high, sets INT_MAX.
+//
+// If mantissa is zero (representing a non-zero value not representable, even
+// as a subnormal), sets INT_MIN.
+static inline CalculatedFloat CalculatedFloatFromRawValues(uint64_t significand, int exponent)
+{
+    CalculatedFloat result;
+
+    if (significand == uint64_t{1} << Double::SignificandSize)
+    {
+        significand >>= 1;
+        exponent++;
+    }
+
+    if (exponent > Double::MaxExponent)
+    {
+        result.exponent = INT_MAX;
+    }
+    else if (significand == 0)
+    {
+        result.exponent = INT_MIN;
+    }
+    else
+    {
+        result.significand = significand;
+        result.exponent = exponent;
+    }
+
+    return result;
+}
+
+namespace {
+struct ParsedDecimal
+{
+    // Significand is in [digits_start, digits_end).
+    // I.e. this range only contains digits and maybe a single '.'
+    const char* digits_start = nullptr;
+    const char* digits_end = nullptr;
+
+    // digits * 10^exponent
+    // where digits has num_digits decimal digits (not counting leading zeros!)
+    uint64_t digits = 0;
+    int num_digits = 0;
+    int exponent = 0;
+};
+}
+
+namespace {
+struct DiyInt // bigits * 2^(64 * exponent)
+{
+    using Bigit = uint64_t;
+    static constexpr int BitsPerBigit = 64;
+
+    static constexpr int MaxBits = 64 + 2536 /*log_2(5^(324 - 1 + 769))*/ + BitsPerBigit;
+    static constexpr int Capacity = (MaxBits + (BitsPerBigit - 1)) / BitsPerBigit;
+
+    uint64_t bigits[Capacity]; // Significand stored in little-endian form.
+    int      size = 0;
+    int      exponent = 0;
+
+    DiyInt() = default;
+    DiyInt(const DiyInt&) = delete;             // (not needed here)
+    DiyInt& operator=(const DiyInt&) = delete;  // (not needed here)
+};
+}
+
+static inline void AssignZero(DiyInt& x)
+{
+    x.size = 0;
+    x.exponent = 0;
+}
+
+static inline void AssignU64(DiyInt& x, uint64_t value)
+{
+    x.bigits[0] = value;
+    x.size = value != 0;
+    x.exponent = 0;
+}
+
+// x := A * x + B
+static inline void MulAddU64(DiyInt& x, uint64_t A, uint64_t B = 0)
+{
+    RYU_ASSERT(x.size >= 0);
+    RYU_ASSERT(B == 0 || x.exponent == 0);
+
+    if (A == 1 && B == 0)
+        return;
+
+    if (A == 0 || x.size == 0)
+    {
+        AssignU64(x, B);
+        return;
+    }
+
+    uint64_t carry = B;
+    for (int i = 0; i < x.size; ++i)
+    {
+        // (hi, lo) = A * x[i] + carry
+        const auto p = Mul128(x.bigits[i], A);
+        uint64_t hi = p.hi;
+        uint64_t lo = p.lo + carry;
+        hi += lo < carry;
+
+        x.bigits[i] = lo;
+        carry       = hi;
+    }
+
+    if (carry != 0)
+    {
+        RYU_ASSERT(x.size < DiyInt::Capacity);
+        x.bigits[x.size++] = carry;
+    }
+}
+
+namespace {
+struct DigitAccumulator
+{
+    DiyInt& i;
+    uint64_t acc = 0;
+    uint64_t acclen = 0;
+
+    explicit DigitAccumulator(DiyInt& i_) : i(i_)
+    {
+        AssignZero(i);
+    }
+
+    DigitAccumulator(const DigitAccumulator&) = delete;
+    DigitAccumulator& operator=(const DigitAccumulator&) = delete;
+
+    void Add(uint32_t digit)
+    {
+        if (acclen < 19)
+        {
+            acc = 10 * acc + digit;
+            acclen++;
+        }
+        else
+        {
+            MulAddU64(i, 10000000000000000000ull, acc);
+            acc = digit;
+            acclen = 1;
+        }
+    }
+
+    void Finish()
+    {
+        static constexpr uint64_t kPow10[] = {
+            1, // 10^0 (unused)
+            10,
+            100,
+            1000,
+            10000,
+            100000,
+            1000000,
+            10000000,
+            100000000,
+            1000000000, // 10^9
+            10000000000,
+            100000000000,
+            1000000000000,
+            10000000000000,
+            100000000000000,
+            1000000000000000,
+            10000000000000000,
+            100000000000000000,
+            1000000000000000000,
+            10000000000000000000u, // 10^19
+        };
+
+        if (acclen > 0)
+        {
+            MulAddU64(i, kPow10[acclen], acc);
+            acc = 0;
+            acclen = 0;
+        }
+    }
+};
+}
+
+// PRE: [next, last) contains only decimal digits or '.'s.
+static inline const char* FindNonZeroDigit(const char* next, const char* last)
+{
+    for ( ; next != last; ++next)
+    {
+        const char ch = *next;
+        if (ch != '.' && ch != '0')
+            break;
+    }
+
+    return next;
+}
+
+static inline void AssignDecimalDigits(DiyInt& x, const char* next, const char* last, int64_t& orig_num_digits, int64_t& orig_exponent)
+{
+    //
+    // TODO:
+    // Optimize?!
+    //
+
+    RYU_ASSERT(next != last);
+    RYU_ASSERT('0' <= *next && *next <= '9');
+    RYU_ASSERT(orig_num_digits > 19);
+
+    int64_t num_digits = 0;
+    int64_t exponent = orig_exponent;
+
+    DigitAccumulator acc(x);
+    for ( ; next != last && num_digits < MaxSignificantDigits; ++next)
+    {
+        const char ch = *next;
+        if (ch == '.')
+            continue;
+
+        RYU_ASSERT(ch >= '0');
+        RYU_ASSERT(ch <= '9');
+        const uint32_t digit = static_cast<uint32_t>(ch - '0');
+
+        acc.Add(digit);
+        num_digits++;
+    }
+
+    exponent += orig_num_digits - num_digits;
+
+    const char* const non_zero = FindNonZeroDigit(next, last);
+    if (non_zero != last)
+    {
+        acc.Add(1);
+        num_digits++;
+        exponent--;
+    }
+
+    acc.Finish();
+
+    RYU_ASSERT(num_digits + exponent == orig_num_digits + orig_exponent);
+    orig_num_digits = num_digits;
+    orig_exponent = exponent;
+}
+
+static inline void MulPow2(DiyInt& x, int exp) // aka left-shift
+{
+    RYU_ASSERT(x.size >= 0);
+    RYU_ASSERT(exp >= 0);
+
+    if (x.size == 0)
+        return;
+    if (exp == 0)
+        return;
+
+    const int bigit_shift = static_cast<int>(static_cast<uint32_t>(exp)) / 64;
+    const int bit_shift   = static_cast<int>(static_cast<uint32_t>(exp)) % 64;
+
+    if (bit_shift > 0)
+    {
+        uint64_t carry = 0;
+        for (int i = 0; i < x.size; ++i)
+        {
+            const uint64_t h = x.bigits[i] >> (64 - bit_shift);
+            x.bigits[i]      = x.bigits[i] << bit_shift | carry;
+            carry            = h;
+        }
+
+        if (carry != 0)
+        {
+            RYU_ASSERT(x.size < DiyInt::Capacity);
+            x.bigits[x.size++] = carry;
+        }
+    }
+
+    x.exponent += bigit_shift;
+}
+
+static inline void MulPow5(DiyInt& x, int exp)
+{
+    static constexpr uint64_t kPow5[] = {
+        1, // 5^0 (unused)
+        5,
+        25,
+        125,
+        625,
+        3125,
+        15625,
+        78125,
+        390625,
+        1953125,
+        9765625,
+        48828125,
+        244140625,
+        1220703125, // 5^13
+        6103515625,
+        30517578125,
+        152587890625,
+        762939453125,
+        3814697265625,
+        19073486328125,
+        95367431640625,
+        476837158203125,
+        2384185791015625,
+        11920928955078125,
+        59604644775390625,
+        298023223876953125,
+        1490116119384765625,
+        7450580596923828125, // 5^27
+    };
+
+    if (x.size == 0)
+        return;
+
+    RYU_ASSERT(exp >= 0);
+    if (exp == 0)
+        return;
+
+    while (exp > 0)
+    {
+        const int n = Min(exp, 27);
+        MulAddU64(x, kPow5[n]);
+        exp -= n;
+    }
+}
+
+static inline int Compare(const DiyInt& lhs, const DiyInt& rhs)
+{
+    const int e1 = lhs.exponent;
+    const int e2 = rhs.exponent;
+    const int n1 = lhs.size + e1;
+    const int n2 = rhs.size + e2;
+
+    if (n1 < n2) return -1;
+    if (n1 > n2) return +1;
+
+    for (int i = n1 - 1; i >= Min(e1, e2); --i)
+    {
+        const uint64_t b1 = (i - e1) >= 0 ? lhs.bigits[i - e1] : 0;
+        const uint64_t b2 = (i - e2) >= 0 ? rhs.bigits[i - e2] : 0;
+
+        if (b1 < b2) return -1;
+        if (b1 > b2) return +1;
+    }
+
+    return 0;
+}
+
+// Compare (lhs * 10^lhs_decimal_exponent) with (rhs_significand * 2^rhs_binary_exponent).
+// Modifies lhs.
+static inline int MulCompare(DiyInt& lhs, int lhs_decimal_exponent, uint64_t rhs_significand, int rhs_binary_exponent)
+{
+    static constexpr int N = sizeof(DiyInt::Bigit) * CHAR_BIT;
+    static_cast<void>(N);
+
+    RYU_ASSERT(lhs.size <= (2555 + (N-1)) / N); // bits <= log_2(10^769) = 2555
+
+    DiyInt rhs;
+    AssignU64(rhs, rhs_significand);
+
+//  int lhs_exp5 = 0;
+//  int rhs_exp5 = 0;
+    int lhs_exp2 = 0;
+    int rhs_exp2 = 0;
+
+    if (lhs_decimal_exponent >= 0)
+    {
+//      lhs_exp5 += lhs_decimal_exponent;
+        lhs_exp2 += lhs_decimal_exponent;
+    }
+    else
+    {
+//      rhs_exp5 -= lhs_decimal_exponent;
+        rhs_exp2 -= lhs_decimal_exponent;
+    }
+
+    if (rhs_binary_exponent >= 0)
+    {
+        rhs_exp2 += rhs_binary_exponent;
+    }
+    else
+    {
+        lhs_exp2 -= rhs_binary_exponent;
+    }
+
+#if 0
+    if (lhs_decimal_exponent > 0) // (lhs_exp5 > 0) // rhs >= digits
+    {
+//      MulPow5(lhs, lhs_exp5);
+        MulPow5(lhs, lhs_decimal_exponent);
+
+        RYU_ASSERT(lhs.size <= (1030 + (N-1)) / N);  // 1030 = log_2(10^(309 + 1)))
+        RYU_ASSERT(rhs.size <= (  64 + (N-1)) / N);
+    }
+    else if (lhs_decimal_exponent < 0) // (rhs_exp5 > 0)
+    {
+        //
+        // TODO:
+        //
+        // When multiplying the rhs it might be beneficial to store some large powers of 5
+        // and then multiply this power by rhs, i.e. multilpy by rhs_significand, then shift
+        // by rhs_exponent.
+        //
+
+//      MulPow5(rhs, rhs_exp5);
+        MulPow5(rhs, -lhs_decimal_exponent);
+
+        RYU_ASSERT(lhs.size <= (2555        + (N-1)) / N);
+        RYU_ASSERT(rhs.size <= (  64 + 2536 + (N-1)) / N); // 2536 = log_2(5^(324 - 1 + 769)) ---- XXX: 2504
+    }
+#else
+    if (lhs_decimal_exponent != 0) // (lhs_exp5 > 0 || rhs_exp5 > 0)
+    {
+//      MulPow5((lhs_exp5 > 0) ? lhs : rhs, (lhs_exp5 > 0) ? lhs_exp5 : rhs_exp5);
+        MulPow5((lhs_decimal_exponent > 0) ? lhs : rhs, (lhs_decimal_exponent > 0) ? lhs_decimal_exponent : -lhs_decimal_exponent);
+    }
+#endif
+
+#if 1
+    // Cancel common factors of 2.
+    const int diff_exp2 = lhs_exp2 - rhs_exp2;
+    if (diff_exp2 != 0)
+    {
+        MulPow2((diff_exp2 > 0) ? lhs : rhs, (diff_exp2 > 0) ? diff_exp2 : -diff_exp2);
+    }
+#else
+    if (lhs_exp2 > rhs_exp2)
+    {
+        MulPow2(lhs, lhs_exp2 - rhs_exp2);
+    }
+    else if (rhs_exp2 > lhs_exp2)
+    {
+        MulPow2(rhs, rhs_exp2 - lhs_exp2);
+    }
+#endif
+
+    RYU_ASSERT(lhs.size <= (2555        + 64 + (N-1)) / N);
+    RYU_ASSERT(rhs.size <= (  64 + 2536 + 64 + (N-1)) / N);
+
+    return Compare(lhs, rhs);
+}
+
+static inline bool MustRoundUp(uint64_t binary_mantissa, int binary_exponent, const ParsedDecimal& dec)
+{
+    DiyInt lhs;
+
+    int64_t num_digits = dec.num_digits;
+    int64_t exponent = dec.exponent;
+    if (num_digits > 19)
+    {
+        AssignDecimalDigits(lhs, dec.digits_start, dec.digits_end, num_digits, exponent);
+    }
+    else
+    {
+        AssignU64(lhs, dec.digits);
+    }
+
+    // Compare digits * 10^exponent with v = f * 2^e.
+    const int cmp = MulCompare(lhs, exponent, 2 * binary_mantissa + 1, binary_exponent - 1);
+    if (cmp < 0 || (cmp == 0 && (binary_mantissa & 1) == 0))
+    {
+        return false; // Round down.
+    }
+    else
+    {
+        return true; // Round up.
+    }
+}
+
+static inline CalculatedFloat CalculateFromParsedDecimal(const ParsedDecimal& dec)
+{
+    uint64_t decimal_digits = 0;
+    int decimal_exponent = 0;
+
+    // If the input contains more than 19 significant digits, dec.mantissa is actually invalid.
+    // In this case we have to re-read the leading 19 decimal digits.
+    if (dec.num_digits > 19)
+    {
+        decimal_digits = Read19Digits(dec.digits_start, dec.digits_end);
+        decimal_exponent = dec.exponent + (dec.num_digits - 19);
+    }
+    else
+    {
+        decimal_digits = dec.digits;
+        decimal_exponent = dec.exponent;
+    }
+
+    // Otherwise convert our power of 10 into a power of 2 times an integer
+    // mantissa, and multiply this by our parsed decimal mantissa.
+    uint128 wide_binary_mantissa = Mul128(decimal_digits, Power10Mantissa(decimal_exponent));
+    int binary_exponent = Power10Exponent(decimal_exponent);
+
+    // Discard bits that are inaccurate due to truncation error.  The magic
+    // `mantissa_width` constants below are justified in
+    // https://abseil.io/about/design/charconv. They represent the number of bits
+    // in `wide_binary_mantissa` that are guaranteed to be unaffected by error
+    // propagation.
+
+    int mantissa_width;
+    bool mantissa_exact;
+
+    if (dec.num_digits > 19)
+    {
+        // Truncated mantissa
+        mantissa_width = 58;
+        mantissa_exact = false;
+        binary_exponent += TruncateToBitWidth(mantissa_width, wide_binary_mantissa);
+    }
+    else if (!Power10Exact(decimal_exponent))
+    {
+        // Exact mantissa, truncated power of ten
+        mantissa_width = 63;
+        mantissa_exact = false;
+        binary_exponent += TruncateToBitWidth(mantissa_width, wide_binary_mantissa);
+    }
+    else
+    {
+        // Product is exact
+        mantissa_width = BitWidth(wide_binary_mantissa);
+        mantissa_exact = true;
+    }
+
+    // Shift into an FloatType-sized mantissa, and round to nearest.
+    const int shift = NormalizedShiftSize(mantissa_width, binary_exponent);
+    binary_exponent += shift;
+
+    bool result_exact;
+    uint64_t binary_mantissa = ShiftRightAndRound(wide_binary_mantissa, shift, mantissa_exact, result_exact);
+    if (!result_exact)
+    {
+        // We could not determine the rounding direction using int128 math.  Use
+        // full resolution math instead.
+        if (MustRoundUp(binary_mantissa, binary_exponent, dec))
+        {
+            ++binary_mantissa;
+        }
+    }
+
+    return CalculatedFloatFromRawValues(binary_mantissa, binary_exponent);
+}
+
+// Given a CalculatedFloat result of a from_chars conversion, generate the
+// correct output values.
+static inline double EncodeResult(const CalculatedFloat& calculated)
+{
+    if (calculated.exponent == INT_MAX) // overflow
+        return std::numeric_limits<double>::infinity();
+
+    if (calculated.significand == 0 || calculated.exponent == INT_MIN) // 0 or underflow
+        return 0;
+
+    return MakeDouble(calculated.significand, calculated.exponent);
+}
+
+static RYU_NEVER_INLINE double ToBinary64Slow(const char* digits_start, const char* digits_end, uint64_t digits, int64_t num_digits, int64_t exponent)
+{
+    ParsedDecimal dec;
+
+    dec.digits_start = digits_start;
+    dec.digits_end   = digits_end;
+    dec.digits       = digits;
+    dec.num_digits   = num_digits;
+    dec.exponent     = exponent;
+
+    const CalculatedFloat calculated = CalculateFromParsedDecimal(dec);
+    return EncodeResult(calculated);
+}
+
+#endif
 
 //==================================================================================================
 // Strtod
@@ -1989,7 +3036,7 @@ static inline bool StartsWith(const char* next, const char* last, const char* lo
 
 static inline StrtodResult ParseInfinity(const char* next, const char* last)
 {
-    RYU_ASSERT((*next == 'i' || *next == 'I'));
+    RYU_ASSERT(*next == 'i' || *next == 'I');
 
     if (!StartsWith(next + 1, last, "nf"))
         return {next, StrtodStatus::invalid};
@@ -2001,11 +3048,16 @@ static inline StrtodResult ParseInfinity(const char* next, const char* last)
     return {next, StrtodStatus::ok};
 }
 
+static inline bool IsNaNSequenceChar(char ch)
+{
+    return ch == '_' || IsDigit(ch) || IsUpperASCII(ch) || IsLowerASCII(ch);
+}
+
 // FIXME:
 // Don't ignore the nan-sequence!!!
 static inline StrtodResult ParseNaN(const char* next, const char* last)
 {
-    RYU_ASSERT((*next == 'n' || *next == 'N'));
+    RYU_ASSERT(*next == 'n' || *next == 'N');
 
     if (!StartsWith(next + 1, last, "an"))
         return {next, StrtodStatus::invalid};
@@ -2013,16 +3065,13 @@ static inline StrtodResult ParseNaN(const char* next, const char* last)
     next += 3;
     if (next != last && *next == '(')
     {
-        const char* const first = next;
         for (const char* p = next + 1; p != last; ++p)
         {
             if (*p == ')')
                 return {p + 1, StrtodStatus::ok};
 
-            if (*p == '_' || IsDigit(*p) || IsUpperASCII(*p) || IsLowerASCII(*p))
-                continue;
-
-            return {first, StrtodStatus::invalid}; // invalid/incomplete nan-sequence
+            if (!IsNaNSequenceChar(*p))
+                return {next, StrtodStatus::invalid}; // invalid/incomplete nan-sequence
         }
     }
 
@@ -2078,7 +3127,7 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
 
 // int
 
-    const char* const digits_start = next;
+    const char* /*const*/ digits_start = next;
 
     const bool has_leading_zero = (*next == '0');
     const bool has_leading_dot  = (*next == '.');
@@ -2095,7 +3144,9 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
 
     if (next != last && IsDigit(*next)) // non-0
     {
-//      digits_start = next;
+#if !RYU_STD_FALLBACK()
+        digits_start = next;
+#endif
 
         const char* const p = next;
 
@@ -2142,7 +3193,9 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
                 while (nz != next && *nz == '0')
                     ++nz;
 
-//              digits_start = nz;
+#if !RYU_STD_FALLBACK()
+                digits_start = nz;
+#endif
             }
 
             num_digits += next - nz;
@@ -2157,7 +3210,9 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
         }
     }
 
-//  const char* const digits_end = next;
+#if !RYU_STD_FALLBACK()
+    const char* const digits_end = next;
+#endif
 
 // exp
 
@@ -2238,7 +3293,11 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
     else
     {
         // We need to fall back to another algorithm if the input is too long.
-        flt = ToBinary64Slow(digits_start, next /*digits_end*/, significand, num_digits, exponent);
+#if RYU_STD_FALLBACK()
+        flt = ToBinary64Slow(digits_start, next, significand, num_digits, exponent);
+#else
+        flt = ToBinary64Slow(digits_start, digits_end, significand, num_digits, exponent);
+#endif
     }
 
     value = is_negative ? -flt : flt;
