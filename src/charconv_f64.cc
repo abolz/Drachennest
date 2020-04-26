@@ -367,7 +367,7 @@ struct U128
 } // namespace
 
 // Returns 2^e.
-static constexpr inline U128 MakePow2(int e)
+static inline U128 MakePow2(int e)
 {
     RYU_ASSERT(e >= 0);
     RYU_ASSERT(e <= 127);
@@ -378,7 +378,7 @@ static constexpr inline U128 MakePow2(int e)
 }
 
 // Returns 2^e - 1.
-static constexpr inline U128 MakeMask(int e)
+static inline U128 MakeMask(int e)
 {
     RYU_ASSERT(e >= 0);
     RYU_ASSERT(e <= 127);
