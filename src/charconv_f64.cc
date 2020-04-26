@@ -1816,7 +1816,6 @@ static inline char* ToChars(char* buffer, double value, bool force_trailing_dot_
         return buffer + 3;
     }
 
-
     if (v.SignBit())
     {
         value = v.AbsValue();

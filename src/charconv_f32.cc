@@ -1160,7 +1160,7 @@ static inline bool StartsWith(const char* next, const char* last, const char* lo
 
 static inline StrtofResult ParseInfinity(const char* next, const char* last)
 {
-    RYU_ASSERT((*next == 'i' || *next == 'I'));
+    RYU_ASSERT(*next == 'i' || *next == 'I');
 
     if (!StartsWith(next + 1, last, "nf"))
         return {next, StrtofStatus::invalid};
@@ -1172,11 +1172,16 @@ static inline StrtofResult ParseInfinity(const char* next, const char* last)
     return {next, StrtofStatus::ok};
 }
 
+static inline bool IsNaNSequenceChar(char ch)
+{
+    return ch == '_' || IsDigit(ch) || IsUpperASCII(ch) || IsLowerASCII(ch);
+}
+
 // FIXME:
 // Don't ignore the nan-sequence!!!
 static inline StrtofResult ParseNaN(const char* next, const char* last)
 {
-    RYU_ASSERT((*next == 'n' || *next == 'N'));
+    RYU_ASSERT(*next == 'n' || *next == 'N');
 
     if (!StartsWith(next + 1, last, "an"))
         return {next, StrtofStatus::invalid};
@@ -1184,16 +1189,13 @@ static inline StrtofResult ParseNaN(const char* next, const char* last)
     next += 3;
     if (next != last && *next == '(')
     {
-        const char* const first = next;
         for (const char* p = next + 1; p != last; ++p)
         {
             if (*p == ')')
                 return {p + 1, StrtofStatus::ok};
 
-            if (*p == '_' || IsDigit(*p) || IsUpperASCII(*p) || IsLowerASCII(*p))
-                continue;
-
-            return {first, StrtofStatus::invalid}; // invalid/incomplete nan-sequence
+            if (!IsNaNSequenceChar(*p))
+                return {next, StrtofStatus::invalid}; // invalid/incomplete nan-sequence
         }
     }
 
@@ -1248,7 +1250,7 @@ static RYU_NEVER_INLINE StrtofResult StdStrtof(const char* next, const char* las
         return {next, StrtofStatus::invalid}; // invalid argument (this shouldn't happen here...)
 #if 0
     if (errno == ERANGE)
-        return {next, StrtodStatus::invalid};
+        return {next, StrtofStatus::invalid};
 #endif
 
     // std::strtod should have consumed all of the input.
