@@ -26,8 +26,9 @@
 #include <intrin.h>
 #endif
 
-#define RYU_STD_FALLBACK() 0
-#define RYU_STD_FROM_CHARS_FALLBACK() 1
+#define RYU_STD_FALLBACK() 1
+#define RYU_STD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT() 0
+#define RYU_STD_FROM_CHARS_FALLBACK() 0
 
 #if RYU_STD_FALLBACK() && !RYU_STD_FROM_CHARS_FALLBACK()
 #include <string>
@@ -2143,7 +2144,7 @@ static RYU_NEVER_INLINE double ToBinary64Slow(const char* next, const char* last
     // _strtod_l( ..., C_LOCALE )
     //
 
-#if RYU_ASSUME_NULL_TERMINATED_INPUT()
+#if RYU_STD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT()
     const char* const ptr = next;
 #else
     // std::strtod expects null-terminated inputs. So we need to make a copy and null-terminate the input.
