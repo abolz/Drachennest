@@ -1209,14 +1209,14 @@ static inline uint64_t MulShift(uint64_t m, const U128* mul, int j)
 
 static inline void MulPow5DivPow2_Double(uint64_t u, uint64_t v, uint64_t w, int e5, int e2, uint64_t& a, uint64_t& b, uint64_t& c)
 {
-    // j >= 118 and m has at most 53 + 2 = 55 bits.
+    // j >= 121 and m has at most 53 + 2 = 55 bits.
     // The product along with the subsequent shift therefore requires
-    // 55 + 125 - 118 = 62 bits.
+    // 55 + 128 - 121 = 62 bits.
 
     const auto k = FloorLog2Pow5(e5) + 1 - BitsPerPow5_Double;
     const auto j = e2 - k;
-    RYU_ASSERT(j >= BitsPerPow5_Double - 7); // 118 - 64 = 54
-    RYU_ASSERT(j <= BitsPerPow5_Double - 1); // 124 - 64 = 60
+    RYU_ASSERT(j >= BitsPerPow5_Double - 7); // 121 - 64 = 57
+    RYU_ASSERT(j <= BitsPerPow5_Double - 1); // 127 - 64 = 63
 
     const auto pow5 = ComputePow5_Double(e5);
 
@@ -1815,6 +1815,7 @@ static inline char* ToChars(char* buffer, double value, bool force_trailing_dot_
         std::memcpy(buffer, "inf ", 4);
         return buffer + 3;
     }
+
 
     if (v.SignBit())
     {
