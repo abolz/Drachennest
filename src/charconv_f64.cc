@@ -140,6 +140,17 @@ struct Double
 //
 //==================================================================================================
 
+static inline uint32_t Lo32(uint64_t x)
+{
+    return static_cast<uint32_t>(x);
+}
+
+//[[maybe_unused]]
+static inline uint32_t Hi32(uint64_t x)
+{
+    return static_cast<uint32_t>(x >> 32);
+}
+
 namespace {
 
 struct U128
@@ -353,6 +364,8 @@ struct U128
     }
 };
 
+} // namespace
+
 // Returns 2^e.
 static constexpr inline U128 MakePow2(int e)
 {
@@ -409,8 +422,6 @@ static inline U128 MulHi(U128 lhs, uint64_t rhs) noexcept
     return p1 + p0.hi;
 }
 
-} // namespace
-
 //==================================================================================================
 //
 //==================================================================================================
@@ -456,17 +467,6 @@ static inline int FloorLog10Pow5(int e)
     RYU_ASSERT(e >= -2620);
     RYU_ASSERT(e <=  2620);
     return FloorDivPow2(e * 732923, 20);
-}
-
-static inline uint32_t Lo32(uint64_t x)
-{
-    return static_cast<uint32_t>(x);
-}
-
-//[[maybe_unused]]
-static inline uint32_t Hi32(uint64_t x)
-{
-    return static_cast<uint32_t>(x >> 32);
 }
 
 //==================================================================================================
@@ -1168,7 +1168,25 @@ static inline uint64_t MulShift(uint64_t m, const U128* mul, int j)
     RYU_ASSERT(j >= 64);
     RYU_ASSERT(j <= 64 + 127);
 
+#if 0 // _MSC_VER
+    uint64_t b0_hi;
+    uint64_t b0_lo = _umul128(m, mul->lo, &b0_hi);
+    uint64_t b2_hi;
+    uint64_t b2_lo = _umul128(m, mul->hi, &b2_hi);
+    static_cast<void>(b0_lo);
+
+    // b2 + (b0 >> 64)
+    // b2_lo += b0_hi;
+    // b2_hi += b2_lo < b0_hi;
+    _addcarry_u64(_addcarry_u64(0, b2_lo, b0_hi, &b2_lo), b2_hi, 0, &b2_hi);
+
+    const int shift = j - 64;
+    const uint64_t l = __shiftright128(b2_lo, b2_hi, static_cast<unsigned char>(shift));
+    const uint64_t h = __ull_rshift(b2_hi, shift);
+    return (shift & 64) ? h : l;
+#else
     return ShiftRight128_Lo64(MulHi(*mul, m), j - 64);
+#endif
 }
 
 #else
