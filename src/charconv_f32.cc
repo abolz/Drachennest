@@ -1195,7 +1195,7 @@ static inline StrtofResult ParseNaN(const char* next, const char* last)
                 return {p + 1, StrtofStatus::ok};
 
             if (!IsNaNSequenceChar(*p))
-                return {next, StrtofStatus::invalid}; // invalid/incomplete nan-sequence
+                break; // invalid/incomplete nan-sequence
         }
     }
 
