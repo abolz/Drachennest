@@ -1227,7 +1227,7 @@ static RYU_NEVER_INLINE StrtofResult ParseSpecial(bool is_negative, const char* 
     return {next, StrtofStatus::invalid};
 }
 
-static RYU_NEVER_INLINE StrtofResult StdStrtof(const char* next, const char* last, float& value)
+static RYU_NEVER_INLINE float ToBinarySlow(const char* next, const char* last)
 {
     //
     // FIXME:
@@ -1246,24 +1246,15 @@ static RYU_NEVER_INLINE StrtofResult StdStrtof(const char* next, const char* las
     char* end;
     const auto flt = ::strtof(ptr, &end);
 
-    if (ptr == end)
-        return {next, StrtofStatus::invalid}; // invalid argument (this shouldn't happen here...)
-#if 0
-    if (errno == ERANGE)
-        return {next, StrtofStatus::invalid};
-#endif
-
     // std::strtod should have consumed all of the input.
+    RYU_ASSERT(ptr != end);
     RYU_ASSERT(last - next == end - ptr);
 
-    value = flt;
-    return {last, StrtofStatus::ok};
+    return flt;
 }
 
 StrtofResult charconv::Strtof(const char* next, const char* last, float& value)
 {
-    const char* const start = next;
-
     if (next == last)
         return {next, StrtofStatus::invalid};
 
@@ -1285,6 +1276,8 @@ StrtofResult charconv::Strtof(const char* next, const char* last, float& value)
     }
 
 // int
+
+    const char* const start = next;
 
     const bool has_leading_zero = (*next == '0');
     const bool has_leading_dot  = (*next == '.');
@@ -1438,7 +1431,7 @@ StrtofResult charconv::Strtof(const char* next, const char* last, float& value)
     else
     {
         // We need to fall back to another algorithm if the input is too long.
-        return StdStrtof(start, next, value);
+        flt = ToBinarySlow(start, next);
     }
 
     value = is_negative ? -flt : flt;
