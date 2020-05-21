@@ -1861,28 +1861,19 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
     auto significand = (m2 >> shift) + round_up;
     RYU_ASSERT(significand <= 2 * Double::HiddenBit); // significand <= 2^(p+1) = 2^54
 
-    // Rounding up may cause overflow.
-    if (significand == 2 * Double::HiddenBit)
-    {
-        RYU_ASSERT(round_up);
+    significand &= Double::SignificandMask;
 
+    // Rounding up may cause overflow.
+    if (significand == 0 && round_up)
+    {
+        // Rounding up may overflow the p-bit significand.
         // Move a trailing zero of the significand into the exponent.
         // Due to how the IEEE represents +/-Infinity, we don't need to check for overflow here.
-        // We don't need to shift the significand here because we only use the lower 52 bits below.
-        ++ieee_e2;
-    }
-    else if (significand == Double::HiddenBit && ieee_e2 == 0)
-    {
-        RYU_ASSERT(round_up);
-
-        // Subnormal number shifted into the normal range.
-        // We need to adjust the IEEE exponent in this case.
-        // We don't need to shift the significand here because we only use the lower 52 bits below.
         ++ieee_e2;
     }
 
     RYU_ASSERT(ieee_e2 <= 2 * std::numeric_limits<double>::max_exponent - 1);
-    const auto ieee = static_cast<uint64_t>(ieee_e2) << MantissaBits | (significand & Double::SignificandMask);
+    const auto ieee = static_cast<uint64_t>(ieee_e2) << MantissaBits | significand;
     return ReinterpretBits<double>(ieee);
 }
 
@@ -2022,8 +2013,13 @@ static RYU_NEVER_INLINE double ToBinarySlow(const char* next, const char* last)
     char* end;
     const auto flt = ::strtod(ptr, &end);
 
-    // std::strtod should have consumed all of the input.
     RYU_ASSERT(ptr != end);
+#if 0
+    if (errno == ERANGE)
+        return {next, StrtodStatus::invalid};
+#endif
+
+    // std::strtod should have consumed all of the input.
     RYU_ASSERT(last - next == end - ptr);
 
     return flt;
