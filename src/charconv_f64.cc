@@ -2013,13 +2013,8 @@ static RYU_NEVER_INLINE double ToBinarySlow(const char* next, const char* last)
     char* end;
     const auto flt = ::strtod(ptr, &end);
 
-    RYU_ASSERT(ptr != end);
-#if 0
-    if (errno == ERANGE)
-        return {next, StrtodStatus::invalid};
-#endif
-
     // std::strtod should have consumed all of the input.
+    RYU_ASSERT(ptr != end);
     RYU_ASSERT(last - next == end - ptr);
 
     return flt;
