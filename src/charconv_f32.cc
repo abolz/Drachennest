@@ -931,8 +931,8 @@ static constexpr int ToBinaryMaxDecimalDigits = 9;
 
 // Any input <= 10^MinDecimalExponent is interpreted as 0.
 // Any input >  10^MaxDecimalExponent is interpreted as +Infinity.
-static constexpr int MinDecimalExponent = -45; // denorm_min = 1.401298464e-45 >=  1 * 10^-45
-static constexpr int MaxDecimalExponent =  39; //        max = 3.402823466e+38 <= 10 * 10^+38
+static constexpr int MinDecimalExponent = -46; // denorm_min / 2 =  7.00649232e-46 >=  1 * 10^-46
+static constexpr int MaxDecimalExponent =  39; //            max = 3.402823466e+38 <= 10 * 10^+38
 
 static inline int FloorLog2(uint32_t x)
 {
@@ -1031,7 +1031,8 @@ static inline float ToBinary32(uint32_t m10, int m10_digits, int e10)
 
     // We also compute if the result is exact, i.e., [m10 * 10^e10 / 2^e2] == m10 * 10^e10 / 2^e2.
     //  (See: Ryu Revisited, Section 4.3)
-    bool is_exact;
+
+    bool is_exact = (e2 <= e10) || (e2 - e10 < 32 && MultipleOfPow2(m10, e2 - e10));
     if (e10 >= 0)
     {
         // 2^(e2 - e10) | m10 5^e10
@@ -1039,22 +1040,46 @@ static inline float ToBinary32(uint32_t m10, int m10_digits, int e10)
         //  <==> p2(m10) + e10 p2(5) >= e2 - e10
         //  <==> p2(m10)             >= e2 - e10
 
-        is_exact = (e2 <= e10) || (e2 - e10 < 32 && MultipleOfPow2(m10, e2 - e10));
+        // is_exact
+        //  <==>   (e2 <= e10   OR   p2(m10) >= e2 - e10)
+
+        // is_exact = (e2 <= e10) || (e2 - e10 < 32 && MultipleOfPow2(m10, e2 - e10));
     }
     else
     {
+        // e2 <= e10:
+        //
         // m10 10^e10 / 2^e2
         //  == m10 2^e10 5^e10 / 2^e2
         //  == m10 2^(e10 - e2) / 5^(-e10)
-
+        //
         // 5^(-e10) | m10 2^(e10 - e2)
         //  <==> p5(m10 2^(e10 - e2))       >= -e10
         //  <==> p5(m10) + (e10 - e2) p5(2) >= -e10
         //  <==> p5(m10)                    >= -e10
 
+        // e2 > e10:
+        //
+        // m10 10^e10 / 2^e2
+        //  == m10 (2^e10 5^e10) / 2^e2
+        //  == m10 / (5^(-e10) 2^(e2 - e10))
+        //  == m10 / (10^(-e10) 2^e2)
+        //
+        // 5^(-e10) 2^(e2 - e10) | m10
+        //  <==> 5^(-e10) | m10   AND   2^(e2 - e10) | m10
+        //  <==> p5(m10) >= -e10   AND   p2(m10) >= e2 - e10
+
+        // is_exact
+        //  <==>   (e2 <= e10   OR   p2(m10) >= e2 - e10)   AND   p5(m10) >= -e10
+
+        // e2 <= e10 ==> is_exact = true
+        // In this case we need to check p5(m10) >= -e10.
+        // Check that the test below works.
+        RYU_ASSERT(e2 > e10 || is_exact);
+
         // 30 = ceil(log_2(10^9))
         // 12 = floor(log_5(2^30))
-        is_exact = -e10 <= 12 && MultipleOfPow5(m10, -e10);
+        is_exact = is_exact && (-e10 <= 12 && MultipleOfPow5(m10, -e10));
     }
 
     // Compute the final IEEE exponent.
@@ -1069,7 +1094,7 @@ static inline float ToBinary32(uint32_t m10, int m10_digits, int e10)
     // We need to figure out how much we need to shift m2.
     // The tricky part is that we need to take the final IEEE exponent into account, so we need to
     // reverse the bias and also special-case the value 0.
-    const auto shift = (ieee_e2 == 0 ? 1 : ieee_e2) - e2 - (ExponentBias + MantissaBits);
+    const int shift = (ieee_e2 == 0 ? 1 : ieee_e2) - e2 - (ExponentBias + MantissaBits);
     RYU_ASSERT(shift > 0);
 
     // We need to round up if the exact value is more than 0.5 above the value we computed. That's
@@ -1082,22 +1107,22 @@ static inline float ToBinary32(uint32_t m10, int m10_digits, int e10)
     const auto round_up
         = last_removed_bit != 0 && (!trailing_zeros || ExtractBit(m2, shift) != 0);
 
-    auto significand = (m2 >> shift) + round_up;
+    uint32_t significand = (m2 >> shift) + round_up;
     RYU_ASSERT(significand <= 2 * Single::HiddenBit); // significand <= 2^(p+1) = 2^25
 
     significand &= Single::SignificandMask;
 
-    // Rounding up may cause overflow.
+    // Rounding up may cause overflow...
     if (significand == 0 && round_up)
     {
-        // Rounding up may overflow the p-bit significand.
+        // Rounding up did overflow the p-bit significand.
         // Move a trailing zero of the significand into the exponent.
         // Due to how the IEEE represents +/-Infinity, we don't need to check for overflow here.
         ++ieee_e2;
     }
 
     RYU_ASSERT(ieee_e2 <= 2 * std::numeric_limits<float>::max_exponent - 1);
-    const auto ieee = static_cast<uint32_t>(ieee_e2) << MantissaBits | significand;
+    const uint32_t ieee = static_cast<uint32_t>(ieee_e2) << MantissaBits | significand;
     return ReinterpretBits<float>(ieee);
 }
 
@@ -1427,4 +1452,70 @@ StrtofResult charconv::Strtof(const char* next, const char* last, float& value)
 
     value = is_negative ? -flt : flt;
     return {next, StrtofStatus::ok};
+}
+
+StrtofStatus charconv::Strtof(uint32_t m10, int m10_digits, int e10, float& value)
+{
+    float flt;
+    if (m10_digits == 0)
+    {
+        flt = 0;
+    }
+    else if (e10 + m10_digits <= MinDecimalExponent)
+    {
+        // input < 10^MinDecimalExponent, which rounds to +-0.
+        flt = 0;
+    }
+    else if (e10 + m10_digits > MaxDecimalExponent)
+    {
+        // input >= 10^MaxDecimalExponent, which rounds to +-infinity.
+        flt = std::numeric_limits<float>::infinity();
+    }
+    else if (m10_digits <= ToBinaryMaxDecimalDigits)
+    {
+        RYU_ASSERT(e10 >= INT_MIN);
+        RYU_ASSERT(e10 <= INT_MAX);
+        flt = ToBinary32(m10, m10_digits, e10);
+    }
+    else
+    {
+        return StrtofStatus::invalid;
+    }
+
+    value = flt;
+    return StrtofStatus::ok;
+}
+
+StrtofStatus charconv::Strtof(uint32_t m10, int e10, float& value)
+{
+    const int m10_digits = (m10 == 0) ? 0 : DecimalLength(m10);
+
+    float flt;
+    if (m10_digits == 0)
+    {
+        flt = 0;
+    }
+    else if (e10 + m10_digits <= MinDecimalExponent)
+    {
+        // input < 10^MinDecimalExponent, which rounds to +-0.
+        flt = 0;
+    }
+    else if (e10 + m10_digits > MaxDecimalExponent)
+    {
+        // input >= 10^MaxDecimalExponent, which rounds to +-infinity.
+        flt = std::numeric_limits<float>::infinity();
+    }
+    else if (m10_digits <= ToBinaryMaxDecimalDigits)
+    {
+        RYU_ASSERT(e10 >= INT_MIN);
+        RYU_ASSERT(e10 <= INT_MAX);
+        flt = ToBinary32(m10, m10_digits, e10);
+    }
+    else
+    {
+        return StrtofStatus::invalid;
+    }
+
+    value = flt;
+    return StrtofStatus::ok;
 }

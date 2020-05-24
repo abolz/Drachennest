@@ -893,6 +893,7 @@ static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 #if 1
     const int shift = j - 64;
 #else
+    RYU_ASSERT(j <= 64 + 63);
     // We need shift = j - 64 here.
     // Since 64 < j < 128, this is equivalent to shift = (j - 64) % 64 = j % 64.
     // When written as shift = j & 63, clang can optimize the 128-bit shift into
@@ -926,6 +927,7 @@ static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
     const uint64_t h = __ull_rshift(b2_hi, shift);
     return (shift & 64) ? h : l;
 #else
+    RYU_ASSERT(j <= 64 + 63);
     // We need shift = j - 64 here.
     // For the __shiftright128 intrinsic, the shift value is always modulo 64.
     // Since (j - 64) % 64 = j, we can simply use j here.
@@ -977,10 +979,16 @@ static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
     b2.lo += b0.hi;
     b2.hi += b2.lo < b0.hi;
 
+#if 1
     const int shift = j - 64; // [0, 128)
     // NB:
     // shift >= 64 ==> 0 <= shift - 64 <= 31 (use 32-bit intrinsics?)
     return shift <= 63 ? ShiftRight128(b2.lo, b2.hi, shift) : b2.hi >> (shift - 64);
+#else
+    RYU_ASSERT(j <= 64 + 63);
+    const int shift = j - 64;
+    return ShiftRight128(b2.lo, b2.hi, shift);
+#endif
 }
 
 #endif
@@ -1630,8 +1638,8 @@ static constexpr int ToBinaryMaxDecimalDigits = 17;
 
 // Any input <= 10^MinDecimalExponent is interpreted as 0.
 // Any input >  10^MaxDecimalExponent is interpreted as +Infinity.
-static constexpr int MinDecimalExponent = -324; // denorm_min = 4.9406564584124654e-324 >=  1 * 10^-324
-static constexpr int MaxDecimalExponent =  309; //        max = 1.7976931348623158e+308 <= 10 * 10^+308
+static constexpr int MinDecimalExponent = -324; // denorm_min / 2 = 2.4703282292062327e-324 >=  1 * 10^-324
+static constexpr int MaxDecimalExponent =  309; //            max = 1.7976931348623158e+308 <= 10 * 10^+308
 
 static inline int FloorLog2(uint64_t x)
 {
@@ -1807,7 +1815,8 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
 
     // We also compute if the result is exact, i.e., [m10 * 10^e10 / 2^e2] == m10 * 10^e10 / 2^e2.
     //  (See: Ryu Revisited, Section 4.3)
-    bool is_exact;
+
+    bool is_exact = (e2 <= e10) || (e2 - e10 < 64 && MultipleOfPow2(m10, e2 - e10));
     if (e10 >= 0)
     {
         // 2^(e2 - e10) | m10 5^e10
@@ -1815,22 +1824,46 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
         //  <==> p2(m10) + e10 p2(5) >= e2 - e10
         //  <==> p2(m10)             >= e2 - e10
 
-        is_exact = (e2 <= e10) || (e2 - e10 < 64 && MultipleOfPow2(m10, e2 - e10));
+        // is_exact
+        //  <==>   (e2 <= e10   OR   p2(m10) >= e2 - e10)
+
+        // is_exact = (e2 <= e10) || (e2 - e10 < 64 && MultipleOfPow2(m10, e2 - e10));
     }
     else
     {
+        // e2 <= e10:
+        //
         // m10 10^e10 / 2^e2
         //  == m10 2^e10 5^e10 / 2^e2
         //  == m10 2^(e10 - e2) / 5^(-e10)
-
+        //
         // 5^(-e10) | m10 2^(e10 - e2)
         //  <==> p5(m10 2^(e10 - e2))       >= -e10
-        //  <==> p5(m10) + (e10 - e2) p5(2) >= -e10
+        //  <==> p5(m10) + (e10 - e2) p5(2) >= -e10   (p5(2) == 0)
         //  <==> p5(m10)                    >= -e10
+
+        // e2 > e10:
+        //
+        // m10 10^e10 / 2^e2
+        //  == m10 (2^e10 5^e10) / 2^e2
+        //  == m10 / (5^(-e10) 2^(e2 - e10))
+        //  == m10 / (10^(-e10) 2^e2)
+        //
+        // 5^(-e10) 2^(e2 - e10) | m10
+        //  <==> 5^(-e10) | m10   AND   2^(e2 - e10) | m10
+        //  <==> p5(m10) >= -e10   AND   p2(m10) >= e2 - e10
+
+        // is_exact
+        //  <==>   (e2 <= e10   OR   p2(m10) >= e2 - e10)   AND   p5(m10) >= -e10
+
+        // e2 <= e10 ==> is_exact = true
+        // In this case we need to check p5(m10) >= -e10.
+        // Check that the test below works.
+        RYU_ASSERT(e2 > e10 || is_exact);
 
         // 57 = ceil(log_2(10^17))
         // 24 = floor(log_5(2^57))
-        is_exact = -e10 <= 24 && MultipleOfPow5(m10, -e10);
+        is_exact = is_exact && (-e10 <= 24 && MultipleOfPow5(m10, -e10));
     }
 
     // Compute the final IEEE exponent.
@@ -1845,7 +1878,7 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
     // We need to figure out how much we need to shift m2.
     // The tricky part is that we need to take the final IEEE exponent into account, so we need to
     // reverse the bias and also special-case the value 0.
-    const auto shift = (ieee_e2 == 0 ? 1 : ieee_e2) - e2 - (ExponentBias + MantissaBits);
+    const int shift = (ieee_e2 == 0 ? 1 : ieee_e2) - e2 - (ExponentBias + MantissaBits);
     RYU_ASSERT(shift > 0);
 
     // We need to round up if the exact value is more than 0.5 above the value we computed. That's
@@ -1858,22 +1891,22 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
     const auto round_up
         = last_removed_bit != 0 && (!trailing_zeros || ExtractBit(m2, shift) != 0);
 
-    auto significand = (m2 >> shift) + round_up;
+    uint64_t significand = (m2 >> shift) + round_up;
     RYU_ASSERT(significand <= 2 * Double::HiddenBit); // significand <= 2^(p+1) = 2^54
 
     significand &= Double::SignificandMask;
 
-    // Rounding up may cause overflow.
+    // Rounding up may cause overflow...
     if (significand == 0 && round_up)
     {
-        // Rounding up may overflow the p-bit significand.
+        // Rounding up did overflow the p-bit significand.
         // Move a trailing zero of the significand into the exponent.
         // Due to how the IEEE represents +/-Infinity, we don't need to check for overflow here.
         ++ieee_e2;
     }
 
     RYU_ASSERT(ieee_e2 <= 2 * std::numeric_limits<double>::max_exponent - 1);
-    const auto ieee = static_cast<uint64_t>(ieee_e2) << MantissaBits | significand;
+    const uint64_t ieee = static_cast<uint64_t>(ieee_e2) << MantissaBits | significand;
     return ReinterpretBits<double>(ieee);
 }
 
@@ -2013,8 +2046,13 @@ static RYU_NEVER_INLINE double ToBinarySlow(const char* next, const char* last)
     char* end;
     const auto flt = ::strtod(ptr, &end);
 
-    // std::strtod should have consumed all of the input.
     RYU_ASSERT(ptr != end);
+#if 0
+    if (errno == ERANGE)
+        return {next, StrtodStatus::invalid};
+#endif
+
+    // std::strtod should have consumed all of the input.
     RYU_ASSERT(last - next == end - ptr);
 
     return flt;
