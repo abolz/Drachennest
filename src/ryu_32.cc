@@ -14,6 +14,7 @@
 #include <cassert>
 #include <climits>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #if !RYU_STD_STRTOD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT()
