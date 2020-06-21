@@ -46,8 +46,8 @@ struct D2S
 };
 #endif
 #if BENCH_RYU
-#include "charconv_f32.h"
-#include "charconv_f64.h"
+#include "ryu_32.h"
+#include "ryu_64.h"
 struct D2S
 {
     static char const* Name() { return "Ryu"; }

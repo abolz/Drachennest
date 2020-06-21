@@ -1,8 +1,8 @@
 #include "drachennest.h"
 #include "double-conversion/double-conversion.h"
 
-#include "charconv_f32.h"
-#include "charconv_f64.h"
+#include "ryu_32.h"
+#include "ryu_64.h"
 
 #include "catch.hpp"
 
@@ -96,18 +96,10 @@ struct D2S_Grisu3
 
 struct D2S_Ryu
 {
-    bool Optimal() const { return true; }
-    const char* Name() const { return "ryu"; }
-    char* operator()(char* buf, int buflen, float f) { return drachennest::ftoa_ryu(buf, f); }
-    char* operator()(char* buf, int buflen, double f) { return drachennest::dtoa_ryu(buf, f); }
-};
-
-struct D2S_RyuCharconv
-{
     static_assert(BufSize >= charconv::DtoaMinBufferLength, "");
 
     bool Optimal() const { return true; }
-    const char* Name() const { return "ryu-charconv"; }
+    const char* Name() const { return "ryu"; }
     char* operator()(char* buf, int buflen, float f) { return charconv::Ftoa(buf, f); }
     char* operator()(char* buf, int buflen, double f) { return charconv::Dtoa(buf, f); }
 };
@@ -282,7 +274,6 @@ static void CheckSingle(float f)
     CheckSingle(D2S_Grisu2{}, f);
     CheckSingle(D2S_Grisu3{}, f);
     CheckSingle(D2S_Ryu{}, f);
-    CheckSingle(D2S_RyuCharconv{}, f);
     //CheckSingle(D2S_Swift{}, f);
 }
 
@@ -318,7 +309,6 @@ static void CheckSingle(float value, const std::string& expected)
     CheckSingle(D2S_Grisu2{}, value, expected);
     CheckSingle(D2S_Grisu3{}, value, expected);
     CheckSingle(D2S_Ryu{}, value, expected);
-    CheckSingle(D2S_RyuCharconv{}, value, expected);
     //CheckSingle(D2S_Swift{}, value, expected);
 }
 
@@ -385,7 +375,6 @@ static void CheckDouble(double f)
     CheckDouble(D2S_Grisu2{}, f);
     CheckDouble(D2S_Grisu3{}, f);
     CheckDouble(D2S_Ryu{}, f);
-    CheckDouble(D2S_RyuCharconv{}, f);
     //CheckDouble(D2S_Swift{}, f);
 }
 
@@ -421,7 +410,6 @@ static void CheckDouble(double value, const std::string& expected)
     CheckDouble(D2S_Grisu2{}, value, expected);
     CheckDouble(D2S_Grisu3{}, value, expected);
     CheckDouble(D2S_Ryu{}, value, expected);
-    CheckDouble(D2S_RyuCharconv{}, value, expected);
     //CheckDouble(D2S_Swift{}, value, expected);
 }
 
