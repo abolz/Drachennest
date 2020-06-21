@@ -1,5 +1,10 @@
 #include "benchmark/benchmark.h"
 
+#include "ryu_32.h"
+#include "ryu_64.h"
+#include "schubfach_64.h"
+#include "grisu2.h"
+
 #include <cfloat>
 #include <climits>
 #include <cmath>
@@ -7,75 +12,72 @@
 #include <cstring>
 
 #include <algorithm>
+#include <chrono>
 #include <random>
 #include <vector>
-#include <chrono>
 
 #include <math.h>
 
-//#define BENCH_CHARCONV 1
-//#define BENCH_GRISU2 1
-//#define BENCH_GRISU3 1
-#define BENCH_RYU 1
-//#define BENCH_RYU_UPSTREAM 1
+#define BENCH_RYU()             0
+#define BENCH_STD_PRINTF()      0
+#define BENCH_STD_CHARCONV()    1
+#define BENCH_SCHUBFACH()       0
+#define BENCH_GRISU2()          0
 
-#define BENCH_SINGLE 1
-#define BENCH_DOUBLE 1
-#define BENCH_TO_DECIMAL 0
+#define BENCH_SINGLE()          0
+#define BENCH_DOUBLE()          1
 
 //==================================================================================================
 //
 //==================================================================================================
 
-#if BENCH_GRISU2
-#include "grisu2.h"
+#if BENCH_RYU()
 struct D2S
 {
-    static char const* Name() { return "Grisu2"; }
-    char* operator()(char* buf, int /*buflen*/, float f) const { return grisu2::ToChars(buf, f); }
-    char* operator()(char* buf, int /*buflen*/, double f) const { return grisu2::ToChars(buf, f); }
-};
-#endif
-#if BENCH_GRISU3
-#include "grisu3.h"
-struct D2S
-{
-    static char const* Name() { return "Grisu3 (Dragon4)"; }
-    char* operator()(char* buf, int /*buflen*/, float f) const { return grisu3::ToChars(buf, f); }
-    char* operator()(char* buf, int /*buflen*/, double f) const { return grisu3::ToChars(buf, f); }
-};
-#endif
-#if BENCH_RYU
-#include "ryu_32.h"
-#include "ryu_64.h"
-struct D2S
-{
-    static char const* Name() { return "Ryu"; }
+    static char const* Name() { return "ryu"; }
     char* operator()(char* buf, int /*buflen*/, float f) const { return ryu::Ftoa(buf, f); }
     char* operator()(char* buf, int /*buflen*/, double f) const { return ryu::Dtoa(buf, f); }
 };
 #endif
-#if BENCH_RYU_UPSTREAM
-#include "ryu/ryu/ryu.h"
+
+#if BENCH_STD_PRINTF()
 struct D2S
 {
-    static char const* Name() { return "Ryu (upstream)"; }
-    char* operator()(char* buf, int /*buflen*/, float f) const { return buf + f2s_buffered_n(f, buf); }
-    char* operator()(char* buf, int /*buflen*/, double f) const { return buf + d2s_buffered_n(f, buf); }
+    static char const* Name() { return "std::printf"; }
+    char* operator()(char* buf, int buflen, float f) const { return buf + std::snprintf(buf, static_cast<size_t>(buflen), "%.9g", f); }
+    char* operator()(char* buf, int buflen, double f) const { return buf + std::snprintf(buf, static_cast<size_t>(buflen), "%.17g", f); }
 };
 #endif
-#if BENCH_CHARCONV
+
+#if BENCH_STD_CHARCONV()
 #include <charconv>
 struct D2S
 {
-    static char const* Name() { return "charconv"; }
 #if 0
+    static char const* Name() { return "std::charconv::general"; }
     char* operator()(char* buf, int buflen, float f) const { return std::to_chars(buf, buf + buflen, f, std::chars_format::general).ptr; }
     char* operator()(char* buf, int buflen, double f) const { return std::to_chars(buf, buf + buflen, f, std::chars_format::general).ptr; }
 #else
+    static char const* Name() { return "std::charconv"; }
     char* operator()(char* buf, int buflen, float f) const { return std::to_chars(buf, buf + buflen, f).ptr; }
     char* operator()(char* buf, int buflen, double f) const { return std::to_chars(buf, buf + buflen, f).ptr; }
 #endif
+};
+#endif
+
+#if BENCH_SCHUBFACH()
+struct D2S
+{
+    static char const* Name() { return "schubfach"; }
+    char* operator()(char* buf, int /*buflen*/, double f) const { return schubfach::Dtoa(buf, f); }
+};
+#endif
+
+#if BENCH_GRISU2()
+struct D2S
+{
+    static char const* Name() { return "grisu2"; }
+    char* operator()(char* buf, int /*buflen*/, double f) const { return grisu2::Dtoa(buf, f); }
 };
 #endif
 
@@ -165,37 +167,6 @@ static inline char const* StrPrintf(char const* format, Args&&... args)
 #endif
 }
 
-#if BENCH_TO_DECIMAL
-#if BENCH_GRISU2
-inline uint32_t ToDecimal(int& exponent, float  value) { const auto dec = grisu2::ToDecimal(value); /*exponent = dec.exponent;*/ return dec.digits; }
-inline uint64_t ToDecimal(int& exponent, double value) { const auto dec = grisu2::ToDecimal(value); /*exponent = dec.exponent;*/ return dec.digits; }
-#endif
-#if BENCH_GRISU3
-inline uint32_t ToDecimal(int& exponent, float  value) { const auto dec = grisu3::ToDecimal(value); /*exponent = dec.exponent;*/ return dec.digits; }
-inline uint64_t ToDecimal(int& exponent, double value) { const auto dec = grisu3::ToDecimal(value); /*exponent = dec.exponent;*/ return dec.digits; }
-#endif
-#if BENCH_RYU
-inline uint32_t ToDecimal(int& exponent, float  value) { const auto dec = ryu::ToDecimal(value); /*exponent = dec.exponent;*/ return dec.digits; }
-inline uint64_t ToDecimal(int& exponent, double value) { const auto dec = ryu::ToDecimal(value); /*exponent = dec.exponent;*/ return dec.digits; }
-#endif
-
-template <typename, typename Float>
-static inline void BenchIt(benchmark::State& state, std::vector<Float> const& numbers)
-{
-    int index = 0;
-
-    uint64_t sum = 0;
-    for (auto _ : state)
-    {
-        int exponent;
-        sum += ToDecimal(exponent, numbers[index]) & 0xFF;
-        index = (index + 1) & (NumFloats - 1);
-    }
-
-    if (sum == UINT64_MAX)
-        abort();
-}
-#else
 template <typename D2S, typename Float>
 static inline void BenchIt(benchmark::State& state, std::vector<Float> const& numbers)
 {
@@ -215,7 +186,6 @@ static inline void BenchIt(benchmark::State& state, std::vector<Float> const& nu
     if (sum == UINT64_MAX)
         abort();
 }
-#endif
 
 template <typename Float>
 static inline void RegisterBenchmarks(char const* name, std::vector<Float> const& numbers)
@@ -226,7 +196,7 @@ static inline void RegisterBenchmarks(char const* name, std::vector<Float> const
     bench->ComputeStatistics("min", [](const std::vector<double>& v) -> double {
         return *(std::min_element(std::begin(v), std::end(v)));
     });
-    bench->Repetitions(3);
+    //bench->Repetitions(3);
     bench->ReportAggregatesOnly();
 }
 
@@ -401,6 +371,40 @@ static inline void Register_Digits_single(const char* name, int digits, int e10)
 //
 //--------------------------------------------------------------------------------------------------
 
+static inline std::vector<double> GenRandomDigitData(int digits, int count)
+{
+    std::uniform_real_distribution<double> gen(0, 1);
+//  std::uniform_real_distribution<double> gen(1, 2);
+
+    std::vector<double> result;
+    result.resize(count);
+
+    for (int i = 0; i < count; ++i)
+    {
+        const double d = gen(random);
+
+        char buffer[128];
+        char* const end = buffer + snprintf(buffer, 128, "%.*g", digits, d);
+
+        double converted;
+        const auto res = ryu::Strtod(buffer, end, converted);
+        assert(res.status == ryu::StrtodStatus::ok);
+
+        result[i] = converted;
+    }
+
+    return result;
+}
+
+static inline void Register_RandomDigits_double(const char* name, int digits)
+{
+    RegisterBenchmarks(name, GenRandomDigitData(digits, NumFloats));
+}
+
+//--------------------------------------------------------------------------------------------------
+//
+//--------------------------------------------------------------------------------------------------
+
 int main(int argc, char** argv)
 {
 #if defined(__clang__)
@@ -411,10 +415,10 @@ int main(int argc, char** argv)
     printf("Msc %d\n", _MSC_FULL_VER);
 #endif
 
-    printf("Benchmarking %s\n", D2S::Name());
+    printf("Preparing benchmarks...\n");
 
 #if 1
-#if BENCH_DOUBLE
+#if BENCH_DOUBLE()
     Register_RandomBits_double();
     Register_Uniform(0.0, 1.0);
     Register_Uniform(0.0, 1.0e+308);
@@ -423,7 +427,7 @@ int main(int argc, char** argv)
     //    Register_Uniform(std::pow(10.0, e), std::pow(10.0, e+1));
     //}
 
-#if 1
+#if 0
 #if 0
     for (int d = 1; d <= 15; ++d) {
 //  for (int d = 15; d >= 1; --d) {
@@ -439,19 +443,19 @@ int main(int argc, char** argv)
         Register_Digits_double(StrPrintf("%d-digits * 10^22", d), d, 22);
     }
 #else
-    for (int d = 1; d <= 18; ++d) {
-		if (d != 1 && d != 18) continue;
-    //for (int d = 18; d >= 1; --d) {
-        //for (int e = 22; e >= -22; e -= 1) {
+    for (int d = 18; d >= 1; --d) {
         for (int e = -22; e <= 22; e += 1) {
             Register_Digits_double(StrPrintf("%2d,%3d", d, e), d, e);
         }
     }
 #endif
+#else
+    for (int d = 1; d <= 17; ++d)
+        Register_RandomDigits_double(StrPrintf("%d-digits", d), d);
 #endif
 #endif
 
-#if BENCH_SINGLE
+#if BENCH_SINGLE()
     Register_RandomBits_single();
     Register_Uniform(0.0f, 1.0f);
     Register_Uniform(0.0f, 1.0e+38f);
@@ -480,6 +484,8 @@ int main(int argc, char** argv)
 #endif
 #endif
 #endif
+
+    printf("Benchmarking %s\n", D2S::Name());
 
     benchmark::Initialize(&argc, argv);
     benchmark::RunSpecifiedBenchmarks();
