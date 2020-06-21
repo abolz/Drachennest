@@ -4,6 +4,7 @@ import sys
 import decimal
 import textwrap
 import random
+import functools
 
 PRECISION = 53
 EXPONENT_BITS = 11
@@ -86,7 +87,7 @@ def BinaryFromDecimalString(s):
     """Converts the input string s to [f, e, p, isExact]"""
 
     _, digits, exponent = decimal.Decimal(s).as_tuple()
-    d = reduce(lambda s, d: s * 10 + d, digits)
+    d = functools.reduce(lambda s, d: s * 10 + d, digits)
     return BinaryFromDecimal(d, exponent)
 
 def BinaryFromFloat(v):
@@ -225,62 +226,62 @@ def ShortestDecimalFromBinary(f, e, p):
 #
 #===================================================================================================
 
-def Dtoa(v):
-    f, e, p, isExact = BinaryFromFloat(v)
-    return ShortestDecimalStringFromBinary(f, e, p)
+#def Dtoa(v):
+#    f, e, p, isExact = BinaryFromFloat(v)
+#    return ShortestDecimalStringFromBinary(f, e, p)
 
-assert Dtoa(1.0) == ('1', 0)
-assert Dtoa(1.5) == ('15', -1)
-assert Dtoa(12345.0) == ('12345', 0)
-assert Dtoa(5e-324) == ('5', -324)
-assert Dtoa(1.7976931348623157e308) == ('17976931348623157', 292)
-assert Dtoa(4294967272.0) == ('4294967272', 0)
-assert Dtoa(4.1855804968213567e298) == ('4185580496821357', 283)
-assert Dtoa(5.5626846462680035e-309) == ('5562684646268003', -324)
-assert Dtoa(2147483648.0) == ('2147483648', 0)
-assert Dtoa(3.5844466002796428e+298) == ('35844466002796428', 282)
-assert Dtoa(1e-23) == ('1', -23)
-assert Dtoa(4128420500802942e-24) == ('4128420500802942', -24)
-assert Dtoa(3.9292015898194142585311918e-10) == ('39292015898194143', -26)
-assert Dtoa(1.7800590868057611e-307) == ('17800590868057611', -323) # 2^-1019
-assert Dtoa(2.0522684006491881e-289) == ('20522684006491881', -305) # 2^-959
-assert Dtoa(3.9696644133184383e-264) == ('39696644133184383', -280) # 2^-875
-assert Dtoa(2.9290953396399042e-244) == ('29290953396399042', -260) # 2^-809
-assert Dtoa(2.5160737381238802e-234) == ('25160737381238802', -250) # 2^-776
-assert Dtoa(5.5329046628180653e-222) == ('55329046628180653', -238) # 2^-735
-assert Dtoa(4.5965573598916705e-187) == ('45965573598916705', -203) # 2^-619
-assert Dtoa(2.8451311993408992e-160) == ('28451311993408992', -176) # 2^-530
-assert Dtoa(5.0052077379577523e-147) == ('50052077379577523', -163) # 2^-486
-assert Dtoa(4.9569176510071274e-119) == ('49569176510071274', -135) # 2^-393
-assert Dtoa(4.6816763546921983e-97) == ('46816763546921983', -113) # 2^-320
-assert Dtoa(5.0978941156238473e-57) == ('50978941156238473', -73) # 2^-187
-assert Dtoa(3.2311742677852644e-27) == ('32311742677852644', -43) # 2^-88
-assert Dtoa(3.8685626227668134e+25) == ('38685626227668134', 9) # 2^85
-assert Dtoa(4.9039857307708443e+55) == ('49039857307708443', 39) # 2^185
-assert Dtoa(2.6074060497081422e+92) == ('26074060497081422', 76) # 2^307
-assert Dtoa(4.8098152095208105e+111) == ('48098152095208105', 95) # 2^371
-assert Dtoa(4.7634102635436893e+139) == ('47634102635436893', 123) # 2^464
-assert Dtoa(4.4989137945431964e+161) == ('44989137945431964', 145) # 2^537
-assert Dtoa(4.8988833106573424e+201) == ('48988833106573424', 185) # 2^670
-assert Dtoa(8.139666055761541e+236) == ('8139666055761541', 221) # 2^787
-assert Dtoa(1.3207363278391631e+269) == ('13207363278391631', 253) # 2^894
-assert Dtoa(3299624351.9916105) == ('32996243519916105', -7)
-assert Dtoa(1.3802575018809038) == ('13802575018809038', -16)
+#assert Dtoa(1.0) == ('1', 0)
+#assert Dtoa(1.5) == ('15', -1)
+#assert Dtoa(12345.0) == ('12345', 0)
+#assert Dtoa(5e-324) == ('5', -324)
+#assert Dtoa(1.7976931348623157e308) == ('17976931348623157', 292)
+#assert Dtoa(4294967272.0) == ('4294967272', 0)
+#assert Dtoa(4.1855804968213567e298) == ('4185580496821357', 283)
+#assert Dtoa(5.5626846462680035e-309) == ('5562684646268003', -324)
+#assert Dtoa(2147483648.0) == ('2147483648', 0)
+#assert Dtoa(3.5844466002796428e+298) == ('35844466002796428', 282)
+#assert Dtoa(1e-23) == ('1', -23)
+#assert Dtoa(4128420500802942e-24) == ('4128420500802942', -24)
+#assert Dtoa(3.9292015898194142585311918e-10) == ('39292015898194143', -26)
+#assert Dtoa(1.7800590868057611e-307) == ('17800590868057611', -323) # 2^-1019
+#assert Dtoa(2.0522684006491881e-289) == ('20522684006491881', -305) # 2^-959
+#assert Dtoa(3.9696644133184383e-264) == ('39696644133184383', -280) # 2^-875
+#assert Dtoa(2.9290953396399042e-244) == ('29290953396399042', -260) # 2^-809
+#assert Dtoa(2.5160737381238802e-234) == ('25160737381238802', -250) # 2^-776
+#assert Dtoa(5.5329046628180653e-222) == ('55329046628180653', -238) # 2^-735
+#assert Dtoa(4.5965573598916705e-187) == ('45965573598916705', -203) # 2^-619
+#assert Dtoa(2.8451311993408992e-160) == ('28451311993408992', -176) # 2^-530
+#assert Dtoa(5.0052077379577523e-147) == ('50052077379577523', -163) # 2^-486
+#assert Dtoa(4.9569176510071274e-119) == ('49569176510071274', -135) # 2^-393
+#assert Dtoa(4.6816763546921983e-97) == ('46816763546921983', -113) # 2^-320
+#assert Dtoa(5.0978941156238473e-57) == ('50978941156238473', -73) # 2^-187
+#assert Dtoa(3.2311742677852644e-27) == ('32311742677852644', -43) # 2^-88
+#assert Dtoa(3.8685626227668134e+25) == ('38685626227668134', 9) # 2^85
+#assert Dtoa(4.9039857307708443e+55) == ('49039857307708443', 39) # 2^185
+#assert Dtoa(2.6074060497081422e+92) == ('26074060497081422', 76) # 2^307
+#assert Dtoa(4.8098152095208105e+111) == ('48098152095208105', 95) # 2^371
+#assert Dtoa(4.7634102635436893e+139) == ('47634102635436893', 123) # 2^464
+#assert Dtoa(4.4989137945431964e+161) == ('44989137945431964', 145) # 2^537
+#assert Dtoa(4.8988833106573424e+201) == ('48988833106573424', 185) # 2^670
+#assert Dtoa(8.139666055761541e+236) == ('8139666055761541', 221) # 2^787
+#assert Dtoa(1.3207363278391631e+269) == ('13207363278391631', 253) # 2^894
+#assert Dtoa(3299624351.9916105) == ('32996243519916105', -7)
+#assert Dtoa(1.3802575018809038) == ('13802575018809038', -16)
 
-def DtoaPow2(e, significand):
-    if e >= 0:
-        num = 2**e * significand
-        den = 1
-    else:
-        num = 1 * significand
-        den = 2**(-e)
-    f, e, p, isExact = BinaryFromFraction(num, den)
-    return ShortestDecimalStringFromBinary(f, e, p)
+#def DtoaPow2(e, significand):
+#    if e >= 0:
+#        num = 2**e * significand
+#        den = 1
+#    else:
+#        num = 1 * significand
+#        den = 2**(-e)
+#    f, e, p, isExact = BinaryFromFraction(num, den)
+#    return ShortestDecimalStringFromBinary(f, e, p)
 
-for e in range(MIN_EXPONENT, MAX_EXPONENT + 1):
-    DtoaPow2(e, 1)
-    DtoaPow2(e, 2**53 - 1)
-    # print "e = {:4d} {}".format(e, DtoaPow2(e))
+#for e in range(MIN_EXPONENT, MAX_EXPONENT + 1):
+#    DtoaPow2(e, 1)
+#    DtoaPow2(e, 2**53 - 1)
+#    # print "e = {:4d} {}".format(e, DtoaPow2(e))
 
 # for i in range(0, 1000000 + 1):
 #     val = random.uniform(1.0, 2.0)
@@ -297,34 +298,36 @@ for e in range(MIN_EXPONENT, MAX_EXPONENT + 1):
 #
 #===================================================================================================
 
-# def PrintBinary(f, e, p, isExact):
-#     print "PRECISION: {}".format(p)
-#     print "Exact: {}".format(isExact)
-#     print ""
-#     print "Decimal times power-of-2:"
-#     print ""
-#     print "   {} * 2^{}".format(f, e)
-#     print ""
-#     print "Shortest decimal times power-of-10:"
-#     print ""
-#     if f == 0:
-#         print "   0 * 10^{}".format(e)
-#     elif e < MIN_EXPONENT:
-#         print "   0 [underflow: e = {}]".format(e)
-#     elif e > MAX_EXPONENT:
-#         print "   Infinity [overflow: e = {}]".format(e)
-#     else:
-#         print "   {} * 10^{}".format(*ShortestDecimalStringFromBinary(f, e, p))
-#     print ""
+def PrintBinary(f, e, p, isExact):
+    print("PRECISION: {}".format(p))
+    print("Exact: {}".format(isExact))
+    print("")
+    print("Decimal times power-of-2:")
+    print("")
+    print("   {} * 2^{}".format(f, e))
+    print("")
+    print("Shortest decimal times power-of-10:")
+    print("")
+    if f == 0:
+        print("   0 * 10^{}".format(e))
+    elif e < MIN_EXPONENT:
+        print("   0 [underflow: e = {}]".format(e))
+    elif e > MAX_EXPONENT:
+        print("   Infinity [overflow: e = {}]".format(e))
+    else:
+        print("   {} * 10^{}".format(*ShortestDecimalStringFromBinary(f, e, p)))
+    print("")
 
-# def TestDecimalString(s):
-#     print "========================================================================"
-#     print "Input:"
-#     print ""
-#     for line in textwrap.wrap(s, 72-4):
-#         print "    {}".format(line)
-#     print ""
-#     PrintBinary(*BinaryFromDecimalString(s))
+def TestDecimalString(s):
+    print("========================================================================")
+    print("Input:")
+    print("")
+    for line in textwrap.wrap(s, 72-4):
+        print("    {}".format(line))
+    print("")
+    PrintBinary(*BinaryFromDecimalString(s))
+
+TestDecimalString('0.11754943e-37')
 
 # TestDecimalString('12345678e-7')
 # TestDecimalString('12345677999999999929769955997471697628498077392578125e-52')
