@@ -17,7 +17,7 @@ algorithm as a fallback.
 * Steele, White, [_How to Print FloatingPoint Numbers Accurately_](https://dl.acm.org/citation.cfm?id=93559),
 * Burger, Dybvig, [_Printing Floating-Point Numbers Quickly and Accurately_](https://dl.acm.org/citation.cfm?id=231397),
 
-Contains an implementation of the [Ryu](https://github.com/abolz/Drachennest/blob/master/src/ryu.h)
+Contains an implementation of the [Ryu](https://github.com/abolz/Drachennest/blob/master/src/ryu_64.cc)
 algorithm as described in
 
 * Adams, [_Ryu: fast float-to-string conversion_](https://dl.acm.org/citation.cfm?id=3192369),
