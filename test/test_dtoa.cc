@@ -3,6 +3,7 @@
 
 #include "ryu_32.h"
 #include "ryu_64.h"
+#include "schubfach_64.h"
 
 #include "catch.hpp"
 
@@ -102,6 +103,15 @@ struct D2S_Ryu
     const char* Name() const { return "ryu"; }
     char* operator()(char* buf, int buflen, float f) { return ryu::Ftoa(buf, f); }
     char* operator()(char* buf, int buflen, double f) { return ryu::Dtoa(buf, f); }
+};
+
+struct D2S_Schubfach
+{
+    static_assert(BufSize >= schubfach::DtoaMinBufferLength, "");
+
+    bool Optimal() const { return true; }
+    const char* Name() const { return "schubfach"; }
+    char* operator()(char* buf, int buflen, double f) { return schubfach::Dtoa(buf, f); }
 };
 
 //==================================================================================================
@@ -375,7 +385,7 @@ static void CheckDouble(double f)
     CheckDouble(D2S_Grisu2{}, f);
     CheckDouble(D2S_Grisu3{}, f);
     CheckDouble(D2S_Ryu{}, f);
-    //CheckDouble(D2S_Swift{}, f);
+    CheckDouble(D2S_Schubfach{}, f);
 }
 
 inline void CheckDoubleBits(uint64_t bits)
@@ -410,7 +420,7 @@ static void CheckDouble(double value, const std::string& expected)
     CheckDouble(D2S_Grisu2{}, value, expected);
     CheckDouble(D2S_Grisu3{}, value, expected);
     CheckDouble(D2S_Ryu{}, value, expected);
-    //CheckDouble(D2S_Swift{}, value, expected);
+    CheckDouble(D2S_Schubfach{}, value, expected);
 }
 
 static void CheckDoubleBits(uint64_t bits, const std::string& expected)
