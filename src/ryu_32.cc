@@ -1,19 +1,14 @@
-// Copyright 2019 Ulf Adams
-// Copyright 2019 Alexander Bolz
+// Copyright 2020 Ulf Adams
+// Copyright 2020 Alexander Bolz
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Distributed under the Boost Software License, Version 1.0.
+//  (See accompanying file LICENSE_1_0.txt or copy at https://www.boost.org/LICENSE_1_0.txt)
 
 #include "ryu_32.h"
+
+#define RYU_SMALL_INT_OPTIMIZATION()                            1
+#define RYU_STD_STRTOD_FALLBACK()                               1
+#define RYU_STD_STRTOD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT()  1
 
 //#undef NDEBUG
 #include <cassert>
@@ -21,7 +16,9 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#if !RYU_STD_STRTOD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT()
 #include <string>
+#endif
 #if _MSC_VER
 #include <intrin.h>
 #endif
@@ -75,11 +72,11 @@ struct Single
     using value_type = float;
     using bits_type = uint32_t;
 
-//  static constexpr int       MaxDigits10     = std::numeric_limits<value_type>::max_digits10;
-    static constexpr int       SignificandSize = std::numeric_limits<value_type>::digits; // = p   (includes the hidden bit)
-    static constexpr int       ExponentBias    = std::numeric_limits<value_type>::max_exponent - 1 + (SignificandSize - 1);
-//  static constexpr int       MaxExponent     = std::numeric_limits<value_type>::max_exponent - 1 - (SignificandSize - 1);
-//  static constexpr int       MinExponent     = std::numeric_limits<value_type>::min_exponent - 1 - (SignificandSize - 1);
+//  static constexpr int32_t   MaxDigits10     = std::numeric_limits<value_type>::max_digits10;
+    static constexpr int32_t   SignificandSize = std::numeric_limits<value_type>::digits; // = p   (includes the hidden bit)
+    static constexpr int32_t   ExponentBias    = std::numeric_limits<value_type>::max_exponent - 1 + (SignificandSize - 1);
+//  static constexpr int32_t   MaxExponent     = std::numeric_limits<value_type>::max_exponent - 1 - (SignificandSize - 1);
+//  static constexpr int32_t   MinExponent     = std::numeric_limits<value_type>::min_exponent - 1 - (SignificandSize - 1);
     static constexpr bits_type HiddenBit       = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
     static constexpr bits_type SignificandMask = HiddenBit - 1;                           // = 2^(p-1) - 1
     static constexpr bits_type ExponentMask    = (bits_type{2 * std::numeric_limits<value_type>::max_exponent - 1}) << (SignificandSize - 1);
@@ -132,15 +129,15 @@ struct Single
 //
 //==================================================================================================
 
-static inline int Max(int x, int y)
+static inline int32_t Max(int32_t x, int32_t y)
 {
     return y < x ? x : y;
 }
 
 // Returns floor(x / 2^n).
-static inline int FloorDivPow2(int x, int n)
+static inline int32_t FloorDivPow2(int32_t x, int32_t n)
 {
-#if 1
+#if 0
     // Technically, right-shift of negative integers is implementation defined...
     // Should easily be optimized into SAR (or equivalent) instruction.
     return x < 0 ? ~(~x >> n) : (x >> n);
@@ -149,21 +146,21 @@ static inline int FloorDivPow2(int x, int n)
 #endif
 }
 
-static inline int FloorLog2Pow5(int e)
+static inline int32_t FloorLog2Pow5(int32_t e)
 {
     RYU_ASSERT(e >= -1764);
     RYU_ASSERT(e <=  1763);
     return FloorDivPow2(e * 1217359, 19);
 }
 
-static inline int FloorLog10Pow2(int e)
+static inline int32_t FloorLog10Pow2(int32_t e)
 {
     RYU_ASSERT(e >= -2620);
     RYU_ASSERT(e <=  2620);
     return FloorDivPow2(e * 315653, 20);
 }
 
-static inline int FloorLog10Pow5(int e)
+static inline int32_t FloorLog10Pow5(int32_t e)
 {
     RYU_ASSERT(e >= -2620);
     RYU_ASSERT(e <=  2620);
@@ -185,18 +182,19 @@ static inline uint32_t Hi32(uint64_t x)
 //
 // Single-precision implementation
 //==================================================================================================
-// Constant data: 808 (+ 104) bytes
+// Constant data: 816 (+ 104) bytes
 
-static constexpr int BitsPerPow5_Single = 64;
+static constexpr int32_t BitsPerPow5_Single = 64;
 
-static inline uint64_t ComputePow5_Single(int k)
+static inline uint64_t ComputePow5_Single(int32_t k)
 {
-    // Let e = FloorLog2Pow5(k) + 1 - 64
+    // Let e = FloorLog2Pow5(k) + 1 - BitsPerPow5_Single
     // For k >= 0, stores 5^k in the form: ceil( 5^k / 2^e )
     // For k <= 0, stores 5^k in the form: ceil(2^-e / 5^-k)
-    static constexpr int MinDecExp = -53;
-    static constexpr int MaxDecExp =  47;
+    static constexpr int32_t MinDecExp = -54;
+    static constexpr int32_t MaxDecExp =  47;
     static constexpr uint64_t Pow5[MaxDecExp - MinDecExp + 1] = {
+        0xC428D05AA4751E4D, // e =  -189, k =  -54
         0xF53304714D9265E0, // e =  -187, k =  -53
         0x993FE2C6D07B7FAC, // e =  -184, k =  -52
         0xBF8FDB78849A5F97, // e =  -182, k =  -51
@@ -305,7 +303,7 @@ static inline uint64_t ComputePow5_Single(int k)
     return Pow5[static_cast<unsigned>(k - MinDecExp)];
 }
 
-static inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
+static inline uint64_t MulShift(uint32_t m, uint64_t mul, int32_t j)
 {
     RYU_ASSERT(j >= 32);
     RYU_ASSERT(j <= 95);
@@ -324,14 +322,14 @@ static inline uint64_t MulShift(uint32_t m, uint64_t mul, int j)
     const uint64_t bits1 = uint64_t{m} * Hi32(mul);
     const uint64_t sum = bits1 + Hi32(bits0);
 
-    const int shift = j - 32;
+    const int32_t shift = j - 32;
     const uint64_t shifted_sum = sum >> shift;
 #endif
 
     return shifted_sum;
 }
 
-static inline void MulPow5DivPow2_Single(uint32_t u, uint32_t v, uint32_t w, int e5, int e2, uint64_t& a, uint64_t& b, uint64_t& c)
+static inline void MulPow5DivPow2_Single(uint32_t u, uint32_t v, uint32_t w, int32_t e5, int32_t e2, uint64_t& a, uint64_t& b, uint64_t& c)
 {
     // j >= 57 and m has at most 24 + 2 = 26 bits.
     // The product along with the subsequent shift therefore requires
@@ -350,11 +348,8 @@ static inline void MulPow5DivPow2_Single(uint32_t u, uint32_t v, uint32_t w, int
 }
 
 // Returns whether value is divisible by 5^e5
-static inline bool MultipleOfPow5(uint32_t value, int e5)
+static inline bool MultipleOfPow5(uint32_t value, int32_t e5)
 {
-    RYU_ASSERT(e5 >= 0);
-    RYU_ASSERT(e5 <= 12);
-
     struct MulCmp {
         uint32_t mul;
         uint32_t cmp;
@@ -376,11 +371,15 @@ static inline bool MultipleOfPow5(uint32_t value, int e5)
         {0xCF503EB1u, 0x00000011u}, // 5^12
     };
 
-    return value * Mod5[e5].mul <= Mod5[e5].cmp;
+    RYU_ASSERT(e5 >= 0);
+    RYU_ASSERT(e5 <= 12);
+    const auto m5 = Mod5[static_cast<unsigned>(e5)];
+
+    return value * m5.mul <= m5.cmp;
 }
 
 // Returns whether value is divisible by 2^e2
-static inline bool MultipleOfPow2(uint32_t value, int e2)
+static inline bool MultipleOfPow2(uint32_t value, int32_t e2)
 {
     RYU_ASSERT(e2 >= 0);
     RYU_ASSERT(e2 <= 31);
@@ -389,13 +388,15 @@ static inline bool MultipleOfPow2(uint32_t value, int e2)
 }
 
 namespace {
-struct ToDecimalResultSingle {
+struct FloatingDecimal32 {
     uint32_t digits; // num_digits <= 9
-    int exponent;
+    int32_t exponent;
 };
 }
 
-static inline ToDecimalResultSingle ToDecimal(float value)
+// TODO:
+// Export?!
+static inline FloatingDecimal32 ToDecimal32(float value)
 {
     RYU_ASSERT(Single(value).IsFinite());
     RYU_ASSERT(value > 0);
@@ -412,7 +413,7 @@ static inline ToDecimalResultSingle ToDecimal(float value)
     const uint32_t ieee_exponent = ieee_value.PhysicalExponent();
 
     uint32_t m2;
-    int e2;
+    int32_t e2;
     if (ieee_exponent == 0)
     {
         m2 = ieee_mantissa;
@@ -421,8 +422,9 @@ static inline ToDecimalResultSingle ToDecimal(float value)
     else
     {
         m2 = Single::HiddenBit | ieee_mantissa;
-        e2 = static_cast<int>(ieee_exponent) - Single::ExponentBias;
+        e2 = static_cast<int32_t>(ieee_exponent) - Single::ExponentBias;
 
+#if RYU_SMALL_INT_OPTIMIZATION()
         if /*unlikely*/ ((0 <= -e2 && -e2 < Single::SignificandSize) && MultipleOfPow2(m2, -e2))
         {
             // Since 2^23 <= m2 < 2^24 and 0 <= -e2 <= 23:
@@ -430,6 +432,7 @@ static inline ToDecimalResultSingle ToDecimal(float value)
             // Since m2 is divisible by 2^-e2, value is an integer.
             return {m2 >> -e2, 0};
         }
+#endif
     }
 
     const bool is_even = (m2 % 2) == 0;
@@ -453,7 +456,7 @@ static inline ToDecimalResultSingle ToDecimal(float value)
     // Convert to a decimal power base.
     //
 
-    int e10;
+    int32_t e10;
 
     bool za = false; // a[0, ..., i-1] == 0
     bool zb = false; // b[0, ..., i-1] == 0
@@ -474,7 +477,7 @@ static inline ToDecimalResultSingle ToDecimal(float value)
         // the first step and make sure that we execute the loop below at least
         // once and determine the correct value of the last removed digit.
 
-        const int q = FloorLog10Pow2(e2) - (e2 > 3); // == max(0, q' - 1)
+        const int32_t q = FloorLog10Pow2(e2) - (e2 > 3); // == max(0, q' - 1)
         RYU_ASSERT(q >= 0);
 
         e10 = q;
@@ -507,7 +510,7 @@ static inline ToDecimalResultSingle ToDecimal(float value)
         //          = (u,v,w) * 2^e2 / 10^(e10),
         //          = (u,v,w) * 5^(-e10) / 2^(e10 - e2)
 
-        const int q = FloorLog10Pow5(-e2) - (-e2 > 1); // == max(0, q' - 1)
+        const int32_t q = FloorLog10Pow5(-e2) - (-e2 > 1); // == max(0, q' - 1)
         RYU_ASSERT(q >= 0);
 
         e10 = q + e2;
@@ -706,7 +709,7 @@ static inline char* Utoa_4Digits(char* buf, uint32_t digits)
     return buf + 4;
 }
 
-static inline int DecimalLength(uint32_t v)
+static inline int32_t DecimalLength(uint32_t v)
 {
     RYU_ASSERT(v >= 1);
     RYU_ASSERT(v <= 999999999);
@@ -722,7 +725,7 @@ static inline int DecimalLength(uint32_t v)
     return 1;
 }
 
-static inline void PrintDecimalDigits(char* buf, uint32_t output, int output_length)
+static inline void PrintDecimalDigits(char* buf, uint32_t output, int32_t output_length)
 {
     while (output >= 10000)
     {
@@ -756,27 +759,30 @@ static inline void PrintDecimalDigits(char* buf, uint32_t output, int output_len
     }
 }
 
-static inline char* FormatDigits(char* buffer, uint32_t digits, int decimal_exponent, bool force_trailing_dot_zero = false)
+static inline char* FormatDigits(char* buffer, uint32_t digits, int32_t decimal_exponent, bool force_trailing_dot_zero = false)
 {
     RYU_ASSERT(digits >= 1);
     RYU_ASSERT(digits <= 999999999u);
     RYU_ASSERT(decimal_exponent >= -99);
     RYU_ASSERT(decimal_exponent <=  99);
 
-    const int num_digits = DecimalLength(digits);
-    const int decimal_point = num_digits + decimal_exponent;
+    const int32_t num_digits = DecimalLength(digits);
+    const int32_t decimal_point = num_digits + decimal_exponent;
 
     // In order to successfully parse all numbers output by Dtoa using the Strtod implementation
     // below, we have to make sure to never emit more than 9 (significant) digits.
-    constexpr int MaxFixedDecimalPoint =  9;
-    constexpr int MinFixedDecimalPoint = -4;
+    constexpr int32_t MaxFixedDecimalPoint =  9;
+    constexpr int32_t MinFixedDecimalPoint = -4;
+#if RYU_SMALL_INT_OPTIMIZATION()
+    static_assert(MaxFixedDecimalPoint >= 9, "internal error");
+#endif
 
     const bool use_fixed = MinFixedDecimalPoint <= decimal_point && decimal_point <= MaxFixedDecimalPoint;
 
     // Prepare the buffer.
     // Avoid calling memset/memcpy with variable arguments below...
 
-    int decimal_digits_position;
+    int32_t decimal_digits_position;
     if (use_fixed)
     {
         if (decimal_point <= 0)
@@ -908,7 +914,7 @@ static inline char* ToChars(char* buffer, float value, bool force_trailing_dot_z
         return buffer;
     }
 
-    const auto dec = ToDecimal(value);
+    const auto dec = ToDecimal32(value);
     return FormatDigits(buffer, dec.digits, dec.exponent, force_trailing_dot_zero);
 }
 
@@ -916,7 +922,7 @@ static inline char* ToChars(char* buffer, float value, bool force_trailing_dot_z
 //
 //==================================================================================================
 
-char* charconv::Ftoa(char* buffer, float value)
+char* ryu::Ftoa(char* buffer, float value)
 {
     return ToChars(buffer, value);
 }
@@ -927,25 +933,25 @@ char* charconv::Ftoa(char* buffer, float value)
 
 // Maximum number of decimal digits in the significand the fast ToBinary method can handle.
 // Inputs with more significant digits must be processed using another algorithm.
-static constexpr int ToBinaryMaxDecimalDigits = 9;
+static constexpr int32_t ToBinaryMaxDecimalDigits = 9;
 
 // Any input <= 10^MinDecimalExponent is interpreted as 0.
 // Any input >  10^MaxDecimalExponent is interpreted as +Infinity.
-static constexpr int MinDecimalExponent = -46; // denorm_min / 2 =  7.00649232e-46 >=  1 * 10^-46
-static constexpr int MaxDecimalExponent =  39; //            max = 3.402823466e+38 <= 10 * 10^+38
+static constexpr int32_t MinDecimalExponent = -46; // denorm_min / 2 =  7.00649232e-46 >= 10^-46
+static constexpr int32_t MaxDecimalExponent =  39; //            max = 3.402823466e+38 <= 10^+39
 
-static inline int FloorLog2(uint32_t x)
+static inline int32_t FloorLog2(uint32_t x)
 {
     RYU_ASSERT(x != 0);
 
 #if defined(__GNUC__) || defined(__clang__)
     return 31 - __builtin_clz(x);
-#elif defined(_MSC_VER) && defined(_M_X64)
+#elif defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
     unsigned long index;
     _BitScanReverse(&index, x);
-    return static_cast<int>(index);
+    return static_cast<int32_t>(index);
 #else
-    int l2 = 0;
+    int32_t l2 = 0;
     for (;;)
     {
         x >>= 1;
@@ -957,24 +963,24 @@ static inline int FloorLog2(uint32_t x)
 #endif
 }
 
-static inline int FloorLog2Pow10(int e)
+static inline int32_t FloorLog2Pow10(int32_t e)
 {
     RYU_ASSERT(e >= -1233);
-    RYU_ASSERT(e <= 1233);
+    RYU_ASSERT(e <=  1233);
     return FloorDivPow2(e * 1741647, 19);
 }
 
-static inline int ExtractBit(uint32_t x, int n)
+static inline int32_t ExtractBit(uint32_t x, int32_t n)
 {
     RYU_ASSERT(n >= 0);
     RYU_ASSERT(n <= 31);
     return (x & (uint32_t{1} << n)) != 0;
 }
 
-static inline float ToBinary32(uint32_t m10, int m10_digits, int e10)
+static inline float ToBinary32(uint32_t m10, int32_t m10_digits, int32_t e10)
 {
-    static constexpr int MantissaBits = Single::SignificandSize - 1;
-    static constexpr int ExponentBias = Single::ExponentBias - (Single::SignificandSize - 1);
+    static constexpr int32_t MantissaBits = Single::SignificandSize - 1;
+    static constexpr int32_t ExponentBias = Single::ExponentBias - (Single::SignificandSize - 1);
 
     RYU_ASSERT(m10 > 0);
     RYU_ASSERT(m10_digits == DecimalLength(m10));
@@ -982,6 +988,9 @@ static inline float ToBinary32(uint32_t m10, int m10_digits, int e10)
     RYU_ASSERT(e10 >  MinDecimalExponent - m10_digits);
     RYU_ASSERT(e10 <= MaxDecimalExponent - m10_digits);
     static_cast<void>(m10_digits);
+
+    // e10 >= MinDecimalExponent - m10_digits + 1 >= -46 - 9 + 1 = -54
+    // e10 <= MaxDecimalExponent - m10_digits     <=  39 - 1     =  38
 
     // Convert to binary float m2 * 2^e2, while retaining information about whether the conversion
     // was exact.
@@ -1055,7 +1064,7 @@ static inline float ToBinary32(uint32_t m10, int m10_digits, int e10)
         //
         // 5^(-e10) | m10 2^(e10 - e2)
         //  <==> p5(m10 2^(e10 - e2))       >= -e10
-        //  <==> p5(m10) + (e10 - e2) p5(2) >= -e10
+        //  <==> p5(m10) + (e10 - e2) p5(2) >= -e10   (p5(2) == 0)
         //  <==> p5(m10)                    >= -e10
 
         // e2 > e10:
@@ -1083,7 +1092,7 @@ static inline float ToBinary32(uint32_t m10, int m10_digits, int e10)
     }
 
     // Compute the final IEEE exponent.
-    int ieee_e2 = Max(0, log2_m2 + e2 + ExponentBias);
+    int32_t ieee_e2 = Max(0, log2_m2 + e2 + ExponentBias);
     if (ieee_e2 >= 2 * std::numeric_limits<float>::max_exponent - 1)
     {
         // Overflow:
@@ -1094,7 +1103,7 @@ static inline float ToBinary32(uint32_t m10, int m10_digits, int e10)
     // We need to figure out how much we need to shift m2.
     // The tricky part is that we need to take the final IEEE exponent into account, so we need to
     // reverse the bias and also special-case the value 0.
-    const int shift = (ieee_e2 == 0 ? 1 : ieee_e2) - e2 - (ExponentBias + MantissaBits);
+    const int32_t shift = (ieee_e2 == 0 ? 1 : ieee_e2) - e2 - (ExponentBias + MantissaBits);
     RYU_ASSERT(shift > 0);
 
     // We need to round up if the exact value is more than 0.5 above the value we computed. That's
@@ -1132,15 +1141,15 @@ static inline float ToBinary32(uint32_t m10, int m10_digits, int e10)
 
 #define RYU_ASSUME_NULL_TERMINATED_INPUT() 0
 
-using charconv::StrtofStatus;
-using charconv::StrtofResult;
+using ryu::StrtofStatus;
+using ryu::StrtofResult;
 
 static inline bool IsDigit(char ch)
 {
     return static_cast<unsigned>(ch - '0') <= 9u;
 }
 
-static inline int DigitValue(char ch)
+static inline int32_t DigitValue(char ch)
 {
     RYU_ASSERT(IsDigit(ch));
     return ch - '0';
@@ -1243,14 +1252,15 @@ static RYU_NEVER_INLINE StrtofResult ParseSpecial(bool is_negative, const char* 
     return {next, StrtofStatus::invalid};
 }
 
-static RYU_NEVER_INLINE float ToBinarySlow(const char* next, const char* last)
+#if RYU_STD_STRTOD_FALLBACK()
+static RYU_NEVER_INLINE float ToBinary32Slow(const char* next, const char* last)
 {
     //
     // FIXME:
     // _strtof_l( ..., C_LOCALE )
     //
 
-#if RYU_ASSUME_NULL_TERMINATED_INPUT()
+#if RYU_STD_STRTOD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT()
     const char* const ptr = next;
 #else
     // std::strtod expects null-terminated inputs. So we need to make a copy and null-terminate the input.
@@ -1268,8 +1278,9 @@ static RYU_NEVER_INLINE float ToBinarySlow(const char* next, const char* last)
 
     return flt;
 }
+#endif
 
-StrtofResult charconv::Strtof(const char* next, const char* last, float& value)
+StrtofResult ryu::Strtof(const char* next, const char* last, float& value)
 {
     if (next == last)
         return {next, StrtofStatus::invalid};
@@ -1291,7 +1302,7 @@ StrtofResult charconv::Strtof(const char* next, const char* last, float& value)
             return {next, StrtofStatus::invalid};
     }
 
-// int
+// int32_t
 
     const char* const start = next;
 
@@ -1372,11 +1383,11 @@ StrtofResult charconv::Strtof(const char* next, const char* last, float& value)
 
     // Exponents larger than this limit will be treated as +Infinity.
     // But we must still scan all the digits if this happens to be the case.
-    static constexpr int MaxExp = 999999;
+    static constexpr int32_t MaxExp = 999999;
     static_assert(MaxExp >= 999, "invalid parameter");
     static_assert(MaxExp <= (INT_MAX - 9) / 10, "invalid parameter");
 
-    int parsed_exponent = 0;
+    int32_t parsed_exponent = 0;
     if (next != last && (*next == 'e' || *next == 'E'))
     {
         // Possibly the start of an exponent...
@@ -1442,12 +1453,16 @@ StrtofResult charconv::Strtof(const char* next, const char* last, float& value)
     {
         RYU_ASSERT(exponent >= INT_MIN);
         RYU_ASSERT(exponent <= INT_MAX);
-        flt = ToBinary32(significand, static_cast<int>(num_digits), static_cast<int>(exponent));
+        flt = ToBinary32(significand, static_cast<int32_t>(num_digits), static_cast<int32_t>(exponent));
     }
     else
     {
         // We need to fall back to another algorithm if the input is too long.
-        flt = ToBinarySlow(start, next);
+#if RYU_STD_STRTOD_FALLBACK()
+        flt = ToBinary32Slow(start, next);
+#else
+        return {next, StrtofStatus::input_too_long};
+#endif
     }
 
     value = is_negative ? -flt : flt;

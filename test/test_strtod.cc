@@ -29,14 +29,14 @@ static uint32_t BitsFromFloat(float f)
 static float Strtof(const std::string& str)
 {
     float flt;
-    const auto res = charconv::Strtof(str.data(), str.data() + str.size(), flt);
-    CHECK(res.status != charconv::StrtofStatus::invalid);
+    const auto res = ryu::Strtof(str.data(), str.data() + str.size(), flt);
+    CHECK(res.status != ryu::StrtofStatus::invalid);
     return flt;
 }
 
 struct Ftoa1 {
     char* operator()(char* buf, int /*buflen*/, float value) const {
-        return charconv::Ftoa(buf, value);
+        return ryu::Ftoa(buf, value);
     }
 };
 
@@ -56,13 +56,13 @@ template <typename FtoaFn>
 static bool CheckStrtofImpl(float value)
 {
     const auto bits = BitsFromFloat(value);
-    char buf[charconv::FtoaMinBufferLength];
+    char buf[ryu::FtoaMinBufferLength];
 
-    char* const end = FtoaFn{}(buf, charconv::FtoaMinBufferLength, value);
+    char* const end = FtoaFn{}(buf, ryu::FtoaMinBufferLength, value);
 
     float value2;
-    const auto res = charconv::Strtof(buf, end, value2);
-    CHECK(res.status != charconv::StrtofStatus::invalid);
+    const auto res = ryu::Strtof(buf, end, value2);
+    CHECK(res.status != ryu::StrtofStatus::invalid);
     CHECK(res.next == end);
 
     if (std::isnan(value))
@@ -219,14 +219,14 @@ static uint64_t BitsFromFloat(double f)
 static double Strtod(const std::string& str)
 {
     double flt;
-    const auto res = charconv::Strtod(str.data(), str.data() + str.size(), flt);
-    CHECK(res.status != charconv::StrtodStatus::invalid);
+    const auto res = ryu::Strtod(str.data(), str.data() + str.size(), flt);
+    CHECK(res.status != ryu::StrtodStatus::invalid);
     return flt;
 }
 
 struct Dtoa1 {
     char* operator()(char* buf, int /*buflen*/, double value) const {
-        return charconv::Dtoa(buf, value);
+        return ryu::Dtoa(buf, value);
     }
 };
 
@@ -246,13 +246,13 @@ template <typename DtoaFn>
 static bool CheckStrtodImpl(double value)
 {
     const auto bits = BitsFromFloat(value);
-    char buf[charconv::DtoaMinBufferLength];
+    char buf[ryu::DtoaMinBufferLength];
 
-    char* const end = DtoaFn{}(buf, charconv::DtoaMinBufferLength, value);
+    char* const end = DtoaFn{}(buf, ryu::DtoaMinBufferLength, value);
 
     double value2;
-    const auto res = charconv::Strtod(buf, end, value2);
-    CHECK(res.status != charconv::StrtodStatus::invalid);
+    const auto res = ryu::Strtod(buf, end, value2);
+    CHECK(res.status != ryu::StrtodStatus::invalid);
     CHECK(res.next == end);
 
     if (std::isnan(value))

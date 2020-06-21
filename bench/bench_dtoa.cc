@@ -51,8 +51,8 @@ struct D2S
 struct D2S
 {
     static char const* Name() { return "Ryu"; }
-    char* operator()(char* buf, int /*buflen*/, float f) const { return charconv::Ftoa(buf, f); }
-    char* operator()(char* buf, int /*buflen*/, double f) const { return charconv::Dtoa(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, float f) const { return ryu::Ftoa(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, double f) const { return ryu::Dtoa(buf, f); }
 };
 #endif
 #if BENCH_RYU_UPSTREAM

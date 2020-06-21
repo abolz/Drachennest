@@ -96,12 +96,12 @@ struct D2S_Grisu3
 
 struct D2S_Ryu
 {
-    static_assert(BufSize >= charconv::DtoaMinBufferLength, "");
+    static_assert(BufSize >= ryu::DtoaMinBufferLength, "");
 
     bool Optimal() const { return true; }
     const char* Name() const { return "ryu"; }
-    char* operator()(char* buf, int buflen, float f) { return charconv::Ftoa(buf, f); }
-    char* operator()(char* buf, int buflen, double f) { return charconv::Dtoa(buf, f); }
+    char* operator()(char* buf, int buflen, float f) { return ryu::Ftoa(buf, f); }
+    char* operator()(char* buf, int buflen, double f) { return ryu::Dtoa(buf, f); }
 };
 
 //==================================================================================================

@@ -1,19 +1,14 @@
-// Copyright 2019 Ulf Adams
-// Copyright 2019 Alexander Bolz
+// Copyright 2020 Ulf Adams
+// Copyright 2020 Alexander Bolz
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Distributed under the Boost Software License, Version 1.0.
+//  (See accompanying file LICENSE_1_0.txt or copy at https://www.boost.org/LICENSE_1_0.txt)
 
 #include "ryu_64.h"
+
+#define RYU_SMALL_INT_OPTIMIZATION()                            1
+#define RYU_STD_STRTOD_FALLBACK()                               1
+#define RYU_STD_STRTOD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT()  1
 
 //#undef NDEBUG
 #include <cassert>
@@ -21,7 +16,9 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#if !RYU_STD_STRTOD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT()
 #include <string>
+#endif
 #if _MSC_VER
 #include <intrin.h>
 #endif
@@ -75,11 +72,11 @@ struct Double
     using value_type = double;
     using bits_type = uint64_t;
 
-//  static constexpr int       MaxDigits10     = std::numeric_limits<value_type>::max_digits10;
-    static constexpr int       SignificandSize = std::numeric_limits<value_type>::digits; // = p   (includes the hidden bit)
-    static constexpr int       ExponentBias    = std::numeric_limits<value_type>::max_exponent - 1 + (SignificandSize - 1);
-//  static constexpr int       MaxExponent     = std::numeric_limits<value_type>::max_exponent - 1 - (SignificandSize - 1);
-//  static constexpr int       MinExponent     = std::numeric_limits<value_type>::min_exponent - 1 - (SignificandSize - 1);
+//  static constexpr int32_t   MaxDigits10     = std::numeric_limits<value_type>::max_digits10;
+    static constexpr int32_t   SignificandSize = std::numeric_limits<value_type>::digits; // = p   (includes the hidden bit)
+    static constexpr int32_t   ExponentBias    = std::numeric_limits<value_type>::max_exponent - 1 + (SignificandSize - 1);
+//  static constexpr int32_t   MaxExponent     = std::numeric_limits<value_type>::max_exponent - 1 - (SignificandSize - 1);
+//  static constexpr int32_t   MinExponent     = std::numeric_limits<value_type>::min_exponent - 1 - (SignificandSize - 1);
     static constexpr bits_type HiddenBit       = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
     static constexpr bits_type SignificandMask = HiddenBit - 1;                           // = 2^(p-1) - 1
     static constexpr bits_type ExponentMask    = (bits_type{2 * std::numeric_limits<value_type>::max_exponent - 1}) << (SignificandSize - 1);
@@ -132,15 +129,15 @@ struct Double
 //
 //==================================================================================================
 
-static inline int Max(int x, int y)
+static inline int32_t Max(int32_t x, int32_t y)
 {
     return y < x ? x : y;
 }
 
 // Returns floor(x / 2^n).
-static inline int FloorDivPow2(int x, int n)
+static inline int32_t FloorDivPow2(int32_t x, int32_t n)
 {
-#if 1
+#if 0
     // Technically, right-shift of negative integers is implementation defined...
     // Should easily be optimized into SAR (or equivalent) instruction.
     return x < 0 ? ~(~x >> n) : (x >> n);
@@ -149,21 +146,21 @@ static inline int FloorDivPow2(int x, int n)
 #endif
 }
 
-static inline int FloorLog2Pow5(int e)
+static inline int32_t FloorLog2Pow5(int32_t e)
 {
     RYU_ASSERT(e >= -1764);
     RYU_ASSERT(e <=  1763);
     return FloorDivPow2(e * 1217359, 19);
 }
 
-static inline int FloorLog10Pow2(int e)
+static inline int32_t FloorLog10Pow2(int32_t e)
 {
     RYU_ASSERT(e >= -2620);
     RYU_ASSERT(e <=  2620);
     return FloorDivPow2(e * 315653, 20);
 }
 
-static inline int FloorLog10Pow5(int e)
+static inline int32_t FloorLog10Pow5(int32_t e)
 {
     RYU_ASSERT(e >= -2620);
     RYU_ASSERT(e <=  2620);
@@ -188,23 +185,23 @@ static inline uint32_t Hi32(uint64_t x)
 //==================================================================================================
 // Constant data = 10'656 (+ 400) bytes
 
-static constexpr int BitsPerPow5_Double = 128;
+static constexpr int32_t BitsPerPow5_Double = 128;
 
 namespace {
-struct Uint64x2 {
+struct uint64x2 {
     uint64_t hi;
     uint64_t lo;
 };
 }
 
-static inline Uint64x2 ComputePow5_Double(int k)
+static inline uint64x2 ComputePow5_Double(int32_t k)
 {
-    // Let e = FloorLog2Pow5(k) + 1 - 128
+    // Let e = FloorLog2Pow5(k) + 1 - BitsPerPow5_Double
     // For k >= 0, stores 5^k in the form: ceil( 5^k / 2^e )
     // For k <= 0, stores 5^k in the form: ceil(2^-e / 5^-k)
-    static constexpr int MinDecExp = -340;
-    static constexpr int MaxDecExp =  325;
-    static constexpr Uint64x2 Pow5[MaxDecExp - MinDecExp + 1] = {
+    static constexpr int32_t MinDecExp = -340;
+    static constexpr int32_t MaxDecExp =  325;
+    static constexpr uint64x2 Pow5[MaxDecExp - MinDecExp + 1] = {
         {0xBAAEE17FA23EBF76, 0x5D79BCF00D2DF64A}, // e =  -917, k = -340
         {0xE95A99DF8ACE6F53, 0xF4D82C2C107973DD}, // e =  -915, k = -339
         {0x91D8A02BB6C10594, 0x79071B9B8A4BE86A}, // e =  -912, k = -338
@@ -880,7 +877,7 @@ static inline Uint64x2 ComputePow5_Double(int k)
 
 #if defined(__SIZEOF_INT128__)
 
-static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
+static inline uint64_t MulShift(uint64_t m, const uint64x2* mul, int32_t j)
 {
     __extension__ using uint128_t = unsigned __int128;
 
@@ -891,21 +888,21 @@ static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
     const uint128_t b2 = uint128_t{m} * mul->hi;
 
 #if 1
-    const int shift = j - 64;
+    const int32_t shift = j - 64;
 #else
     RYU_ASSERT(j <= 64 + 63);
     // We need shift = j - 64 here.
     // Since 64 < j < 128, this is equivalent to shift = (j - 64) % 64 = j % 64.
     // When written as shift = j & 63, clang can optimize the 128-bit shift into
     // a simple funnel shift.
-    const int shift = j & 63;
+    const int32_t shift = j & 63;
 #endif
     return static_cast<uint64_t>((b2 + static_cast<uint64_t>(b0 >> 64)) >> shift);
 }
 
 #elif defined(_MSC_VER) && defined(_M_X64)
 
-static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
+static inline uint64_t MulShift(uint64_t m, const uint64x2* mul, int32_t j)
 {
     RYU_ASSERT(j >= 64 + 1);
     RYU_ASSERT(j <= 64 + 127);
@@ -922,7 +919,7 @@ static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
     _addcarry_u64(_addcarry_u64(0, b2_lo, b0_hi, &b2_lo), b2_hi, 0, &b2_hi);
 
 #if 1
-    const int shift = j - 64;
+    const int32_t shift = j - 64;
     const uint64_t l = __shiftright128(b2_lo, b2_hi, static_cast<unsigned char>(shift));
     const uint64_t h = __ull_rshift(b2_hi, shift);
     return (shift & 64) ? h : l;
@@ -937,7 +934,7 @@ static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
 
 #else
 
-static inline Uint64x2 Mul128(uint64_t a, uint64_t b)
+static inline uint64x2 Mul128(uint64_t a, uint64_t b)
 {
     const uint64_t b00 = uint64_t{Lo32(a)} * Lo32(b);
     const uint64_t b01 = uint64_t{Lo32(a)} * Hi32(b);
@@ -952,7 +949,7 @@ static inline Uint64x2 Mul128(uint64_t a, uint64_t b)
     return {hi, lo};
 }
 
-static inline uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int n)
+static inline uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int32_t n)
 {
     // For the __shiftright128 intrinsic, the shift value is always modulo 64.
     // In the current implementation of the double-precision version of Ryu, the
@@ -962,12 +959,12 @@ static inline uint64_t ShiftRight128(uint64_t lo, uint64_t hi, int n)
     RYU_ASSERT(n >= 1);
     RYU_ASSERT(n <= 63);
 
-    const int lshift = -n & 63;
-    const int rshift =  n;
+    const int32_t lshift = -n & 63;
+    const int32_t rshift =  n;
     return (hi << lshift) | (lo >> rshift);
 }
 
-static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
+static inline uint64_t MulShift(uint64_t m, const uint64x2* mul, int32_t j)
 {
     RYU_ASSERT(j >= 65);
     RYU_ASSERT(j <= 64 + 96 - 1);
@@ -980,20 +977,20 @@ static inline uint64_t MulShift(uint64_t m, const Uint64x2* mul, int j)
     b2.hi += b2.lo < b0.hi;
 
 #if 1
-    const int shift = j - 64; // [0, 128)
+    const int32_t shift = j - 64; // [0, 128)
     // NB:
     // shift >= 64 ==> 0 <= shift - 64 <= 31 (use 32-bit intrinsics?)
     return shift <= 63 ? ShiftRight128(b2.lo, b2.hi, shift) : b2.hi >> (shift - 64);
 #else
     RYU_ASSERT(j <= 64 + 63);
-    const int shift = j - 64;
+    const int32_t shift = j - 64;
     return ShiftRight128(b2.lo, b2.hi, shift);
 #endif
 }
 
 #endif
 
-static inline void MulPow5DivPow2_Double(uint64_t u, uint64_t v, uint64_t w, int e5, int e2, uint64_t& a, uint64_t& b, uint64_t& c)
+static inline void MulPow5DivPow2_Double(uint64_t u, uint64_t v, uint64_t w, int32_t e5, int32_t e2, uint64_t& a, uint64_t& b, uint64_t& c)
 {
     // j >= 121 and m has at most 53 + 2 = 55 bits.
     // The product along with the subsequent shift therefore requires
@@ -1012,7 +1009,7 @@ static inline void MulPow5DivPow2_Double(uint64_t u, uint64_t v, uint64_t w, int
 }
 
 // Returns whether value is divisible by 5^e5
-static inline bool MultipleOfPow5(uint64_t value, int e5)
+static inline bool MultipleOfPow5(uint64_t value, int32_t e5)
 {
     struct MulCmp {
         uint64_t mul;
@@ -1055,7 +1052,7 @@ static inline bool MultipleOfPow5(uint64_t value, int e5)
 }
 
 // Returns whether value is divisible by 2^e2
-static inline bool MultipleOfPow2(uint64_t value, int e2)
+static inline bool MultipleOfPow2(uint64_t value, int32_t e2)
 {
     RYU_ASSERT(e2 >= 0);
     RYU_ASSERT(e2 <= 63);
@@ -1064,13 +1061,15 @@ static inline bool MultipleOfPow2(uint64_t value, int e2)
 }
 
 namespace {
-struct ToDecimalResultDouble {
+struct FloatingDecimal64 {
     uint64_t digits; // num_digits <= 17
-    int exponent;
+    int32_t exponent;
 };
 }
 
-static inline ToDecimalResultDouble ToDecimal(double value)
+// TODO:
+// Export?!
+static inline FloatingDecimal64 ToDecimal64(double value)
 {
     RYU_ASSERT(Double(value).IsFinite());
     RYU_ASSERT(value > 0);
@@ -1087,7 +1086,7 @@ static inline ToDecimalResultDouble ToDecimal(double value)
     const uint64_t ieee_exponent = ieee_value.PhysicalExponent();
 
     uint64_t m2;
-    int e2;
+    int32_t e2;
     if (ieee_exponent == 0)
     {
         m2 = ieee_mantissa;
@@ -1096,8 +1095,9 @@ static inline ToDecimalResultDouble ToDecimal(double value)
     else
     {
         m2 = Double::HiddenBit | ieee_mantissa;
-        e2 = static_cast<int>(ieee_exponent) - Double::ExponentBias;
+        e2 = static_cast<int32_t>(ieee_exponent) - Double::ExponentBias;
 
+#if RYU_SMALL_INT_OPTIMIZATION()
         if /*unlikely*/ ((0 <= -e2 && -e2 < Double::SignificandSize) && MultipleOfPow2(m2, -e2))
         {
             // Since 2^52 <= m2 < 2^53 and 0 <= -e2 <= 52:
@@ -1105,6 +1105,7 @@ static inline ToDecimalResultDouble ToDecimal(double value)
             // Since m2 is divisible by 2^-e2, value is an integer.
             return {m2 >> -e2, 0};
         }
+#endif
     }
 
     const bool is_even = (m2 % 2) == 0;
@@ -1128,7 +1129,7 @@ static inline ToDecimalResultDouble ToDecimal(double value)
     // Convert to a decimal power base.
     //
 
-    int e10;
+    int32_t e10;
 
     bool za = false; // a[0, ..., i-1] == 0
     bool zb = false; // b[0, ..., i-1] == 0
@@ -1149,7 +1150,7 @@ static inline ToDecimalResultDouble ToDecimal(double value)
         // the first step and make sure that we execute the loop below at least
         // once and determine the correct value of the last removed digit.
 
-        const int q = FloorLog10Pow2(e2) - (e2 > 3); // == max(0, q' - 1)
+        const int32_t q = FloorLog10Pow2(e2) - (e2 > 3); // == max(0, q' - 1)
         RYU_ASSERT(q >= 0);
 
         e10 = q;
@@ -1182,7 +1183,7 @@ static inline ToDecimalResultDouble ToDecimal(double value)
         //          = (u,v,w) * 2^e2 / 10^(e10),
         //          = (u,v,w) * 5^(-e10) / 2^(e10 - e2)
 
-        const int q = FloorLog10Pow5(-e2) - (-e2 > 1); // == max(0, q' - 1)
+        const int32_t q = FloorLog10Pow5(-e2) - (-e2 > 1); // == max(0, q' - 1)
         RYU_ASSERT(q >= 0);
 
         e10 = q + e2;
@@ -1381,7 +1382,7 @@ static inline char* Utoa_8Digits(char* buf, uint32_t digits)
     return buf + 8;
 }
 
-static inline int DecimalLength(uint64_t v)
+static inline int32_t DecimalLength(uint64_t v)
 {
     RYU_ASSERT(v >= 1);
     RYU_ASSERT(v <= 99999999999999999ull);
@@ -1405,7 +1406,7 @@ static inline int DecimalLength(uint64_t v)
     return 1;
 }
 
-static inline void PrintDecimalDigits(char* buf, uint64_t output, int output_length)
+static inline void PrintDecimalDigits(char* buf, uint64_t output, int32_t output_length)
 {
     // We prefer 32-bit operations, even on 64-bit platforms.
     // We have at most 17 digits, and uint32_t can store 9 digits.
@@ -1456,27 +1457,30 @@ static inline void PrintDecimalDigits(char* buf, uint64_t output, int output_len
     }
 }
 
-static inline char* FormatDigits(char* buffer, uint64_t digits, int decimal_exponent, bool force_trailing_dot_zero = false)
+static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_exponent, bool force_trailing_dot_zero = false)
 {
     RYU_ASSERT(digits >= 1);
     RYU_ASSERT(digits <= 99999999999999999ull);
     RYU_ASSERT(decimal_exponent >= -999);
     RYU_ASSERT(decimal_exponent <=  999);
 
-    const int num_digits = DecimalLength(digits);
-    const int decimal_point = num_digits + decimal_exponent;
+    const int32_t num_digits = DecimalLength(digits);
+    const int32_t decimal_point = num_digits + decimal_exponent;
 
     // In order to successfully parse all numbers output by Dtoa using the Strtod implementation
     // below, we have to make sure to never emit more than 17 (significant) digits.
-    static constexpr int MaxFixedDecimalPoint =  17;
-    static constexpr int MinFixedDecimalPoint = -6;
+    static constexpr int32_t MaxFixedDecimalPoint =  17;
+    static constexpr int32_t MinFixedDecimalPoint = -6;
+#if RYU_SMALL_INT_OPTIMIZATION()
+    static_assert(MaxFixedDecimalPoint >= 17, "internal error");
+#endif
 
     const bool use_fixed = MinFixedDecimalPoint <= decimal_point && decimal_point <= MaxFixedDecimalPoint;
 
     // Prepare the buffer.
     // Avoid calling memset/memcpy with variable arguments below...
 
-    int decimal_digits_position;
+    int32_t decimal_digits_position;
     if (use_fixed)
     {
         if (decimal_point <= 0)
@@ -1615,7 +1619,7 @@ static inline char* ToChars(char* buffer, double value, bool force_trailing_dot_
         return buffer;
     }
 
-    const auto dec = ToDecimal(value);
+    const auto dec = ToDecimal64(value);
     return FormatDigits(buffer, dec.digits, dec.exponent, force_trailing_dot_zero);
 }
 
@@ -1623,7 +1627,7 @@ static inline char* ToChars(char* buffer, double value, bool force_trailing_dot_
 //
 //==================================================================================================
 
-char* charconv::Dtoa(char* buffer, double value)
+char* ryu::Dtoa(char* buffer, double value)
 {
     return ToChars(buffer, value);
 }
@@ -1634,14 +1638,14 @@ char* charconv::Dtoa(char* buffer, double value)
 
 // Maximum number of decimal digits in the significand the fast ToBinary method can handle.
 // Inputs with more significant digits must be processed using another algorithm.
-static constexpr int ToBinaryMaxDecimalDigits = 17;
+static constexpr int32_t ToBinaryMaxDecimalDigits = 17;
 
 // Any input <= 10^MinDecimalExponent is interpreted as 0.
 // Any input >  10^MaxDecimalExponent is interpreted as +Infinity.
-static constexpr int MinDecimalExponent = -324; // denorm_min / 2 = 2.4703282292062327e-324 >=  1 * 10^-324
-static constexpr int MaxDecimalExponent =  309; //            max = 1.7976931348623158e+308 <= 10 * 10^+308
+static constexpr int32_t MinDecimalExponent = -324; // denorm_min / 2 = 2.4703282292062327e-324 >= 10^-324
+static constexpr int32_t MaxDecimalExponent =  309; //            max = 1.7976931348623158e+308 <= 10^+309
 
-static inline int FloorLog2(uint64_t x)
+static inline int32_t FloorLog2(uint64_t x)
 {
     RYU_ASSERT(x != 0);
 
@@ -1650,9 +1654,15 @@ static inline int FloorLog2(uint64_t x)
 #elif defined(_MSC_VER) && defined(_M_X64)
     unsigned long index;
     _BitScanReverse64(&index, x);
-    return static_cast<int>(index);
+    return static_cast<int32_t>(index);
+#elif defined(_MSC_VER) && defined(_M_IX86)
+    unsigned long index;
+    if (_BitScanReverse(&index, static_cast<uint32_t>(x >> 32)))
+        return 32 + static_cast<int32_t>(index);
+    _BitScanReverse(&index, static_cast<uint32_t>(x));
+    return static_cast<int32_t>(index);
 #else
-    int l2 = 0;
+    int32_t l2 = 0;
     for (;;)
     {
         x >>= 1;
@@ -1664,24 +1674,24 @@ static inline int FloorLog2(uint64_t x)
 #endif
 }
 
-static inline int FloorLog2Pow10(int e)
+static inline int32_t FloorLog2Pow10(int32_t e)
 {
     RYU_ASSERT(e >= -1233);
-    RYU_ASSERT(e <= 1233);
+    RYU_ASSERT(e <=  1233);
     return FloorDivPow2(e * 1741647, 19);
 }
 
-static inline int ExtractBit(uint64_t x, int n)
+static inline int32_t ExtractBit(uint64_t x, int32_t n)
 {
     RYU_ASSERT(n >= 0);
     RYU_ASSERT(n <= 63);
     return (x & (uint64_t{1} << n)) != 0;
 }
 
-static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
+static inline double ToBinary64(uint64_t m10, int32_t m10_digits, int32_t e10)
 {
-    static constexpr int MantissaBits = Double::SignificandSize - 1;
-    static constexpr int ExponentBias = Double::ExponentBias - (Double::SignificandSize - 1);
+    static constexpr int32_t MantissaBits = Double::SignificandSize - 1;
+    static constexpr int32_t ExponentBias = Double::ExponentBias - (Double::SignificandSize - 1);
 
     RYU_ASSERT(m10 > 0);
     RYU_ASSERT(m10_digits == DecimalLength(m10));
@@ -1690,7 +1700,10 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
     RYU_ASSERT(e10 <= MaxDecimalExponent - m10_digits);
     static_cast<void>(m10_digits);
 
-#if defined(_M_X64) || defined(__x86_64__)
+    // e10 >= MinDecimalExponent - m10_digits + 1 >= -324 - 17 + 1 = -340
+    // e10 <= MaxDecimalExponent - m10_digits     <=  309 -  1     =  308
+
+#if defined(__x86_64__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
     // If the significand fits into a double (m10 <= 2^53) and the exponent 10^e10 (or 10^-e10)
     // fits into a double too (-22 <= e10 <= 22), we can compute the result simply by multiplying,
     // resp. dividing, the two numbers.
@@ -1745,7 +1758,7 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
         {
             RYU_ASSERT(m10_digits < 15);
 
-            const int zeros = 15 - m10_digits;
+            const int32_t zeros = 15 - m10_digits;
             flt *= ExactPowersOfTen[static_cast<uint32_t>(zeros)];
             flt *= ExactPowersOfTen[static_cast<uint32_t>(e10 - zeros)];
         }
@@ -1867,7 +1880,7 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
     }
 
     // Compute the final IEEE exponent.
-    int ieee_e2 = Max(0, log2_m2 + e2 + ExponentBias);
+    int32_t ieee_e2 = Max(0, log2_m2 + e2 + ExponentBias);
     if (ieee_e2 >= 2 * std::numeric_limits<double>::max_exponent - 1)
     {
         // Overflow:
@@ -1878,7 +1891,7 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
     // We need to figure out how much we need to shift m2.
     // The tricky part is that we need to take the final IEEE exponent into account, so we need to
     // reverse the bias and also special-case the value 0.
-    const int shift = (ieee_e2 == 0 ? 1 : ieee_e2) - e2 - (ExponentBias + MantissaBits);
+    const int32_t shift = (ieee_e2 == 0 ? 1 : ieee_e2) - e2 - (ExponentBias + MantissaBits);
     RYU_ASSERT(shift > 0);
 
     // We need to round up if the exact value is more than 0.5 above the value we computed. That's
@@ -1916,15 +1929,15 @@ static inline double ToBinary64(uint64_t m10, int m10_digits, int e10)
 
 #define RYU_ASSUME_NULL_TERMINATED_INPUT() 0
 
-using charconv::StrtodStatus;
-using charconv::StrtodResult;
+using ryu::StrtodStatus;
+using ryu::StrtodResult;
 
 static inline bool IsDigit(char ch)
 {
     return static_cast<unsigned>(ch - '0') <= 9u;
 }
 
-static inline int DigitValue(char ch)
+static inline int32_t DigitValue(char ch)
 {
     RYU_ASSERT(IsDigit(ch));
     return ch - '0';
@@ -2027,14 +2040,15 @@ static RYU_NEVER_INLINE StrtodResult ParseSpecial(bool is_negative, const char* 
     return {next, StrtodStatus::invalid};
 }
 
-static RYU_NEVER_INLINE double ToBinarySlow(const char* next, const char* last)
+#if RYU_STD_STRTOD_FALLBACK()
+static RYU_NEVER_INLINE double ToBinary64Slow(const char* next, const char* last)
 {
     //
     // FIXME:
     // _strtod_l( ..., C_LOCALE )
     //
 
-#if RYU_ASSUME_NULL_TERMINATED_INPUT()
+#if RYU_STD_STRTOD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT()
     const char* const ptr = next;
 #else
     // std::strtod expects null-terminated inputs. So we need to make a copy and null-terminate the input.
@@ -2046,19 +2060,15 @@ static RYU_NEVER_INLINE double ToBinarySlow(const char* next, const char* last)
     char* end;
     const auto flt = ::strtod(ptr, &end);
 
-    RYU_ASSERT(ptr != end);
-#if 0
-    if (errno == ERANGE)
-        return {next, StrtodStatus::invalid};
-#endif
-
     // std::strtod should have consumed all of the input.
+    RYU_ASSERT(ptr != end);
     RYU_ASSERT(last - next == end - ptr);
 
     return flt;
 }
+#endif
 
-StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
+StrtodResult ryu::Strtod(const char* next, const char* last, double& value)
 {
     if (next == last)
         return {next, StrtodStatus::invalid};
@@ -2080,7 +2090,7 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
             return {next, StrtodStatus::invalid};
     }
 
-// int
+// int32_t
 
     const char* const start = next;
 
@@ -2161,11 +2171,11 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
 
     // Exponents larger than this limit will be treated as +Infinity.
     // But we must still scan all the digits if this happens to be the case.
-    static constexpr int MaxExp = 999999;
+    static constexpr int32_t MaxExp = 999999;
     static_assert(MaxExp >= 999, "invalid parameter");
     static_assert(MaxExp <= (INT_MAX - 9) / 10, "invalid parameter");
 
-    int parsed_exponent = 0;
+    int32_t parsed_exponent = 0;
     if (next != last && (*next == 'e' || *next == 'E'))
     {
         // Possibly the start of an exponent...
@@ -2231,12 +2241,16 @@ StrtodResult charconv::Strtod(const char* next, const char* last, double& value)
     {
         RYU_ASSERT(exponent >= INT_MIN);
         RYU_ASSERT(exponent <= INT_MAX);
-        flt = ToBinary64(significand, static_cast<int>(num_digits), static_cast<int>(exponent));
+        flt = ToBinary64(significand, static_cast<int32_t>(num_digits), static_cast<int32_t>(exponent));
     }
     else
     {
         // We need to fall back to another algorithm if the input is too long.
-        flt = ToBinarySlow(start, next);
+#if RYU_STD_STRTOD_FALLBACK()
+        flt = ToBinary64Slow(start, next);
+#else
+        return {next, StrtodStatus::input_too_long};
+#endif
     }
 
     value = is_negative ? -flt : flt;

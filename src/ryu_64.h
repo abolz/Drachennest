@@ -1,33 +1,52 @@
-// Copyright 2019 Ulf Adams
-// Copyright 2019 Alexander Bolz
+// Copyright 2020 Ulf Adams
+// Copyright 2020 Alexander Bolz
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Distributed under the Boost Software License, Version 1.0.
+//  (See accompanying file LICENSE_1_0.txt or copy at https://www.boost.org/LICENSE_1_0.txt)
 
 #pragma once
 
-namespace charconv {
+namespace ryu {
 
-static constexpr int DtoaMinBufferLength = 64;
-
-// Converts the given double-precision number into decimal form and store the result in
-// the given buffer.
+// char* output_end = Dtoa(buffer, value);
+//
+// Converts the given double-precision number into decimal form and stores the result in the given
+// buffer.
+//
 // The buffer must be large enough, i.e. >= DtoaMinBufferLength.
 // The output format is similar to printf("%g").
+// The output is _not_ null-terminted.
+//
+// The output is optimal, i.e. the output string
+//  1. rounds back to the input number when read in (using round-to-nearest-even)
+//  2. is as short as possible,
+//  3. is as close to the input number as possible.
+//
+// Note:
+// This function may temporarily write up to DtoaMinBufferLength characters into the buffer.
+
+constexpr int DtoaMinBufferLength = 64;
+
 char* Dtoa(char* buffer, double value);
+
+// StrtodResult conversion_result = Strtod(first, last, value);
+//
+// Converts the given decimal floating-point number into a double-precision binary floating-point
+// number.
+// The function accepts the same inputs as std::strtod.
+//
+// If the input has more than 17 significant digits, the function may return
+// StrtodStatus::input_too_long. In this case another algorithm must be used to convert the input
+// string (e.g. std::strtod).
+//
+// Note:
+// This function always succeeds to convert the output of Dtoa back into the correct binary
+// floating-point number.
 
 enum class StrtodStatus {
     ok,
-    invalid, // TODO: more detailed error code...
+    invalid,
+    input_too_long,
 };
 
 struct StrtodResult {
@@ -37,4 +56,4 @@ struct StrtodResult {
 
 StrtodResult Strtod(const char* next, const char* last, double& value);
 
-} // namespace charconv
+} // namespace ryu

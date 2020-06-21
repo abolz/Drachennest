@@ -1,33 +1,52 @@
-// Copyright 2019 Ulf Adams
-// Copyright 2019 Alexander Bolz
+// Copyright 2020 Ulf Adams
+// Copyright 2020 Alexander Bolz
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Distributed under the Boost Software License, Version 1.0.
+//  (See accompanying file LICENSE_1_0.txt or copy at https://www.boost.org/LICENSE_1_0.txt)
 
 #pragma once
 
-namespace charconv {
+namespace ryu {
 
-static constexpr int FtoaMinBufferLength = 32;
-
-// Converts the given single-precision number into decimal form and store the result in
-// the given buffer.
+// char* output_end = Ftoa(buffer, value);
+//
+// Converts the given single-precision number into decimal form and stores the result in the given
+// buffer.
+//
 // The buffer must be large enough, i.e. >= FtoaMinBufferLength.
 // The output format is similar to printf("%g").
+// The output is _not_ null-terminted.
+//
+// The output is optimal, i.e. the output string
+//  1. rounds back to the input number when read in (using round-to-nearest-even)
+//  2. is as short as possible,
+//  3. is as close to the input number as possible.
+//
+// Note:
+// This function may temporarily write up to FtoaMinBufferLength characters into the buffer.
+
+constexpr int FtoaMinBufferLength = 32;
+
 char* Ftoa(char* buffer, float value);
+
+// StrtofResult conversion_result = Strtof(first, last, value);
+//
+// Converts the given decimal floating-point number into a single-precision binary floating-point
+// number.
+// The function accepts the same inputs as std::strtof.
+//
+// If the input has more than 9 significant digits, the function may return
+// StrtofStatus::input_too_long. In this case another algorithm must be used to convert the input
+// string (e.g. std::strtof).
+//
+// Note:
+// This function always succeeds to convert the output of Ftoa back into the correct binary
+// floating-point number.
 
 enum class StrtofStatus {
     ok,
-    invalid, // TODO: more detailed error code...
+    invalid,
+    input_too_long,
 };
 
 struct StrtofResult {
@@ -35,6 +54,6 @@ struct StrtofResult {
     StrtofStatus status;
 };
 
-StrtofResult Strtof(const char* next, const char* last, float& value);
+StrtofResult Strtof(const char* first, const char* last, float& value);
 
-} // namespace charconv
+} // namespace ryu
