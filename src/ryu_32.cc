@@ -1140,8 +1140,6 @@ static inline float ToBinary32(uint32_t m10, int32_t m10_digits, int32_t e10)
 // Strtof
 //==================================================================================================
 
-#define RYU_ASSUME_NULL_TERMINATED_INPUT() 0
-
 using ryu::StrtofStatus;
 using ryu::StrtofResult;
 
@@ -1305,7 +1303,9 @@ StrtofResult ryu::Strtof(const char* next, const char* last, float& value)
 
 // int32_t
 
+#if RYU_STD_STRTOD_FALLBACK()
     const char* const start = next;
+#endif
 
     const bool has_leading_zero = (*next == '0');
     const bool has_leading_dot  = (*next == '.');

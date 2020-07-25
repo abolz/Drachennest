@@ -1928,8 +1928,6 @@ static inline double ToBinary64(uint64_t m10, int32_t m10_digits, int32_t e10)
 // Strtod
 //==================================================================================================
 
-#define RYU_ASSUME_NULL_TERMINATED_INPUT() 0
-
 using ryu::StrtodStatus;
 using ryu::StrtodResult;
 
@@ -2093,7 +2091,9 @@ StrtodResult ryu::Strtod(const char* next, const char* last, double& value)
 
 // int32_t
 
+#if RYU_STD_STRTOD_FALLBACK()
     const char* const start = next;
+#endif
 
     const bool has_leading_zero = (*next == '0');
     const bool has_leading_dot  = (*next == '.');
