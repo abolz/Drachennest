@@ -1,4 +1,4 @@
-file(GLOB drachennest_sources "*.h" "*.cc" "ryu/*.h" "ryu/*.cc")
+file(GLOB drachennest_sources "*.h" "*.cc")
 
 add_library(drachennest STATIC ${drachennest_sources})
 
