@@ -2,8 +2,6 @@
 
 #include "ryu_32.h"
 #include "ryu_64.h"
-#include "schubfach_64.h"
-#include "grisu2.h"
 
 #include <cfloat>
 #include <climits>
@@ -20,9 +18,11 @@
 
 #define BENCH_RYU()             0
 #define BENCH_STD_PRINTF()      0
-#define BENCH_STD_CHARCONV()    1
-#define BENCH_SCHUBFACH()       0
+#define BENCH_STD_CHARCONV()    0
+#define BENCH_SCHUBFACH()       1
 #define BENCH_GRISU2()          0
+#define BENCH_GRISU2B()         0
+#define BENCH_GRISU3()          0
 
 #define BENCH_SINGLE()          0
 #define BENCH_DOUBLE()          1
@@ -66,6 +66,7 @@ struct D2S
 #endif
 
 #if BENCH_SCHUBFACH()
+#include "schubfach_64.h"
 struct D2S
 {
     static char const* Name() { return "schubfach"; }
@@ -74,10 +75,29 @@ struct D2S
 #endif
 
 #if BENCH_GRISU2()
+#include "grisu2.h"
 struct D2S
 {
     static char const* Name() { return "grisu2"; }
     char* operator()(char* buf, int /*buflen*/, double f) const { return grisu2::Dtoa(buf, f); }
+};
+#endif
+
+#if BENCH_GRISU2B()
+#include "grisu2b.h"
+struct D2S
+{
+    static char const* Name() { return "grisu2b"; }
+    char* operator()(char* buf, int /*buflen*/, double f) const { return grisu2b::Dtoa(buf, f); }
+};
+#endif
+
+#if BENCH_GRISU3()
+#include "grisu3.h"
+struct D2S
+{
+    static char const* Name() { return "grisu3"; }
+    char* operator()(char* buf, int /*buflen*/, double f) const { return grisu3::Dtoa(buf, f); }
 };
 #endif
 
@@ -373,14 +393,16 @@ static inline void Register_Digits_single(const char* name, int digits, int e10)
 
 static inline std::vector<double> GenRandomDigitData(int digits, int count)
 {
+//  std::uniform_int_distribution<uint64_t> gen(0, 0x7FF0000000000000ull - 1);
     std::uniform_real_distribution<double> gen(0, 1);
-//  std::uniform_real_distribution<double> gen(1, 2);
+    //std::uniform_real_distribution<double> gen(1, 2);
 
     std::vector<double> result;
     result.resize(count);
 
     for (int i = 0; i < count; ++i)
     {
+//      const double d = ReinterpretBits<double>(gen(random));
         const double d = gen(random);
 
         char buffer[128];
@@ -408,11 +430,11 @@ static inline void Register_RandomDigits_double(const char* name, int digits)
 int main(int argc, char** argv)
 {
 #if defined(__clang__)
-    printf("Clang %d.%d\n", __clang_major__, __clang_minor__);
+    printf("clang %d.%d\n", __clang_major__, __clang_minor__);
 #elif defined(__GNUC__)
-    printf("Gcc %s\n", __VERSION__);
+    printf("gcc %s\n", __VERSION__);
 #elif defined(_MSC_VER)
-    printf("Msc %d\n", _MSC_FULL_VER);
+    printf("msc %d\n", _MSC_FULL_VER);
 #endif
 
     printf("Preparing benchmarks...\n");
