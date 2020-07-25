@@ -1040,6 +1040,7 @@ static inline char* Utoa_8Digits(char* buf, uint32_t digits)
     return buf + 8;
 }
 
+#if 0
 static inline int32_t DecimalLength(uint64_t v)
 {
     SF_ASSERT(v >= 1);
@@ -1083,17 +1084,7 @@ static inline void PrintDecimalDigits(char* buf, uint64_t output, int32_t output
     SF_ASSERT(output <= UINT32_MAX);
     uint32_t output2 = static_cast<uint32_t>(output);
 
-    while (output2 >= 10000)
-    {
-        SF_ASSERT(output_length > 4);
-        const uint32_t q = output2 / 10000;
-        const uint32_t r = output2 % 10000;
-        output2 = q;
-        output_length -= 4;
-        Utoa_4Digits(buf + output_length, r);
-    }
-
-    if (output2 >= 100)
+    while (output2 >= 100)
     {
         SF_ASSERT(output_length > 2);
         const uint32_t q = output2 / 100;
@@ -1158,8 +1149,8 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
         else
         {
             // digits[000]
-            // 1 <= num_digits <= 17 decimal_point <= 21.
-            // Pre-filling buffer with 21 '0's is therefore sufficient.
+            // 1 <= num_digits <= decimal_point <= 24.
+            // Pre-filling buffer with 24 '0's is therefore sufficient.
             static_assert(MaxFixedDecimalPoint <= 24, "invalid parameter");
             std::memset(buffer, '0', 24);
             decimal_digits_position = 0;
@@ -1242,6 +1233,158 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
 
     return buffer;
 }
+#else
+static inline char* PrintDecimalDigitsBackwards(char* buf, uint64_t output)
+{
+    // We prefer 32-bit operations, even on 64-bit platforms.
+    // We have at most 17 digits, and uint32_t can store 9 digits.
+    // If output doesn't fit into uint32_t, we cut off 8 digits,
+    // so the rest will fit into uint32_t.
+    if (static_cast<uint32_t>(output >> 32) != 0)
+    {
+        const uint64_t q = output / 100000000;
+        const uint32_t r = static_cast<uint32_t>(output % 100000000);
+        output = q;
+        buf -= 8;
+        Utoa_8Digits(buf, r);
+    }
+
+    SF_ASSERT(output <= UINT32_MAX);
+    uint32_t output2 = static_cast<uint32_t>(output);
+
+    while (output2 >= 100)
+    {
+        const uint32_t q = output2 / 100;
+        const uint32_t r = output2 % 100;
+        output2 = q;
+        buf -= 2;
+        Utoa_2Digits(buf, r);
+    }
+
+    if (output2 >= 10)
+    {
+        buf -= 2;
+        Utoa_2Digits(buf, output2);
+    }
+    else
+    {
+        *--buf = static_cast<char>('0' + output2);
+    }
+
+    return buf;
+}
+
+static inline char* FormatDigits(char* const buffer, uint64_t digits, int32_t decimal_exponent, bool force_trailing_dot_zero = false)
+{
+    SF_ASSERT(digits >= 1);
+    SF_ASSERT(digits <= 99999999999999999ull);
+    SF_ASSERT(decimal_exponent >= -999);
+    SF_ASSERT(decimal_exponent <=  999);
+
+    // Trailing zeros or the exponent will be printed at position L.
+    char* L = buffer + 32;
+
+    // The fractional part starts at F and ends at L.
+    char* F = PrintDecimalDigitsBackwards(L, digits);
+
+    const int32_t num_digits = static_cast<int32_t>(L - F);
+    const int32_t decimal_point = num_digits + decimal_exponent;
+
+    static constexpr int32_t MinFixedDecimalPoint = -6;
+    static_assert(MinFixedDecimalPoint >= -6, "internal error");
+    static_assert(MinFixedDecimalPoint <= -1, "internal error");
+
+    static constexpr int32_t MaxFixedDecimalPoint =  17;
+    static_assert(MaxFixedDecimalPoint >= 17, "internal error");
+    static_assert(MaxFixedDecimalPoint <= 24, "internal error");
+
+    const bool use_fixed = MinFixedDecimalPoint <= decimal_point && decimal_point <= MaxFixedDecimalPoint;
+    if (use_fixed)
+    {
+        if (decimal_point <= 0)
+        {
+            // max_output_length = 2 + -(-6) + 17 = 25
+
+            // 0.[000]digits
+            // -6 <= decimal_point <= 0
+            //  ==> 2 <= 2 + -decimal_point <= 8
+            // Filling the buffer with 8 '0's is therefore sufficient.
+            std::memset(F - 8, '0', 8);
+            F -= 2 - decimal_point;
+            F[1] = '.';
+        }
+        else if (decimal_point < num_digits)
+        {
+            // max_output_length = 17 + 1 = 18
+
+            // dig.its
+            // 0 < decimal_point <= Min(17 - 1, MaxExp)
+            // We need to move at most 16 bytes to the left.
+            std::memmove(F + (decimal_point - 16 - 1), F + (decimal_point - 16), 16);
+            --F;
+            F[decimal_point] = '.';
+        }
+        else
+        {
+            // max_output_length = MaxFixedDecimalPoint = 17
+
+            // digits[000]
+            // 1 <= num_digits <= decimal_point <= 24.
+            // Filling buffer with 24 '0's is therefore sufficient.
+//          std::memset(L, '0', 24);
+            std::memset(L, '0', 16);
+            L = F + decimal_point;
+        }
+    }
+    else
+    {
+        // max_output_length = 17 + 1 + 5 = 23
+
+        // dE+123 or d.igitsE+123
+        if (num_digits != 1)
+        {
+            // We only need to copy the first digit one position to the left
+            // and insert a decimal point.
+            F[-1] = F[0];
+            F[ 0] = '.';
+            --F;
+        }
+
+        const int32_t scientific_exponent = decimal_point - 1;
+
+        std::memcpy(L, scientific_exponent < 0 ? "e-" : "e+", 2);
+        L += 2;
+        const uint32_t k = static_cast<uint32_t>(scientific_exponent < 0 ? -scientific_exponent : scientific_exponent);
+        if (k < 10)
+        {
+            *L++ = static_cast<char>('0' + k);
+        }
+        else if (k < 100)
+        {
+            L = Utoa_2Digits(L, k);
+        }
+        else
+        {
+            const uint32_t r = k % 10;
+            const uint32_t q = k / 10;
+            L = Utoa_2Digits(L, q);
+            *L++ = static_cast<char>('0' + r);
+        }
+    }
+
+    // Null-terminate the output.
+    // *L = '\0';
+
+    const int32_t output_length = static_cast<int32_t>(L - F);
+    SF_ASSERT(output_length >   0);
+    SF_ASSERT(output_length <= 25);
+
+    // Move everything to the start of the output buffer.
+    std::memmove(buffer, F, 32);
+
+    return buffer + output_length;
+}
+#endif
 
 static inline char* ToChars(char* buffer, double value, bool force_trailing_dot_zero = false)
 {
