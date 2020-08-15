@@ -13,7 +13,7 @@
 //--------------------------------------------------------------------------------------------------
 
 #define SF_SMALL_INT_OPTIMIZATION() 1
-#define SF_HP1() 0
+#define SF_HP1() 1
 
 //#undef NDEBUG
 #include <cassert>
@@ -808,7 +808,7 @@ static inline uint64_t RoundToOdd(uint64x2 g, uint64_t cp)
     const uint64_t y0 = static_cast<uint64_t>(y);
 #if SF_HP1()
     const uint64_t y1 = static_cast<uint64_t>(y >> 64);
-    return y1 | (y0 != 0);
+    return y1 | (y0 > 1);
 #else
     return static_cast<uint64_t>(y >> 63) | (y0 != 0);
 #endif
@@ -829,7 +829,7 @@ static inline uint64_t RoundToOdd(uint64x2 g, uint64_t cp)
     _addcarry_u64(_addcarry_u64(0, y0, x1, &y0), y1, 0, &y1);
 
 #if SF_HP1()
-    return y1 | (y0 != 0);
+    return y1 | (y0 > 1);
 #else
     const uint64_t r = __shiftright128(y0, y1, 63);
     return r | (y0 != 0);
@@ -878,7 +878,7 @@ static inline uint64_t RoundToOdd(uint64x2 g, uint64_t cp)
     y.hi += y.lo < x;
 
 #if SF_HP1()
-    return y.hi | (y.lo != 0);
+    return y.hi | (y.lo > 1);
 #else
     const uint64_t r = ShiftRight63(y.lo, y.hi);
     return r | (y.lo != 0);
