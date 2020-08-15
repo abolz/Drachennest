@@ -173,8 +173,8 @@ static constexpr int32_t BitsPerPow5_Single = 64;
 static inline uint64_t ComputePow5_Single(int32_t k)
 {
     // Let e = FloorLog2Pow5(k) + 1 - BitsPerPow5_Single
-    // For k >= 0, stores 5^k in the form: ceil( 5^k / 2^e )
-    // For k <= 0, stores 5^k in the form: ceil(2^-e / 5^-k)
+    // For k <  0, stores 5^k in the form:  ceil(2^-e / 5^-k)
+    // For k >= 0, stores 5^k in the form: floor( 5^k / 2^e )
     static constexpr int32_t MinDecExp = -54;
     static constexpr int32_t MaxDecExp =  47;
     static constexpr uint64_t Pow5[MaxDecExp - MinDecExp + 1] = {
@@ -260,26 +260,26 @@ static inline uint64_t ComputePow5_Single(int32_t k)
         0x84595161401484A0, // e =    -5, k =   25
         0xA56FA5B99019A5C8, // e =    -3, k =   26
         0xCECB8F27F4200F3A, // e =    -1, k =   27
-        0x813F3978F8940985, // e =     2, k =   28
-        0xA18F07D736B90BE6, // e =     4, k =   29
-        0xC9F2C9CD04674EDF, // e =     6, k =   30
-        0xFC6F7C4045812297, // e =     8, k =   31
-        0x9DC5ADA82B70B59E, // e =    11, k =   32
-        0xC5371912364CE306, // e =    13, k =   33
-        0xF684DF56C3E01BC7, // e =    15, k =   34
-        0x9A130B963A6C115D, // e =    18, k =   35
-        0xC097CE7BC90715B4, // e =    20, k =   36
-        0xF0BDC21ABB48DB21, // e =    22, k =   37
-        0x96769950B50D88F5, // e =    25, k =   38
-        0xBC143FA4E250EB32, // e =    27, k =   39
-        0xEB194F8E1AE525FE, // e =    29, k =   40
-        0x92EFD1B8D0CF37BF, // e =    32, k =   41
-        0xB7ABC627050305AE, // e =    34, k =   42
-        0xE596B7B0C643C71A, // e =    36, k =   43
-        0x8F7E32CE7BEA5C70, // e =    39, k =   44
-        0xB35DBF821AE4F38C, // e =    41, k =   45
-        0xE0352F62A19E306F, // e =    43, k =   46
-        0x8C213D9DA502DE46, // e =    46, k =   47
+        0x813F3978F8940984, // e =     2, k =   28
+        0xA18F07D736B90BE5, // e =     4, k =   29
+        0xC9F2C9CD04674EDE, // e =     6, k =   30
+        0xFC6F7C4045812296, // e =     8, k =   31
+        0x9DC5ADA82B70B59D, // e =    11, k =   32
+        0xC5371912364CE305, // e =    13, k =   33
+        0xF684DF56C3E01BC6, // e =    15, k =   34
+        0x9A130B963A6C115C, // e =    18, k =   35
+        0xC097CE7BC90715B3, // e =    20, k =   36
+        0xF0BDC21ABB48DB20, // e =    22, k =   37
+        0x96769950B50D88F4, // e =    25, k =   38
+        0xBC143FA4E250EB31, // e =    27, k =   39
+        0xEB194F8E1AE525FD, // e =    29, k =   40
+        0x92EFD1B8D0CF37BE, // e =    32, k =   41
+        0xB7ABC627050305AD, // e =    34, k =   42
+        0xE596B7B0C643C719, // e =    36, k =   43
+        0x8F7E32CE7BEA5C6F, // e =    39, k =   44
+        0xB35DBF821AE4F38B, // e =    41, k =   45
+        0xE0352F62A19E306E, // e =    43, k =   46
+        0x8C213D9DA502DE45, // e =    46, k =   47
     };
 
     RYU_ASSERT(k >= MinDecExp);
