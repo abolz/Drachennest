@@ -19,3 +19,25 @@ target_link_libraries(
         google_double_conversion
         ryu
     )
+
+set(bench_strtod_sources "bench_strtod.cc")
+
+add_executable(bench_strtod ${bench_strtod_sources})
+
+target_include_directories(
+    bench_strtod
+    PUBLIC
+        "${CMAKE_SOURCE_DIR}/ext/"
+        "${CMAKE_SOURCE_DIR}/src/"
+    )
+
+target_link_libraries(
+    bench_strtod
+    INTERFACE
+        ${DN_INTERFACE}
+    PRIVATE
+        drachennest
+        google_benchmark
+        google_double_conversion
+        ryu
+    )
