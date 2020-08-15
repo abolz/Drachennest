@@ -14,7 +14,6 @@
 
 #define SF_SMALL_INT_OPTIMIZATION() 1
 
-//#undef NDEBUG
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -134,7 +133,7 @@ static inline int32_t FloorLog10ThreeQuartersPow2(int32_t e)
     return FloorDivPow2(e * 1262611 - 524031, 22);
 }
 
-// Return floor(log_2(10^e))
+// Returns floor(log_2(10^e))
 static inline int32_t FloorLog2Pow10(int32_t e)
 {
     SF_ASSERT(e >= -1233);
