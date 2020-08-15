@@ -59,9 +59,10 @@ struct Double
     static constexpr int32_t   ExponentBias    = std::numeric_limits<value_type>::max_exponent - 1 + (SignificandSize - 1);
 //  static constexpr int32_t   MaxExponent     = std::numeric_limits<value_type>::max_exponent - 1 - (SignificandSize - 1);
 //  static constexpr int32_t   MinExponent     = std::numeric_limits<value_type>::min_exponent - 1 - (SignificandSize - 1);
+    static constexpr bits_type MaxIeeeExponent = bits_type{2 * std::numeric_limits<value_type>::max_exponent - 1};
     static constexpr bits_type HiddenBit       = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
     static constexpr bits_type SignificandMask = HiddenBit - 1;                           // = 2^(p-1) - 1
-    static constexpr bits_type ExponentMask    = (bits_type{2 * std::numeric_limits<value_type>::max_exponent - 1}) << (SignificandSize - 1);
+    static constexpr bits_type ExponentMask    = MaxIeeeExponent << (SignificandSize - 1);
     static constexpr bits_type SignMask        = ~(~bits_type{0} >> 1);
 
     bits_type bits;
@@ -95,14 +96,6 @@ struct Double
 
     bool SignBit() const {
         return (bits & SignMask) != 0;
-    }
-
-    value_type Value() const {
-        return ReinterpretBits<value_type>(bits);
-    }
-
-    value_type AbsValue() const {
-        return ReinterpretBits<value_type>(bits & ~SignMask);
     }
 };
 } // namespace
@@ -161,7 +154,7 @@ struct uint64x2 {
 };
 }
 
-static inline uint64x2 ComputePow10(int32_t k)
+static inline uint64x2 ComputePow10_Double(int32_t k)
 {
     // There are unique beta_k and r_k such that 10^-k = beta_k 2^r_k and
     // 2^127 <= beta_k < 2^128, namely r = floor(log_2 10^-k) - 127 and
@@ -894,6 +887,14 @@ static inline uint64_t RoundToOdd(uint64x2 g, uint64_t cp)
 
 #endif
 
+// Returns whether value is divisible by 2^e2
+static inline bool MultipleOfPow2(uint64_t value, int32_t e2)
+{
+    SF_ASSERT(e2 >= 0);
+    SF_ASSERT(e2 <= 63);
+    return (value & ((uint64_t{1} << e2) - 1)) == 0;
+}
+
 namespace {
 struct FloatingDecimal64 {
     uint64_t digits; // num_digits <= 17
@@ -901,34 +902,25 @@ struct FloatingDecimal64 {
 };
 }
 
-static inline FloatingDecimal64 ToDecimal(double value)
+static inline FloatingDecimal64 ToDecimal(uint64_t ieee_significand, uint64_t ieee_exponent)
 {
-    SF_ASSERT(Double(value).IsFinite());
-    SF_ASSERT(value > 0);
-
-    const Double ieee_value(value);
-    const uint64_t ieee_mantissa = ieee_value.PhysicalSignificand();
-    const uint64_t ieee_exponent = ieee_value.PhysicalExponent();
-
     uint64_t c;
     int32_t q;
     if (ieee_exponent != 0)
     {
-        c = Double::HiddenBit | ieee_mantissa;
+        c = Double::HiddenBit | ieee_significand;
         q = static_cast<int32_t>(ieee_exponent) - Double::ExponentBias;
 
 #if SF_SMALL_INT_OPTIMIZATION()
-        if (0 <= -q && -q < Double::SignificandSize)
+        if (0 <= -q && -q < Double::SignificandSize && MultipleOfPow2(c, -q))
         {
-            const uint64_t f = c >> -q;
-            if (f << -q == c)
-                return {f, 0};
+            return {c >> -q, 0};
         }
 #endif
     }
     else
     {
-        c = ieee_mantissa;
+        c = ieee_significand;
         q = 1 - Double::ExponentBias;
     }
 
@@ -936,7 +928,7 @@ static inline FloatingDecimal64 ToDecimal(double value)
     const bool accept_lower = is_even;
     const bool accept_upper = is_even;
 
-    const bool lower_boundary_is_closer = (ieee_mantissa == 0 && ieee_exponent > 1);
+    const bool lower_boundary_is_closer = (ieee_significand == 0 && ieee_exponent > 1);
 
 //  const int32_t qb = q - 2;
     const uint64_t cbl = 4 * c - 2 + lower_boundary_is_closer;
@@ -945,6 +937,8 @@ static inline FloatingDecimal64 ToDecimal(double value)
 
     // (q * 1262611         ) >> 22 == floor(log_10(    2^q))
     // (q * 1262611 - 524031) >> 22 == floor(log_10(3/4 2^q))
+    SF_ASSERT(q >= -1500);
+    SF_ASSERT(q <=  1500);
     const int32_t k = FloorDivPow2(q * 1262611 - (lower_boundary_is_closer ? 524031 : 0), 22);
 
 #if SF_HP1()
@@ -957,7 +951,7 @@ static inline FloatingDecimal64 ToDecimal(double value)
     SF_ASSERT(h <= 3);
 #endif
 
-    const uint64x2 pow10 = ComputePow10(-k);
+    const uint64x2 pow10 = ComputePow10_Double(-k);
     const uint64_t vbl = RoundToOdd(pow10, cbl << h);
     const uint64_t vb  = RoundToOdd(pow10, cb  << h);
     const uint64_t vbr = RoundToOdd(pow10, cbr << h);
@@ -1040,7 +1034,47 @@ static inline char* Utoa_8Digits(char* buf, uint32_t digits)
     return buf + 8;
 }
 
-#if 0
+static inline char* PrintDecimalDigitsBackwards(char* buf, uint64_t output)
+{
+    // We prefer 32-bit operations, even on 64-bit platforms.
+    // We have at most 17 digits, and uint32_t can store 9 digits.
+    // If output doesn't fit into uint32_t, we cut off 8 digits,
+    // so the rest will fit into uint32_t.
+    if (static_cast<uint32_t>(output >> 32) != 0)
+    {
+        const uint64_t q = output / 100000000;
+        const uint32_t r = static_cast<uint32_t>(output % 100000000);
+        output = q;
+        buf -= 8;
+        Utoa_8Digits(buf, r);
+    }
+
+    SF_ASSERT(output <= UINT32_MAX);
+    uint32_t output2 = static_cast<uint32_t>(output);
+
+    // (Runs up to 4 times...)
+    while (output2 >= 100)
+    {
+        const uint32_t q = output2 / 100;
+        const uint32_t r = output2 % 100;
+        output2 = q;
+        buf -= 2;
+        Utoa_2Digits(buf, r);
+    }
+
+    if (output2 >= 10)
+    {
+        buf -= 2;
+        Utoa_2Digits(buf, output2);
+    }
+    else
+    {
+        *--buf = static_cast<char>('0' + output2);
+    }
+
+    return buf;
+}
+
 static inline int32_t DecimalLength(uint64_t v)
 {
     SF_ASSERT(v >= 1);
@@ -1065,49 +1099,13 @@ static inline int32_t DecimalLength(uint64_t v)
     return 1;
 }
 
-static inline void PrintDecimalDigits(char* buf, uint64_t output, int32_t output_length)
-{
-    // We prefer 32-bit operations, even on 64-bit platforms.
-    // We have at most 17 digits, and uint32_t can store 9 digits.
-    // If output doesn't fit into uint32_t, we cut off 8 digits,
-    // so the rest will fit into uint32_t.
-    if (static_cast<uint32_t>(output >> 32) != 0)
-    {
-        SF_ASSERT(output_length > 8);
-        const uint64_t q = output / 100000000;
-        const uint32_t r = static_cast<uint32_t>(output % 100000000);
-        output = q;
-        output_length -= 8;
-        Utoa_8Digits(buf + output_length, r);
-    }
-
-    SF_ASSERT(output <= UINT32_MAX);
-    uint32_t output2 = static_cast<uint32_t>(output);
-
-    while (output2 >= 100)
-    {
-        SF_ASSERT(output_length > 2);
-        const uint32_t q = output2 / 100;
-        const uint32_t r = output2 % 100;
-        output2 = q;
-        output_length -= 2;
-        Utoa_2Digits(buf + output_length, r);
-    }
-
-    if (output2 >= 10)
-    {
-        SF_ASSERT(output_length == 2);
-        Utoa_2Digits(buf, output2);
-    }
-    else
-    {
-        SF_ASSERT(output_length == 1);
-        buf[0] = static_cast<char>('0' + output2);
-    }
-}
-
 static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_exponent, bool force_trailing_dot_zero = false)
 {
+    static constexpr int32_t MinFixedDecimalPoint = -6;
+    static constexpr int32_t MaxFixedDecimalPoint =  17;
+    static_assert(MinFixedDecimalPoint <= -1, "internal error");
+    static_assert(MaxFixedDecimalPoint >= 17, "internal error");
+
     SF_ASSERT(digits >= 1);
     SF_ASSERT(digits <= 99999999999999999ull);
     SF_ASSERT(decimal_exponent >= -999);
@@ -1115,12 +1113,6 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
 
     const int32_t num_digits = DecimalLength(digits);
     const int32_t decimal_point = num_digits + decimal_exponent;
-
-    static constexpr int32_t MaxFixedDecimalPoint =  17;
-    static constexpr int32_t MinFixedDecimalPoint = -6;
-#if SF_SMALL_INT_OPTIMIZATION()
-    static_assert(MaxFixedDecimalPoint >= 17, "internal error");
-#endif
 
     const bool use_fixed = MinFixedDecimalPoint <= decimal_point && decimal_point <= MaxFixedDecimalPoint;
 
@@ -1133,55 +1125,58 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
         if (decimal_point <= 0)
         {
             // 0.[000]digits
-            // -6 <= decimal_point <= 0
-            //  ==> 2 <= 2 + -decimal_point <= 8
-            // Pre-filling the buffer with 8 '0's is therefore sufficient.
-            std::memset(buffer, '0', 8);
-            decimal_digits_position = 2 + (-decimal_point);
+            decimal_digits_position = 2 - decimal_point;
+            static_assert(MinFixedDecimalPoint >= -14, "internal error");
+            std::memcpy(buffer, "0.00000000000000", 16);
         }
         else if (decimal_point < num_digits)
         {
             // dig.its
-            // 0 < decimal_point <= Min(17 - 1, MaxExp)
-            // We need to move at most 16 bytes to the right.
             decimal_digits_position = 0;
         }
         else
         {
             // digits[000]
-            // 1 <= num_digits <= decimal_point <= 24.
-            // Pre-filling buffer with 24 '0's is therefore sufficient.
-            static_assert(MaxFixedDecimalPoint <= 24, "invalid parameter");
-            std::memset(buffer, '0', 24);
             decimal_digits_position = 0;
+            static_assert(MaxFixedDecimalPoint <= 32, "internal error");
+            std::memset(buffer +  0, '0', 16);
+            std::memset(buffer + 16, '0', 16);
         }
     }
     else
     {
         // dE+123 or d.igitsE+123
-        // We only need to copy the first digit one position to the left.
         decimal_digits_position = 1;
     }
 
-    PrintDecimalDigits(buffer + decimal_digits_position, digits, num_digits);
+    char* const digits_end = buffer + decimal_digits_position + num_digits;
+    PrintDecimalDigitsBackwards(digits_end, digits);
 
     if (use_fixed)
     {
         if (decimal_point <= 0)
         {
             // 0.[000]digits
-            buffer[1] = '.';
-            buffer += 2 + (-decimal_point) + num_digits;
+            buffer = digits_end;
         }
         else if (decimal_point < num_digits)
         {
             // dig.its
-            // We need to move at most 16 bytes one place to the right.
-            std::memmove(buffer + (decimal_point + 1), buffer + decimal_point, 16);
+#if defined(_MSC_VER) && !defined(__clang__)
+            // VC does not inline the memmove call below. (Even if compiled with /arch:AVX2.)
+            // However, memcpy will be inlined.
+            uint8_t tmp[16];
+            char* const src = buffer + decimal_point;
+            char* const dst = src + 1;
+            std::memcpy(tmp, src, 16);
+            std::memcpy(dst, tmp, 16);
+#else
+            std::memmove(buffer + decimal_point + 1, buffer + decimal_point, 16);
+#endif
             buffer[decimal_point] = '.';
-            buffer += num_digits + 1;
+            buffer = digits_end + 1;
         }
-        else // 0 < num_digits <= decimal_point
+        else
         {
             // digits[000]
             buffer += decimal_point;
@@ -1199,20 +1194,21 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
         if (num_digits == 1)
         {
             // dE+123
-            buffer += 1;
+            ++buffer;
         }
         else
         {
             // d.igitsE+123
             buffer[1] = '.';
-            buffer += 1 + num_digits;
+            buffer = digits_end;
         }
 
-        const auto scientific_exponent = decimal_point - 1;
-//      assert(scientific_exponent != 0);
+        const int32_t scientific_exponent = decimal_point - 1;
+//      SF_ASSERT(scientific_exponent != 0);
 
         std::memcpy(buffer, scientific_exponent < 0 ? "e-" : "e+", 2);
         buffer += 2;
+
         const uint32_t k = static_cast<uint32_t>(scientific_exponent < 0 ? -scientific_exponent : scientific_exponent);
         if (k < 10)
         {
@@ -1224,202 +1220,58 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
         }
         else
         {
-            const uint32_t r = k % 10;
-            const uint32_t q = k / 10;
-            buffer = Utoa_2Digits(buffer, q);
-            *buffer++ = static_cast<char>('0' + r);
+            const uint32_t q = k / 100;
+            const uint32_t r = k % 100;
+            *buffer++ = static_cast<char>('0' + q);
+            buffer = Utoa_2Digits(buffer, r);
         }
     }
 
     return buffer;
 }
-#else
-static inline char* PrintDecimalDigitsBackwards(char* buf, uint64_t output)
-{
-    // We prefer 32-bit operations, even on 64-bit platforms.
-    // We have at most 17 digits, and uint32_t can store 9 digits.
-    // If output doesn't fit into uint32_t, we cut off 8 digits,
-    // so the rest will fit into uint32_t.
-    if (static_cast<uint32_t>(output >> 32) != 0)
-    {
-        const uint64_t q = output / 100000000;
-        const uint32_t r = static_cast<uint32_t>(output % 100000000);
-        output = q;
-        buf -= 8;
-        Utoa_8Digits(buf, r);
-    }
-
-    SF_ASSERT(output <= UINT32_MAX);
-    uint32_t output2 = static_cast<uint32_t>(output);
-
-    while (output2 >= 100)
-    {
-        const uint32_t q = output2 / 100;
-        const uint32_t r = output2 % 100;
-        output2 = q;
-        buf -= 2;
-        Utoa_2Digits(buf, r);
-    }
-
-    if (output2 >= 10)
-    {
-        buf -= 2;
-        Utoa_2Digits(buf, output2);
-    }
-    else
-    {
-        *--buf = static_cast<char>('0' + output2);
-    }
-
-    return buf;
-}
-
-static inline char* FormatDigits(char* const buffer, uint64_t digits, int32_t decimal_exponent, bool force_trailing_dot_zero = false)
-{
-    SF_ASSERT(digits >= 1);
-    SF_ASSERT(digits <= 99999999999999999ull);
-    SF_ASSERT(decimal_exponent >= -999);
-    SF_ASSERT(decimal_exponent <=  999);
-
-    // Trailing zeros or the exponent will be printed at position L.
-    char* L = buffer + 32;
-
-    // The fractional part starts at F and ends at L.
-    char* F = PrintDecimalDigitsBackwards(L, digits);
-
-    const int32_t num_digits = static_cast<int32_t>(L - F);
-    const int32_t decimal_point = num_digits + decimal_exponent;
-
-    static constexpr int32_t MinFixedDecimalPoint = -6;
-    static_assert(MinFixedDecimalPoint >= -6, "internal error");
-    static_assert(MinFixedDecimalPoint <= -1, "internal error");
-
-    static constexpr int32_t MaxFixedDecimalPoint =  17;
-    static_assert(MaxFixedDecimalPoint >= 17, "internal error");
-    static_assert(MaxFixedDecimalPoint <= 24, "internal error");
-
-    const bool use_fixed = MinFixedDecimalPoint <= decimal_point && decimal_point <= MaxFixedDecimalPoint;
-    if (use_fixed)
-    {
-        if (decimal_point <= 0)
-        {
-            // max_output_length = 2 + -(-6) + 17 = 25
-
-            // 0.[000]digits
-            // -6 <= decimal_point <= 0
-            //  ==> 2 <= 2 + -decimal_point <= 8
-            // Filling the buffer with 8 '0's is therefore sufficient.
-            std::memset(F - 8, '0', 8);
-            F -= 2 - decimal_point;
-            F[1] = '.';
-        }
-        else if (decimal_point < num_digits)
-        {
-            // max_output_length = 17 + 1 = 18
-
-            // dig.its
-            // 0 < decimal_point <= Min(17 - 1, MaxExp)
-            // We need to move at most 16 bytes to the left.
-            std::memmove(F + (decimal_point - 16 - 1), F + (decimal_point - 16), 16);
-            --F;
-            F[decimal_point] = '.';
-        }
-        else
-        {
-            // max_output_length = MaxFixedDecimalPoint = 17
-
-            // digits[000]
-            // 1 <= num_digits <= decimal_point <= 24.
-            // Filling buffer with 24 '0's is therefore sufficient.
-//          std::memset(L, '0', 24);
-            std::memset(L, '0', 16);
-            L = F + decimal_point;
-        }
-    }
-    else
-    {
-        // max_output_length = 17 + 1 + 5 = 23
-
-        // dE+123 or d.igitsE+123
-        if (num_digits != 1)
-        {
-            // We only need to copy the first digit one position to the left
-            // and insert a decimal point.
-            F[-1] = F[0];
-            F[ 0] = '.';
-            --F;
-        }
-
-        const int32_t scientific_exponent = decimal_point - 1;
-
-        std::memcpy(L, scientific_exponent < 0 ? "e-" : "e+", 2);
-        L += 2;
-        const uint32_t k = static_cast<uint32_t>(scientific_exponent < 0 ? -scientific_exponent : scientific_exponent);
-        if (k < 10)
-        {
-            *L++ = static_cast<char>('0' + k);
-        }
-        else if (k < 100)
-        {
-            L = Utoa_2Digits(L, k);
-        }
-        else
-        {
-            const uint32_t r = k % 10;
-            const uint32_t q = k / 10;
-            L = Utoa_2Digits(L, q);
-            *L++ = static_cast<char>('0' + r);
-        }
-    }
-
-    // Null-terminate the output.
-    // *L = '\0';
-
-    const int32_t output_length = static_cast<int32_t>(L - F);
-    SF_ASSERT(output_length >   0);
-    SF_ASSERT(output_length <= 25);
-
-    // Move everything to the start of the output buffer.
-    std::memmove(buffer, F, 32);
-
-    return buffer + output_length;
-}
-#endif
 
 static inline char* ToChars(char* buffer, double value, bool force_trailing_dot_zero = false)
 {
     const Double v(value);
 
-    if (!v.IsFinite())
+    const uint64_t significand = v.PhysicalSignificand();
+    const uint64_t exponent = v.PhysicalExponent();
+
+    if (exponent != Double::MaxIeeeExponent) // [[likely]]
     {
-        if (v.IsNaN())
+        // Finite
+
+        buffer[0] = '-';
+        buffer += v.SignBit();
+
+        if (exponent != 0 || significand != 0) // [[likely]]
         {
-            std::memcpy(buffer, "nan ", 4);
-            return buffer + 3;
+            // != 0
+
+            const auto dec = ToDecimal(significand, exponent);
+            return FormatDigits(buffer, dec.digits, dec.exponent, force_trailing_dot_zero);
         }
-        if (v.SignBit())
+        else
         {
-            *buffer++ = '-';
+            std::memcpy(buffer, "0.0 ", 4);
+            buffer += force_trailing_dot_zero ? 3 : 1;
+            return buffer;
         }
+    }
+
+    if (significand == 0)
+    {
+        buffer[0] = '-';
+        buffer += v.SignBit();
+
         std::memcpy(buffer, "inf ", 4);
         return buffer + 3;
     }
-
-    if (v.SignBit())
+    else
     {
-        value = v.AbsValue();
-        *buffer++ = '-';
+        std::memcpy(buffer, "nan ", 4);
+        return buffer + 3;
     }
-
-    if (v.IsZero())
-    {
-        std::memcpy(buffer, "0.0 ", 4);
-        buffer += 1 + (force_trailing_dot_zero ? 2 : 0);
-        return buffer;
-    }
-
-    const auto dec = ToDecimal(value);
-    return FormatDigits(buffer, dec.digits, dec.exponent, force_trailing_dot_zero);
 }
 
 //==================================================================================================
