@@ -1,5 +1,7 @@
 #include "benchmark/benchmark.h"
 
+#include <cstring>
+
 #include <algorithm>
 #include <random>
 #include <string>
