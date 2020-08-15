@@ -7,6 +7,7 @@
 #include "grisu3.h"
 #include "ryu_32.h"
 #include "ryu_64.h"
+#include "schubfach_32.h"
 #include "schubfach_64.h"
 
 #include <cassert>
@@ -110,11 +111,11 @@ struct D2S_Ryu
     char* operator()(char* buf, int buflen, double f) { return ryu::Dtoa(buf, f); }
 };
 
-struct D2D_Schubfach
+struct D2S_Schubfach
 {
     bool Optimal() const { return true; }
     const char* Name() const { return "schubfach"; }
-    char* operator()(char* buf, int buflen, float f) { return ryu::Ftoa(buf, f); }
+    char* operator()(char* buf, int buflen, float f) { return schubfach::Ftoa(buf, f); }
     char* operator()(char* buf, int buflen, double f) { return schubfach::Dtoa(buf, f); }
 };
 
@@ -286,6 +287,7 @@ static void CheckSingle(float f)
 {
     CheckSingle(D2S_DoubleConversion{}, f);
     CheckSingle(D2S_Ryu{}, f);
+    CheckSingle(D2S_Schubfach{}, f);
 }
 
 inline void CheckSingleBits(uint32_t bits)
@@ -318,6 +320,7 @@ static void CheckSingle(float value, const std::string& expected)
 {
     CheckSingle(D2S_DoubleConversion{}, value, expected);
     CheckSingle(D2S_Ryu{}, value, expected);
+    CheckSingle(D2S_Schubfach{}, value, expected);
 }
 
 static void CheckSingleBits(uint32_t bits, const std::string& expected)
@@ -384,7 +387,7 @@ static void CheckDouble(double f)
     CheckDouble(D2S_Grisu2b{}, f);
     CheckDouble(D2S_Grisu3{}, f);
     CheckDouble(D2S_Ryu{}, f);
-    CheckDouble(D2D_Schubfach{}, f);
+    CheckDouble(D2S_Schubfach{}, f);
 }
 
 inline void CheckDoubleBits(uint64_t bits)
@@ -421,7 +424,7 @@ static void CheckDouble(double value, const std::string& expected)
     CheckDouble(D2S_Grisu2b{}, value, expected);
     CheckDouble(D2S_Grisu3{}, value, expected);
     CheckDouble(D2S_Ryu{}, value, expected);
-    CheckDouble(D2D_Schubfach{}, value, expected);
+    CheckDouble(D2S_Schubfach{}, value, expected);
 }
 
 static void CheckDoubleBits(uint64_t bits, const std::string& expected)
