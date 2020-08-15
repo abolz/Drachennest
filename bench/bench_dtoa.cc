@@ -27,6 +27,8 @@
 #define BENCH_SINGLE()          0
 #define BENCH_DOUBLE()          1
 
+#define BENCH_TO_DECIMAL()      0
+
 //==================================================================================================
 //
 //==================================================================================================
@@ -37,6 +39,9 @@ struct D2S
     static char const* Name() { return "ryu"; }
     char* operator()(char* buf, int /*buflen*/, float f) const { return ryu::Ftoa(buf, f); }
     char* operator()(char* buf, int /*buflen*/, double f) const { return ryu::Dtoa(buf, f); }
+#if BENCH_TO_DECIMAL()
+    static ryu::FloatingDecimal64 ToDec(double value) { return ryu::ToDecimal64(value); }
+#endif
 };
 #endif
 
@@ -66,11 +71,16 @@ struct D2S
 #endif
 
 #if BENCH_SCHUBFACH()
+#include "schubfach_32.h"
 #include "schubfach_64.h"
 struct D2S
 {
     static char const* Name() { return "schubfach"; }
+    char* operator()(char* buf, int /*buflen*/, float f) const { return schubfach::Ftoa(buf, f); }
     char* operator()(char* buf, int /*buflen*/, double f) const { return schubfach::Dtoa(buf, f); }
+#if BENCH_TO_DECIMAL()
+    static schubfach::FloatingDecimal64 ToDec(double value) { return schubfach::ToDecimal(value); }
+#endif
 };
 #endif
 
@@ -187,11 +197,23 @@ static inline char const* StrPrintf(char const* format, Args&&... args)
 #endif
 }
 
+#if BENCH_TO_DECIMAL()
+template <typename D2S, typename Float>
+static inline void BenchIt(benchmark::State& state, std::vector<Float> const& numbers)
+{
+    int index = 0;
+    for (auto _ : state)
+    {
+        benchmark::DoNotOptimize(D2S::ToDec(numbers[index]));
+        index = (index + 1) & (NumFloats - 1);
+    }
+}
+#else
 template <typename D2S, typename Float>
 static inline void BenchIt(benchmark::State& state, std::vector<Float> const& numbers)
 {
     D2S d2s;
-
+ 
     int index = 0;
 
     uint64_t sum = 0;
@@ -206,6 +228,7 @@ static inline void BenchIt(benchmark::State& state, std::vector<Float> const& nu
     if (sum == UINT64_MAX)
         abort();
 }
+#endif
 
 template <typename Float>
 static inline void RegisterBenchmarks(char const* name, std::vector<Float> const& numbers)
@@ -391,7 +414,7 @@ static inline void Register_Digits_single(const char* name, int digits, int e10)
 //
 //--------------------------------------------------------------------------------------------------
 
-static inline std::vector<double> GenRandomDigitData(int digits, int count)
+static inline std::vector<double> GenRandomDigitData_double(int digits, int count)
 {
 //  std::uniform_int_distribution<uint64_t> gen(0, 0x7FF0000000000000ull - 1);
     std::uniform_real_distribution<double> gen(0, 1);
@@ -420,7 +443,42 @@ static inline std::vector<double> GenRandomDigitData(int digits, int count)
 
 static inline void Register_RandomDigits_double(const char* name, int digits)
 {
-    RegisterBenchmarks(name, GenRandomDigitData(digits, NumFloats));
+    RegisterBenchmarks(name, GenRandomDigitData_double(digits, NumFloats));
+}
+
+//--------------------------------------------------------------------------------------------------
+//
+//--------------------------------------------------------------------------------------------------
+
+static inline std::vector<float> GenRandomDigitData_float(int digits, int count)
+{
+    std::uniform_real_distribution<float> gen(0, 1);
+    //std::uniform_real_distribution<double> gen(1, 2);
+
+    std::vector<float> result;
+    result.resize(count);
+
+    for (int i = 0; i < count; ++i)
+    {
+//      const double d = ReinterpretBits<double>(gen(random));
+        const double d = gen(random);
+
+        char buffer[128];
+        char* const end = buffer + snprintf(buffer, 128, "%.*g", digits, d);
+
+        float converted;
+        const auto res = ryu::Strtof(buffer, end, converted);
+        assert(res.status == ryu::StrtofStatus::ok);
+
+        result[i] = converted;
+    }
+
+    return result;
+}
+
+static inline void Register_RandomDigits_float(const char* name, int digits)
+{
+    RegisterBenchmarks(name, GenRandomDigitData_float(digits, NumFloats));
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -439,8 +497,9 @@ int main(int argc, char** argv)
 
     printf("Preparing benchmarks...\n");
 
-#if 1
 #if BENCH_DOUBLE()
+    Register_RandomBits_double();
+    Register_RandomBits_double();
     Register_RandomBits_double();
     Register_Uniform(0.0, 1.0);
     Register_Uniform(0.0, 1.0e+308);
@@ -449,7 +508,7 @@ int main(int argc, char** argv)
     //    Register_Uniform(std::pow(10.0, e), std::pow(10.0, e+1));
     //}
 
-#if 0
+#if 1
 #if 0
     for (int d = 1; d <= 15; ++d) {
 //  for (int d = 15; d >= 1; --d) {
@@ -465,8 +524,11 @@ int main(int argc, char** argv)
         Register_Digits_double(StrPrintf("%d-digits * 10^22", d), d, 22);
     }
 #else
-    for (int d = 18; d >= 1; --d) {
-        for (int e = -22; e <= 22; e += 1) {
+    for (int d = 1; d <= 18; ++d) {
+//  for (int d = 16; d <= 18; ++d) {
+//  for (int d = 16; d <= 16; ++d) {
+//  for (int d = 1; d <= 3; ++d) {
+        for (int e = -11; e <= 11; e += 1) {
             Register_Digits_double(StrPrintf("%2d,%3d", d, e), d, e);
         }
     }
@@ -479,10 +541,14 @@ int main(int argc, char** argv)
 
 #if BENCH_SINGLE()
     Register_RandomBits_single();
+    Register_RandomBits_single();
+    Register_RandomBits_single();
     Register_Uniform(0.0f, 1.0f);
     Register_Uniform(0.0f, 1.0e+38f);
 
-#if 0
+    for (int d = 1; d <= 9; ++d)
+        Register_RandomDigits_float(StrPrintf("%d-digits", d), d);
+
 #if 0
     for (int d = 1; d <= 7; ++d) {
         Register_Digits_single(StrPrintf("1.%d-digits", d - 1), d, -(d - 1));
@@ -502,8 +568,6 @@ int main(int argc, char** argv)
             Register_Digits_single(StrPrintf("%2d,%3d", d, e), d, e);
         }
     }
-#endif
-#endif
 #endif
 #endif
 
