@@ -156,18 +156,14 @@ struct uint64x2 {
 
 static inline uint64x2 ComputePow10_Double(int32_t k)
 {
-    // There are unique beta_k and r_k such that 10^-k = beta_k 2^r_k and
-    // 2^127 <= beta_k < 2^128, namely r = floor(log_2 10^-k) - 127 and
-    // beta_k = 2^-r_k 10^-k.
-    // Let g = ceil(beta), so (g-1) 2^r < 10^-k <= g 2^r, with the latter
-    // value being a pretty good overestimate for 10^-k.
+    // There are unique beta and r such that 10^k = beta 2^r and
+    // 2^127 <= beta < 2^128, namely r = floor(log_2 10^k) - 127 and
+    // beta = 2^-r 10^k.
+    // Let g = ceil(beta), so (g-1) 2^r < 10^k <= g 2^r, with the latter
+    // value being a pretty good overestimate for 10^k.
 
-    //
-    // FIXME:
-    // The paper uses g = floor(beta) + 1 here.
-    // I need to do the math and verify that it's ok to use the ceiling here!
-    // Or revert to floor(beta) + 1!
-    //
+    // NB: Since for all the required exponents k, we have g < 2^128,
+    //     all constants can be stored in 128-bit integers.
 
     static constexpr int32_t kMin = -292;
     static constexpr int32_t kMax =  324;
