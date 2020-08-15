@@ -13,7 +13,6 @@
 //--------------------------------------------------------------------------------------------------
 
 #define SF_SMALL_INT_OPTIMIZATION() 1
-#define SF_HP1() 1
 
 //#undef NDEBUG
 #include <cassert>
@@ -802,12 +801,8 @@ static inline uint64_t RoundToOdd(uint64x2 g, uint64_t cp)
     const uint128_t y = uint128_t{cp} * g.hi + static_cast<uint64_t>(x >> 64);
 
     const uint64_t y0 = static_cast<uint64_t>(y);
-#if SF_HP1()
     const uint64_t y1 = static_cast<uint64_t>(y >> 64);
     return y1 | (y0 > 1);
-#else
-    return static_cast<uint64_t>(y >> 63) | (y0 != 0);
-#endif
 }
 
 #elif defined(_MSC_VER) && defined(_M_X64)
@@ -824,12 +819,7 @@ static inline uint64_t RoundToOdd(uint64x2 g, uint64_t cp)
     // y1 += y0 < x1;
     _addcarry_u64(_addcarry_u64(0, y0, x1, &y0), y1, 0, &y1);
 
-#if SF_HP1()
     return y1 | (y0 > 1);
-#else
-    const uint64_t r = __shiftright128(y0, y1, 63);
-    return r | (y0 != 0);
-#endif
 }
 
 #else
@@ -859,12 +849,6 @@ static inline uint64x2 Mul128(uint64_t a, uint64_t b)
     return {hi, lo};
 }
 
-//[[maybe_unused]]
-static inline uint64_t ShiftRight63(uint64_t lo, uint64_t hi)
-{
-    return (hi << 1) | (lo >> 63);
-}
-
 static inline uint64_t RoundToOdd(uint64x2 g, uint64_t cp)
 {
     uint64_t x = Mul128(g.lo, cp).hi;
@@ -873,12 +857,7 @@ static inline uint64_t RoundToOdd(uint64x2 g, uint64_t cp)
     y.lo += x;
     y.hi += y.lo < x;
 
-#if SF_HP1()
     return y.hi | (y.lo > 1);
-#else
-    const uint64_t r = ShiftRight63(y.lo, y.hi);
-    return r | (y.lo != 0);
-#endif
 }
 
 #endif
@@ -937,15 +916,9 @@ static inline FloatingDecimal64 ToDecimal(uint64_t ieee_significand, uint64_t ie
     SF_ASSERT(q <=  1500);
     const int32_t k = FloorDivPow2(q * 1262611 - (lower_boundary_is_closer ? 524031 : 0), 22);
 
-#if SF_HP1()
     const int32_t h = q + FloorLog2Pow10(-k) + 1;
     SF_ASSERT(h >= 1);
     SF_ASSERT(h <= 4);
-#else
-    const int32_t h = q + FloorLog2Pow10(-k) + 0;
-    SF_ASSERT(h >= 0);
-    SF_ASSERT(h <= 3);
-#endif
 
     const uint64x2 pow10 = ComputePow10_Double(-k);
     const uint64_t vbl = RoundToOdd(pow10, cbl << h);
