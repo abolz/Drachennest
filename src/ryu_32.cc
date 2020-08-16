@@ -776,17 +776,7 @@ static inline char* FormatDigits(char* buffer, uint32_t digits, int32_t decimal_
         else if (decimal_point < num_digits)
         {
             // dig.its
-#if defined(_MSC_VER) && !defined(__clang__)
-            // VC does not inline the memmove call below. (Even if compiled with /arch:AVX2.)
-            // However, memcpy will be inlined.
-            uint8_t tmp[8];
-            char* const src = buffer + decimal_point;
-            char* const dst = src + 1;
-            std::memcpy(tmp, src, 8);
-            std::memcpy(dst, tmp, 8);
-#else
             std::memmove(buffer + decimal_point + 1, buffer + decimal_point, 8);
-#endif
             buffer[decimal_point] = '.';
             buffer = digits_end + 1;
         }
