@@ -12,7 +12,8 @@
 //     https://drive.google.com/open?id=1luHhyQF9zKlM8yJ1nebU0OgVYhfC6CBN
 //--------------------------------------------------------------------------------------------------
 
-#define SF_SMALL_INT_OPTIMIZATION() 1
+#define REMOVE_TRAILING_ZEROS_IN_TO_DECIMAL() 0
+#define REMOVE_TRAILING_ZEROS_IN_PRINT_DECIMAL_DIGITS() 1
 
 #include <cassert>
 #include <cstdint>
@@ -25,6 +26,16 @@
 
 #ifndef SF_ASSERT
 #define SF_ASSERT(X) assert(X)
+#endif
+
+#ifndef SF_NEVER_INLINE
+#if _MSC_VER
+#define SF_NEVER_INLINE __declspec(noinline) inline
+#elif __GNUC__
+#define SF_NEVER_INLINE __attribute__((noinline)) inline
+#else
+#define SF_NEVER_INLINE inline
+#endif
 #endif
 
 //==================================================================================================
@@ -876,7 +887,142 @@ struct FloatingDecimal64 {
 };
 }
 
-static inline FloatingDecimal64 ToDecimal(uint64_t ieee_significand, uint64_t ieee_exponent)
+#if REMOVE_TRAILING_ZEROS_IN_TO_DECIMAL()
+//static inline FloatingDecimal64 RemoveTrailingZeros(FloatingDecimal64 dec)
+//{
+//    uint64_t n = dec.digits;
+//    SF_ASSERT(n <= 99999999999999999ull);
+//
+//    int i = 0;
+//    while (n % 10 == 0)
+//    {
+//        n /= 10;
+//        i += 1;
+//    }
+//
+//    return {n, dec.exponent + i};
+//}
+
+#if 1
+#if 0
+static inline uint64_t RotateRight64(uint64_t x, int n)
+{
+    SF_ASSERT(n > 0);
+    SF_ASSERT(n < 64);
+
+#if defined(_MSC_VER) || defined(__clang__)
+    return _rotr64(x, n);
+#else
+    return (x >> n) | (x << (64 - n));
+#endif
+}
+
+namespace {
+struct ExactDivResult64 {
+    uint64_t q;
+    uint64_t max;
+
+    explicit operator bool() const noexcept {
+        return q <= max;
+    }
+};
+} // namespace
+
+static inline ExactDivResult64 ExactDiv10e8(uint64_t n) {
+    return {RotateRight64(n * 0xC767074B22E90E21u, 8), 184467440737u};
+}
+
+static inline ExactDivResult64 ExactDiv10e4(uint64_t n) {
+    return {RotateRight64(n * 0xD288CE703AFB7E91u, 4), 1844674407370955u};
+}
+
+static inline ExactDivResult64 ExactDiv10e2(uint64_t n) {
+    return {RotateRight64(n * 0x8F5C28F5C28F5C29u, 2), 184467440737095516u};
+}
+
+static inline ExactDivResult64 ExactDiv10e1(uint64_t n) {
+    return {RotateRight64(n * 0xCCCCCCCCCCCCCCCDu, 1), 1844674407370955161u};
+}
+
+static inline FloatingDecimal64 RemoveTrailingZeros(FloatingDecimal64 dec)
+{
+    uint64_t n = dec.digits;
+    int32_t i = dec.exponent;
+    SF_ASSERT(n <= 99999999999999999ull);
+
+    // Since n contains at most 17 decimal digits,
+    // we need to remove at most 16 decimal 0's.
+
+    if (const auto d = ExactDiv10e1(n)) {
+        n = d.q;
+        ++i;
+    } else {
+        return dec;
+    }
+
+    // We're left with atmost 15 trailing 0's.
+    if (const auto d = ExactDiv10e8(n)) {
+        n = d.q;
+        i += 8;
+    }
+    if (const auto d = ExactDiv10e4(n)) {
+        n = d.q;
+        i += 4;
+    }
+    if (const auto d = ExactDiv10e2(n)) {
+        n = d.q;
+        i += 2;
+    }
+    if (const auto d = ExactDiv10e1(n)) {
+        n = d.q;
+        ++i;
+    }
+
+    return {n, i};
+}
+#else
+static inline FloatingDecimal64 RemoveTrailingZeros(FloatingDecimal64 dec)
+{
+    uint64_t n = dec.digits;
+    int32_t i = dec.exponent;
+    SF_ASSERT(n <= 99999999999999999ull);
+
+    // Since n contains at most 17 decimal digits,
+    // we need to remove at most 16 decimal 0's.
+
+    if (n % 10 == 0) {
+        n /= 10;
+        ++i;
+    } else {
+        return dec;
+    }
+
+    // We're left with atmost 15 trailing 0's.
+    if (n % 100000000 == 0) {
+        n /= 100000000;
+        i += 8;
+    }
+    if (n % 10000 == 0) {
+        n /= 10000;
+        i += 4;
+    }
+    if (n % 100 == 0) {
+        n /= 100;
+        i += 2;
+    }
+    if (n % 10 == 0) {
+        n /= 10;
+        ++i;
+    }
+
+    return {n, i};
+}
+#endif
+#endif
+
+#endif // REMOVE_TRAILING_ZEROS()
+
+static inline FloatingDecimal64 ToDecimal64(uint64_t ieee_significand, uint64_t ieee_exponent)
 {
     uint64_t c;
     int32_t q;
@@ -885,12 +1031,10 @@ static inline FloatingDecimal64 ToDecimal(uint64_t ieee_significand, uint64_t ie
         c = Double::HiddenBit | ieee_significand;
         q = static_cast<int32_t>(ieee_exponent) - Double::ExponentBias;
 
-#if SF_SMALL_INT_OPTIMIZATION()
         if (0 <= -q && -q < Double::SignificandSize && MultipleOfPow2(c, -q))
         {
             return {c >> -q, 0};
         }
-#endif
     }
     else
     {
@@ -940,7 +1084,11 @@ static inline FloatingDecimal64 ToDecimal(uint64_t ieee_significand, uint64_t ie
 //      if (up_inside || wp_inside) // NB: At most one of u' and w' is in R_v.
         if (up_inside != wp_inside)
         {
+#if REMOVE_TRAILING_ZEROS_IN_TO_DECIMAL()
+            return RemoveTrailingZeros({sp + wp_inside, k + 1});
+#else
             return {sp + wp_inside, k + 1};
+#endif
         }
     }
 
@@ -948,21 +1096,25 @@ static inline FloatingDecimal64 ToDecimal(uint64_t ieee_significand, uint64_t ie
     const bool w_inside =          4 * s + 4 <= upper;
     if (u_inside != w_inside)
     {
-        return {s + w_inside, k};
+        const uint64_t digits = s + w_inside;
+        SF_ASSERT(digits % 10 != 0);
+        return {digits, k};
     }
 
     // NB: s & 1 == vb & 0x4
     const uint64_t mid = 4 * s + 2; // = 2(s + t)
     const bool round_up = vb > mid || (vb == mid && (s & 1) != 0);
 
-    return {s + round_up, k};
+    const uint64_t digits = s + round_up;
+    SF_ASSERT(digits % 10 != 0);
+    return {digits, k};
 }
 
 //==================================================================================================
 // ToChars
 //==================================================================================================
 
-static inline char* Utoa_2Digits(char* buf, uint32_t digits)
+static inline void Utoa_2Digits(char* buf, uint32_t digits)
 {
     static constexpr char Digits100[200] = {
         '0','0','0','1','0','2','0','3','0','4','0','5','0','6','0','7','0','8','0','9',
@@ -979,30 +1131,182 @@ static inline char* Utoa_2Digits(char* buf, uint32_t digits)
 
     SF_ASSERT(digits <= 99);
     std::memcpy(buf, &Digits100[2 * digits], 2 * sizeof(char));
-    return buf + 2;
 }
 
-static inline char* Utoa_4Digits(char* buf, uint32_t digits)
+#if REMOVE_TRAILING_ZEROS_IN_PRINT_DECIMAL_DIGITS()
+static inline int TrailingZeros_2Digits(uint32_t digits)
+{
+    static constexpr int8_t TrailingZeros100[100] = {
+        2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    };
+
+    SF_ASSERT(digits <= 99);
+    return TrailingZeros100[digits];
+}
+
+static inline int Utoa_8Digits_skip_trailing_zeros(char* buf, uint32_t digits)
+{
+    SF_ASSERT(digits >= 1);
+    SF_ASSERT(digits <= 99999999);
+
+    const uint32_t q = digits / 10000;
+    const uint32_t r = digits % 10000;
+
+    const uint32_t qH = q / 100;
+    const uint32_t qL = q % 100;
+    Utoa_2Digits(buf + 0, qH);
+    Utoa_2Digits(buf + 2, qL);
+    if (r == 0)
+    {
+        if (qL == 0)
+            return 6 + TrailingZeros_2Digits(qH);
+        else
+            return 4 + TrailingZeros_2Digits(qL);
+    }
+    else
+    {
+        const uint32_t rH = r / 100;
+        const uint32_t rL = r % 100;
+        Utoa_2Digits(buf + 4, rH);
+        if (rL == 0)
+        {
+            return 2 + TrailingZeros_2Digits(rH);
+        }
+        else
+        {
+            Utoa_2Digits(buf + 6, rL);
+            return 0 + TrailingZeros_2Digits(rL);
+        }
+    }
+}
+
+static inline int PrintDecimalDigitsBackwards(char* buf, uint64_t output)
+{
+    int tz = 0;
+    int nd = 0;
+
+    // We prefer 32-bit operations, even on 64-bit platforms.
+    // We have at most 17 digits, and uint32_t can store 9 digits.
+    // If output doesn't fit into uint32_t, we cut off 8 digits,
+    // so the rest will fit into uint32_t.
+    if (static_cast<uint32_t>(output >> 32) != 0)
+    {
+        const uint64_t q = output / 100000000;
+        const uint32_t r = static_cast<uint32_t>(output % 100000000);
+        output = q;
+        buf -= 8;
+        if (r == 0)
+        {
+            tz = 8;
+            nd = 8;
+        }
+        else
+        {
+            tz = Utoa_8Digits_skip_trailing_zeros(buf, r);
+            SF_ASSERT(tz >= 0);
+            SF_ASSERT(tz <= 7);
+            nd = 8;
+        }
+    }
+
+    // At most 10 digits remaining.
+    uint32_t output2 = static_cast<uint32_t>(output);
+
+    if (output2 >= 10000)
+    {
+        const uint32_t q = output2 / 10000;
+        const uint32_t r = output2 % 10000;
+        output2 = q;
+        buf -= 4;
+        if (r == 0)
+        {
+            tz += (tz == nd) ? 4 : 0;
+        }
+        else
+        {
+            const uint32_t rH = r / 100;
+            const uint32_t rL = r % 100;
+            Utoa_2Digits(buf + 0, rH);
+            Utoa_2Digits(buf + 2, rL);
+            if (tz == nd)
+            {
+                if (rL == 0)
+                    tz += TrailingZeros_2Digits(rH) + 2;
+                else
+                    tz += TrailingZeros_2Digits(rL);
+            }
+        }
+        nd += 4;
+    }
+
+    if (output2 >= 100)
+    {
+        const uint32_t q = output2 / 100;
+        const uint32_t r = output2 % 100;
+        output2 = q;
+        buf -= 2;
+        Utoa_2Digits(buf, r);
+        tz += (tz == nd) ? TrailingZeros_2Digits(r) : 0;
+        nd += 2;
+
+        if (output2 >= 100)
+        {
+            const uint32_t q = output2 / 100;
+            const uint32_t r = output2 % 100;
+            output2 = q;
+            buf -= 2;
+            Utoa_2Digits(buf, r);
+            tz += (tz == nd) ? TrailingZeros_2Digits(r) : 0;
+            nd += 2;
+        }
+    }
+
+    // At most 2 digits remaining
+
+    if (output2 >= 10)
+    {
+        buf -= 2;
+        Utoa_2Digits(buf, output2);
+        tz += (tz == nd) ? TrailingZeros_2Digits(output2) : 0;
+//      nd += 2;
+    }
+    else
+    {
+        SF_ASSERT(output2 != 0);
+        *--buf = static_cast<char>('0' + output2);
+    }
+
+    return tz;
+}
+#else
+static inline void Utoa_4Digits(char* buf, uint32_t digits)
 {
     SF_ASSERT(digits <= 9999);
     const uint32_t q = digits / 100;
     const uint32_t r = digits % 100;
     Utoa_2Digits(buf + 0, q);
     Utoa_2Digits(buf + 2, r);
-    return buf + 4;
 }
 
-static inline char* Utoa_8Digits(char* buf, uint32_t digits)
+static inline void Utoa_8Digits(char* buf, uint32_t digits)
 {
     SF_ASSERT(digits <= 99999999);
     const uint32_t q = digits / 10000;
     const uint32_t r = digits % 10000;
     Utoa_4Digits(buf + 0, q);
     Utoa_4Digits(buf + 4, r);
-    return buf + 8;
 }
 
-static inline char* PrintDecimalDigitsBackwards(char* buf, uint64_t output)
+static inline void PrintDecimalDigitsBackwards(char* buf, uint64_t output)
 {
     // We prefer 32-bit operations, even on 64-bit platforms.
     // We have at most 17 digits, and uint32_t can store 9 digits.
@@ -1037,33 +1341,39 @@ static inline char* PrintDecimalDigitsBackwards(char* buf, uint64_t output)
     }
     else
     {
+        SF_ASSERT(output2 != 0);
         *--buf = static_cast<char>('0' + output2);
     }
-
-    return buf;
 }
+#endif
 
 static inline int32_t DecimalLength(uint64_t v)
 {
     SF_ASSERT(v >= 1);
     SF_ASSERT(v <= 99999999999999999ull);
 
-    if (v >= 10000000000000000ull) { return 17; }
-    if (v >= 1000000000000000ull) { return 16; }
-    if (v >= 100000000000000ull) { return 15; }
-    if (v >= 10000000000000ull) { return 14; }
-    if (v >= 1000000000000ull) { return 13; }
-    if (v >= 100000000000ull) { return 12; }
-    if (v >= 10000000000ull) { return 11; }
-    if (v >= 1000000000ull) { return 10; }
-    if (v >= 100000000ull) { return 9; }
-    if (v >= 10000000ull) { return 8; }
-    if (v >= 1000000ull) { return 7; }
-    if (v >= 100000ull) { return 6; }
-    if (v >= 10000ull) { return 5; }
-    if (v >= 1000ull) { return 4; }
-    if (v >= 100ull) { return 3; }
-    if (v >= 10ull) { return 2; }
+    if (static_cast<uint32_t>(v >> 32) != 0)
+    {
+        if (v >= 10000000000000000ull) { return 17; }
+        if (v >= 1000000000000000ull) { return 16; }
+        if (v >= 100000000000000ull) { return 15; }
+        if (v >= 10000000000000ull) { return 14; }
+        if (v >= 1000000000000ull) { return 13; }
+        if (v >= 100000000000ull) { return 12; }
+        if (v >= 10000000000ull) { return 11; }
+        return 10;
+    }
+
+    const uint32_t v32 = static_cast<uint32_t>(v);
+    if (v32 >= 1000000000u) { return 10; }
+    if (v32 >= 100000000u) { return 9; }
+    if (v32 >= 10000000u) { return 8; }
+    if (v32 >= 1000000u) { return 7; }
+    if (v32 >= 100000u) { return 6; }
+    if (v32 >= 10000u) { return 5; }
+    if (v32 >= 1000u) { return 4; }
+    if (v32 >= 100u) { return 3; }
+    if (v32 >= 10u) { return 2; }
     return 1;
 }
 
@@ -1079,13 +1389,18 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
     SF_ASSERT(decimal_exponent >= -999);
     SF_ASSERT(decimal_exponent <=  999);
 
-    const int32_t num_digits = DecimalLength(digits);
+    int32_t num_digits = DecimalLength(digits);
     const int32_t decimal_point = num_digits + decimal_exponent;
 
     const bool use_fixed = MinFixedDecimalPoint <= decimal_point && decimal_point <= MaxFixedDecimalPoint;
 
     // Prepare the buffer.
     // Avoid calling memset/memcpy with variable arguments below...
+
+    std::memset(buffer +  0, '0', 16);
+    std::memset(buffer + 16, '0', 16);
+    static_assert(MinFixedDecimalPoint >= -30, "internal error");
+    static_assert(MaxFixedDecimalPoint <=  32, "internal error");
 
     int32_t decimal_digits_position;
     if (use_fixed)
@@ -1094,21 +1409,12 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
         {
             // 0.[000]digits
             decimal_digits_position = 2 - decimal_point;
-            static_assert(MinFixedDecimalPoint >= -14, "internal error");
-            std::memcpy(buffer, "0.00000000000000", 16);
-        }
-        else if (decimal_point < num_digits)
-        {
-            // dig.its
-            decimal_digits_position = 0;
+            buffer[1] = '.';
         }
         else
         {
             // digits[000]
             decimal_digits_position = 0;
-            static_assert(MaxFixedDecimalPoint <= 32, "internal error");
-            std::memset(buffer +  0, '0', 16);
-            std::memset(buffer + 16, '0', 16);
         }
     }
     else
@@ -1117,8 +1423,16 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
         decimal_digits_position = 1;
     }
 
-    char* const digits_end = buffer + decimal_digits_position + num_digits;
+    char* digits_end = buffer + decimal_digits_position + num_digits;
+
+#if REMOVE_TRAILING_ZEROS_IN_PRINT_DECIMAL_DIGITS()
+    const int tz = PrintDecimalDigitsBackwards(digits_end, digits);
+    num_digits -= tz;
+    digits_end -= tz;
+//  decimal_exponent += tz; // => decimal_point unchanged.
+#else
     PrintDecimalDigitsBackwards(digits_end, digits);
+#endif
 
     if (use_fixed)
     {
@@ -1184,14 +1498,16 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
         }
         else if (k < 100)
         {
-            buffer = Utoa_2Digits(buffer, k);
+            Utoa_2Digits(buffer, k);
+            buffer += 2;
         }
         else
         {
             const uint32_t q = k / 100;
             const uint32_t r = k % 100;
             *buffer++ = static_cast<char>('0' + q);
-            buffer = Utoa_2Digits(buffer, r);
+            Utoa_2Digits(buffer, r);
+            buffer += 2;
         }
     }
 
@@ -1216,7 +1532,7 @@ static inline char* ToChars(char* buffer, double value, bool force_trailing_dot_
         {
             // != 0
 
-            const auto dec = ToDecimal(significand, exponent);
+            const auto dec = ToDecimal64(significand, exponent);
             return FormatDigits(buffer, dec.digits, dec.exponent, force_trailing_dot_zero);
         }
         else
