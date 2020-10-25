@@ -43,9 +43,15 @@ algorithm as described in
 
 The name of this algorithm "deliberately departs from a long lineage of fabulous drakes".
 
+Dragonbox
+--------------------------------------------------------------------------------
+
+Contains the reference implementation of Junekey Jeon's
+[Dragonbox](https://github.com/jk-jeon/dragonbox) algorithm.
+
 ---
 
-Grisu3, Ryu, and Schubfach are optimal, i.e. the output string
+Grisu3, Ryu, Schubfach, and Dragonbox are optimal, i.e. the output string
 1. rounds back to the input number when read in,
 2. is as short as possible,
 3. is as close to the input number as possible.
@@ -67,9 +73,14 @@ digits) and then read back in. The final timings were obtained using Google's
 benchmark library by running the different algorithms to convert the rounded
 numbers to decimal.
 
+![Benchmark](/resources/bench.png)
+
 `Grisu2*` is the Grisu2 implementation without the optional rounding step,
 `Grisu2**` includes the rounding step.
 
-![Benchmark](/resources/bench.png)
+`Dragonbox` is Junekey Jeon's [Dragonbox](https://github.com/jk-jeon/dragonbox)
+algorithm using the `to_chars` method provided along with the reference
+implementation. `Dragonbox*` uses the same algorithm to convert from binary
+to decimal, but uses a different formatting procedure.
 
 Benchmarks were run on an Intel Core i7-9750H, using Visual Studio 2019 16.6.2, Clang 10.0, 64-bit. Timings are in ns.
