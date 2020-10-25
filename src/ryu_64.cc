@@ -6,18 +6,29 @@
 
 #include "ryu_64.h"
 
-#define RYU_SMALL_INT_OPTIMIZATION()                            1
-#define RYU_STD_STRTOD_FALLBACK()                               1
-#define RYU_STD_STRTOD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT()  1
+#if defined(__has_include) && __has_include(<version>)
+#include <version>
+#else
+#include <cassert>
+#endif
+
+#if defined(__cpp_lib_to_chars)
+#define HAS_CHARCONV() 1
+#else
+#define HAS_CHARCONV() 0
+#endif
 
 //#undef NDEBUG
 #include <cassert>
 #include <climits>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
-#if !RYU_STD_STRTOD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT()
+#if HAS_CHARCONV()
+#include <charconv>
+#else
 #include <string>
 #endif
 #if _MSC_VER
@@ -1072,7 +1083,6 @@ static inline FloatingDecimal64 ToDecimal64(uint64_t ieee_significand, uint64_t 
         m2 = Double::HiddenBit | ieee_significand;
         e2 = static_cast<int32_t>(ieee_exponent) - Double::ExponentBias;
 
-#if RYU_SMALL_INT_OPTIMIZATION()
         if /*unlikely*/ ((0 <= -e2 && -e2 < Double::SignificandSize) && MultipleOfPow2(m2, -e2))
         {
             // Since 2^52 <= m2 < 2^53 and 0 <= -e2 <= 52:
@@ -1080,7 +1090,6 @@ static inline FloatingDecimal64 ToDecimal64(uint64_t ieee_significand, uint64_t 
             // Since m2 is divisible by 2^-e2, value is an integer.
             return {m2 >> -e2, 0};
         }
-#endif
     }
 
     const bool is_even = (m2 % 2) == 0;
@@ -1527,7 +1536,7 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
         }
 
         const int32_t scientific_exponent = decimal_point - 1;
-//      SF_ASSERT(scientific_exponent != 0);
+//      RYU_ASSERT(scientific_exponent != 0);
 
         std::memcpy(buffer, scientific_exponent < 0 ? "e-" : "e+", 2);
         buffer += 2;
@@ -1954,7 +1963,7 @@ static inline StrtodResult ParseInfinity(const char* next, const char* last)
     if (StartsWith(next, last, "inity"))
         next += 5;
 
-    return {next, StrtodStatus::ok};
+    return {next, StrtodStatus::inf};
 }
 
 static inline bool IsNaNSequenceChar(char ch)
@@ -1977,14 +1986,14 @@ static inline StrtodResult ParseNaN(const char* next, const char* last)
         for (const char* p = next + 1; p != last; ++p)
         {
             if (*p == ')')
-                return {p + 1, StrtodStatus::ok};
+                return {p + 1, StrtodStatus::nan};
 
             if (!IsNaNSequenceChar(*p))
                 break; // invalid/incomplete nan-sequence
         }
     }
 
-    return {next, StrtodStatus::ok};
+    return {next, StrtodStatus::nan};
 }
 
 static RYU_NEVER_INLINE StrtodResult ParseSpecial(bool is_negative, const char* next, const char* last, double& value)
@@ -2012,23 +2021,24 @@ static RYU_NEVER_INLINE StrtodResult ParseSpecial(bool is_negative, const char* 
     return {next, StrtodStatus::invalid};
 }
 
-#if RYU_STD_STRTOD_FALLBACK()
+#if RYU_STRTOD_FALLBACK()
 static RYU_NEVER_INLINE double ToBinary64Slow(const char* next, const char* last)
 {
+#if HAS_CHARCONV()
+    double flt = 0;
+    std::from_chars(next, last, flt);
+    return flt;
+#else
     //
     // FIXME:
     // _strtod_l( ..., C_LOCALE )
     //
 
-#if RYU_STD_STRTOD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT()
-    const char* const ptr = next;
-#else
     // std::strtod expects null-terminated inputs. So we need to make a copy and null-terminate the input.
     // This function is actually almost never going to be called, so that should be ok.
     const std::string inp(next, last);
-
     const char* const ptr = inp.c_str();
-#endif
+
     char* end;
     const auto flt = ::strtod(ptr, &end);
 
@@ -2037,6 +2047,7 @@ static RYU_NEVER_INLINE double ToBinary64Slow(const char* next, const char* last
     RYU_ASSERT(last - next == end - ptr);
 
     return flt;
+#endif
 }
 #endif
 
@@ -2051,6 +2062,7 @@ StrtodResult ryu::Strtod(const char* next, const char* last, double& value)
     uint64_t significand = 0; // only valid iff num_digits <= 19
     int64_t  num_digits  = 0; // 64-bit to avoid overflow...
     int64_t  exponent    = 0; // 64-bit to avoid overflow...
+    StrtodStatus status = StrtodStatus::integer;
 
 // [-]
 
@@ -2064,7 +2076,7 @@ StrtodResult ryu::Strtod(const char* next, const char* last, double& value)
 
 // int32_t
 
-#if RYU_STD_STRTOD_FALLBACK()
+#if RYU_STRTOD_FALLBACK()
     const char* const start = next;
 #endif
 
@@ -2104,6 +2116,8 @@ StrtodResult ryu::Strtod(const char* next, const char* last, double& value)
 
     if (has_leading_dot || (next != last && *next == '.'))
     {
+        status = StrtodStatus::floating_point;
+
         ++next; // skip '.'
         if (next != last && IsDigit(*next))
         {
@@ -2166,7 +2180,9 @@ StrtodResult ryu::Strtod(const char* next, const char* last, double& value)
 
             if (p != last && IsDigit(*p))
             {
-                next = p; // Found a valid exponent.
+                // Found a valid exponent.
+                status = StrtodStatus::floating_point;
+                next = p;
 
                 parsed_exponent = DigitValue(*next);
                 ++next;
@@ -2225,7 +2241,7 @@ StrtodResult ryu::Strtod(const char* next, const char* last, double& value)
     else
     {
         // We need to fall back to another algorithm if the input is too long.
-#if RYU_STD_STRTOD_FALLBACK()
+#if RYU_STRTOD_FALLBACK()
         flt = ToBinary64Slow(start, next);
 #else
         return {next, StrtodStatus::input_too_long};
@@ -2233,5 +2249,5 @@ StrtodResult ryu::Strtod(const char* next, const char* last, double& value)
     }
 
     value = is_negative ? -flt : flt;
-    return {next, StrtodStatus::ok};
+    return {next, status};
 }

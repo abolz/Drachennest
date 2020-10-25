@@ -6,18 +6,29 @@
 
 #include "ryu_32.h"
 
-#define RYU_SMALL_INT_OPTIMIZATION()                            1
-#define RYU_STD_STRTOD_FALLBACK()                               1
-#define RYU_STD_STRTOD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT()  1
+#if defined(__has_include) && __has_include(<version>)
+#include <version>
+#else
+#include <cassert>
+#endif
+
+#if defined(__cpp_lib_to_chars)
+#define HAS_CHARCONV() 1
+#else
+#define HAS_CHARCONV() 0
+#endif
 
 //#undef NDEBUG
 #include <cassert>
 #include <climits>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
-#if !RYU_STD_STRTOD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT()
+#if HAS_CHARCONV()
+#include <charconv>
+#else
 #include <string>
 #endif
 #if _MSC_VER
@@ -399,7 +410,6 @@ static inline FloatingDecimal32 ToDecimal32(uint32_t ieee_significand, uint32_t 
         m2 = Single::HiddenBit | ieee_significand;
         e2 = static_cast<int32_t>(ieee_exponent) - Single::ExponentBias;
 
-#if RYU_SMALL_INT_OPTIMIZATION()
         if /*unlikely*/ ((0 <= -e2 && -e2 < Single::SignificandSize) && MultipleOfPow2(m2, -e2))
         {
             // Since 2^23 <= m2 < 2^24 and 0 <= -e2 <= 23:
@@ -407,7 +417,6 @@ static inline FloatingDecimal32 ToDecimal32(uint32_t ieee_significand, uint32_t 
             // Since m2 is divisible by 2^-e2, value is an integer.
             return {m2 >> -e2, 0};
         }
-#endif
     }
 
     const bool is_even = (m2 % 2) == 0;
@@ -807,7 +816,7 @@ static inline char* FormatDigits(char* buffer, uint32_t digits, int32_t decimal_
         }
 
         const int32_t scientific_exponent = decimal_point - 1;
-//      SF_ASSERT(scientific_exponent != 0);
+//      RYU_ASSERT(scientific_exponent != 0);
 
         std::memcpy(buffer, scientific_exponent < 0 ? "e-" : "e+", 2);
         buffer += 2;
@@ -943,6 +952,33 @@ static inline float ToBinary32(uint32_t m10, int32_t m10_digits, int32_t e10)
 
     // e10 >= MinDecimalExponent - m10_digits + 1 >= -46 - 9 + 1 = -54
     // e10 <= MaxDecimalExponent - m10_digits     <=  39 - 1     =  38
+
+#if defined(__x86_64__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+    static constexpr float ExactPowersOfTen[23] = {
+        1e+00f,
+        1e+01f,
+        1e+02f,
+        1e+03f,
+        1e+04f,
+        1e+05f,
+        1e+06f,
+        1e+07f,
+        1e+08f,
+        1e+09f,
+        1e+10f,
+    };
+
+    if (m10 <= (1u << 24) && -10 <= e10 && e10 <= 10)
+    {
+        float flt = static_cast<float>(static_cast<int32_t>(m10));
+        if (e10 < 0)
+            flt /= ExactPowersOfTen[static_cast<uint32_t>(-e10)];
+        else
+            flt *= ExactPowersOfTen[static_cast<uint32_t>(e10)];
+
+        return flt;
+    }
+#endif
 
     // Convert to binary float m2 * 2^e2, while retaining information about whether the conversion
     // was exact.
@@ -1144,7 +1180,7 @@ static inline StrtofResult ParseInfinity(const char* next, const char* last)
     if (StartsWith(next, last, "inity"))
         next += 5;
 
-    return {next, StrtofStatus::ok};
+    return {next, StrtofStatus::inf};
 }
 
 static inline bool IsNaNSequenceChar(char ch)
@@ -1167,14 +1203,14 @@ static inline StrtofResult ParseNaN(const char* next, const char* last)
         for (const char* p = next + 1; p != last; ++p)
         {
             if (*p == ')')
-                return {p + 1, StrtofStatus::ok};
+                return {p + 1, StrtofStatus::nan};
 
             if (!IsNaNSequenceChar(*p))
                 break; // invalid/incomplete nan-sequence
         }
     }
 
-    return {next, StrtofStatus::ok};
+    return {next, StrtofStatus::nan};
 }
 
 static RYU_NEVER_INLINE StrtofResult ParseSpecial(bool is_negative, const char* next, const char* last, float& value)
@@ -1202,23 +1238,24 @@ static RYU_NEVER_INLINE StrtofResult ParseSpecial(bool is_negative, const char* 
     return {next, StrtofStatus::invalid};
 }
 
-#if RYU_STD_STRTOD_FALLBACK()
+#if RYU_STRTOD_FALLBACK()
 static RYU_NEVER_INLINE float ToBinary32Slow(const char* next, const char* last)
 {
+#if HAS_CHARCONV()
+    float flt = 0;
+    std::from_chars(next, last, flt);
+    return flt;
+#else
     //
     // FIXME:
     // _strtof_l( ..., C_LOCALE )
     //
 
-#if RYU_STD_STRTOD_FALLBACK_ASSUME_NULL_TERMINATED_INPUT()
-    const char* const ptr = next;
-#else
     // std::strtod expects null-terminated inputs. So we need to make a copy and null-terminate the input.
     // This function is actually almost never going to be called, so that should be ok.
     const std::string inp(next, last);
-
     const char* const ptr = inp.c_str();
-#endif
+
     char* end;
     const auto flt = ::strtof(ptr, &end);
 
@@ -1227,6 +1264,7 @@ static RYU_NEVER_INLINE float ToBinary32Slow(const char* next, const char* last)
     RYU_ASSERT(last - next == end - ptr);
 
     return flt;
+#endif
 }
 #endif
 
@@ -1241,6 +1279,7 @@ StrtofResult ryu::Strtof(const char* next, const char* last, float& value)
     uint32_t significand = 0; // only valid iff num_digits <= 9
     int64_t  num_digits  = 0; // 64-bit to avoid overflow...
     int64_t  exponent    = 0; // 64-bit to avoid overflow...
+    StrtofStatus status = StrtofStatus::integer;
 
 // [-]
 
@@ -1254,7 +1293,7 @@ StrtofResult ryu::Strtof(const char* next, const char* last, float& value)
 
 // int32_t
 
-#if RYU_STD_STRTOD_FALLBACK()
+#if RYU_STRTOD_FALLBACK()
     const char* const start = next;
 #endif
 
@@ -1294,6 +1333,8 @@ StrtofResult ryu::Strtof(const char* next, const char* last, float& value)
 
     if (has_leading_dot || (next != last && *next == '.'))
     {
+        status = StrtofStatus::floating_point;
+
         ++next; // skip '.'
         if (next != last && IsDigit(*next))
         {
@@ -1356,7 +1397,9 @@ StrtofResult ryu::Strtof(const char* next, const char* last, float& value)
 
             if (p != last && IsDigit(*p))
             {
-                next = p; // Found a valid exponent.
+                // Found a valid exponent.
+                status = StrtofStatus::floating_point;
+                next = p;
 
                 parsed_exponent = DigitValue(*next);
                 ++next;
@@ -1410,7 +1453,7 @@ StrtofResult ryu::Strtof(const char* next, const char* last, float& value)
     else
     {
         // We need to fall back to another algorithm if the input is too long.
-#if RYU_STD_STRTOD_FALLBACK()
+#if RYU_STRTOD_FALLBACK()
         flt = ToBinary32Slow(start, next);
 #else
         return {next, StrtofStatus::input_too_long};
@@ -1418,5 +1461,5 @@ StrtofResult ryu::Strtof(const char* next, const char* last, float& value)
     }
 
     value = is_negative ? -flt : flt;
-    return {next, StrtofStatus::ok};
+    return {next, status};
 }

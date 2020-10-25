@@ -9,12 +9,14 @@
 #include "ryu_64.h"
 #include "schubfach_32.h"
 #include "schubfach_64.h"
+#include "dragonbox.h"
 
 #include <cassert>
 #include <cstring>
 #include <iostream>
 #include <limits>
 #include <string>
+#include <cmath>
 
 #include "scan_number.h"
 
@@ -86,37 +88,44 @@ struct D2S_Grisu2
 {
     bool Optimal() const { return false; }
     const char* Name() const { return "grisu2"; }
-    char* operator()(char* buf, int buflen, double f) { return grisu2::Dtoa(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, double f) { return grisu2::Dtoa(buf, f); }
 };
 
 struct D2S_Grisu2b
 {
     bool Optimal() const { return false; }
     const char* Name() const { return "grisu2b"; }
-    char* operator()(char* buf, int buflen, double f) { return grisu2b::Dtoa(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, double f) { return grisu2b::Dtoa(buf, f); }
 };
 
 struct D2S_Grisu3
 {
     bool Optimal() const { return true; }
     const char* Name() const { return "grisu3"; }
-    char* operator()(char* buf, int buflen, double f) { return grisu3::Dtoa(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, double f) { return grisu3::Dtoa(buf, f); }
 };
 
 struct D2S_Ryu
 {
     bool Optimal() const { return true; }
     const char* Name() const { return "ryu"; }
-    char* operator()(char* buf, int buflen, float f) { return ryu::Ftoa(buf, f); }
-    char* operator()(char* buf, int buflen, double f) { return ryu::Dtoa(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, float f) { return ryu::Ftoa(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, double f) { return ryu::Dtoa(buf, f); }
 };
 
 struct D2S_Schubfach
 {
     bool Optimal() const { return true; }
     const char* Name() const { return "schubfach"; }
-    char* operator()(char* buf, int buflen, float f) { return schubfach::Ftoa(buf, f); }
-    char* operator()(char* buf, int buflen, double f) { return schubfach::Dtoa(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, float f) { return schubfach::Ftoa(buf, f); }
+    char* operator()(char* buf, int /*buflen*/, double f) { return schubfach::Dtoa(buf, f); }
+};
+
+struct D2S_Dragonbox
+{
+    bool Optimal() const { return true; }
+    const char* Name() const { return "dragonbox"; }
+    char* operator()(char* buf, int /*buflen*/, double f) { return dragonbox::Dtoa(buf, f); }
 };
 
 //==================================================================================================
@@ -388,6 +397,7 @@ static void CheckDouble(double f)
     CheckDouble(D2S_Grisu3{}, f);
     CheckDouble(D2S_Ryu{}, f);
     CheckDouble(D2S_Schubfach{}, f);
+    CheckDouble(D2S_Dragonbox{}, f);
 }
 
 inline void CheckDoubleBits(uint64_t bits)
@@ -425,6 +435,7 @@ static void CheckDouble(double value, const std::string& expected)
     CheckDouble(D2S_Grisu3{}, value, expected);
     CheckDouble(D2S_Ryu{}, value, expected);
     CheckDouble(D2S_Schubfach{}, value, expected);
+    CheckDouble(D2S_Dragonbox{}, value, expected);
 }
 
 static void CheckDoubleBits(uint64_t bits, const std::string& expected)

@@ -397,7 +397,7 @@ static inline FloatingDecimal32 ToDecimal(uint32_t ieee_significand, uint32_t ie
 // ToChars
 //==================================================================================================
 
-static inline char* Utoa_2Digits(char* buf, uint32_t digits)
+static inline void Utoa_2Digits(char* buf, uint32_t digits)
 {
     static constexpr char Digits100[200] = {
         '0','0','0','1','0','2','0','3','0','4','0','5','0','6','0','7','0','8','0','9',
@@ -414,31 +414,114 @@ static inline char* Utoa_2Digits(char* buf, uint32_t digits)
 
     SF_ASSERT(digits <= 99);
     std::memcpy(buf, &Digits100[2 * digits], 2 * sizeof(char));
-    return buf + 2;
 }
 
-static inline char* PrintDecimalDigitsBackwards(char* buf, uint32_t output)
+static inline int TrailingZeros_2Digits(uint32_t digits)
 {
-    while (output >= 100)
+    static constexpr int8_t TrailingZeros100[100] = {
+        2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    };
+
+    SF_ASSERT(digits <= 99);
+    return TrailingZeros100[digits];
+}
+
+static inline int PrintDecimalDigitsBackwards(char* buf, uint32_t output)
+{
+    int tz = 0; // number of trailing zeros removed.
+    int nd = 0; // number of decimal digits processed.
+
+    // At most 9 digits remaining
+
+    if (output >= 10000)
+    {
+        const uint32_t q = output / 10000;
+        const uint32_t r = output % 10000;
+        output = q;
+        buf -= 4;
+        if (r != 0)
+        {
+            const uint32_t rH = r / 100;
+            const uint32_t rL = r % 100;
+            Utoa_2Digits(buf + 0, rH);
+            Utoa_2Digits(buf + 2, rL);
+
+            tz = TrailingZeros_2Digits(rL == 0 ? rH : rL) + (rL == 0 ? 2 : 0);
+        }
+        else
+        {
+            tz = 4;
+        }
+        nd = 4;
+    }
+
+    // At most 5 digits remaining.
+
+    if (output >= 100)
     {
         const uint32_t q = output / 100;
         const uint32_t r = output % 100;
         output = q;
         buf -= 2;
         Utoa_2Digits(buf, r);
+        if (tz == nd)
+        {
+            tz += TrailingZeros_2Digits(r);
+        }
+        nd += 2;
     }
 
-    if (output >= 10)
+    // At most 3 digits remaining.
+
+    SF_ASSERT(output >= 1);
+    SF_ASSERT(output <= 999);
+
+    if (output >= 100)
     {
+        const uint32_t q = output / 100;
+        const uint32_t r = output % 100;
+//      output2 = q;
         buf -= 2;
-        Utoa_2Digits(buf, output);
+        Utoa_2Digits(buf, r);
+        if (tz == nd)
+        {
+            tz += TrailingZeros_2Digits(r);
+        }
+//      nd += 2;
+
+        SF_ASSERT(q >= 1);
+        SF_ASSERT(q <= 9);
+        *--buf = static_cast<char>('0' + q);
+    }
+    else if (output >= 10)
+    {
+        const uint32_t q = output;
+        buf -= 2;
+        Utoa_2Digits(buf, q);
+        if (tz == nd)
+        {
+            tz += TrailingZeros_2Digits(q);
+        }
+//      nd += 2;
     }
     else
     {
-        *--buf = static_cast<char>('0' + output);
+        const uint32_t q = output;
+        SF_ASSERT(q >= 1);
+        SF_ASSERT(q <= 9);
+        *--buf = static_cast<char>('0' + q);
     }
 
-    return buf;
+    return tz;
 }
 
 static inline int32_t DecimalLength(uint32_t v)
@@ -469,13 +552,17 @@ static inline char* FormatDigits(char* buffer, uint32_t digits, int32_t decimal_
     SF_ASSERT(decimal_exponent >= -99);
     SF_ASSERT(decimal_exponent <=  99);
 
-    const int32_t num_digits = DecimalLength(digits);
+    int32_t num_digits = DecimalLength(digits);
     const int32_t decimal_point = num_digits + decimal_exponent;
 
     const bool use_fixed = MinFixedDecimalPoint <= decimal_point && decimal_point <= MaxFixedDecimalPoint;
 
     // Prepare the buffer.
     // Avoid calling memset/memcpy with variable arguments below...
+
+    std::memset(buffer, '0', 16);
+    static_assert(MinFixedDecimalPoint >= -14, "internal error");
+    static_assert(MaxFixedDecimalPoint <=  16, "internal error");
 
     int32_t decimal_digits_position;
     if (use_fixed)
@@ -484,20 +571,12 @@ static inline char* FormatDigits(char* buffer, uint32_t digits, int32_t decimal_
         {
             // 0.[000]digits
             decimal_digits_position = 2 - decimal_point;
-            static_assert(MinFixedDecimalPoint >= -6, "internal error");
-            std::memcpy(buffer, "0.000000", 8);
-        }
-        else if (decimal_point < num_digits)
-        {
-            // dig.its
-            decimal_digits_position = 0;
         }
         else
         {
+            // dig.its
             // digits[000]
             decimal_digits_position = 0;
-            static_assert(MaxFixedDecimalPoint <= 16, "internal error");
-            std::memset(buffer, '0', 16);
         }
     }
     else
@@ -506,14 +585,19 @@ static inline char* FormatDigits(char* buffer, uint32_t digits, int32_t decimal_
         decimal_digits_position = 1;
     }
 
-    char* const digits_end = buffer + decimal_digits_position + num_digits;
-    PrintDecimalDigitsBackwards(digits_end, digits);
+    char* digits_end = buffer + decimal_digits_position + num_digits;
+
+    const int tz = PrintDecimalDigitsBackwards(digits_end, digits);
+    digits_end -= tz;
+    num_digits -= tz;
+//  decimal_exponent += tz; // => decimal_point unchanged.
 
     if (use_fixed)
     {
         if (decimal_point <= 0)
         {
             // 0.[000]digits
+            buffer[1] = '.';
             buffer = digits_end;
         }
         else if (decimal_point < num_digits)
@@ -562,7 +646,8 @@ static inline char* FormatDigits(char* buffer, uint32_t digits, int32_t decimal_
         }
         else
         {
-            buffer = Utoa_2Digits(buffer, k);
+            Utoa_2Digits(buffer, k);
+            buffer += 2;
         }
     }
 

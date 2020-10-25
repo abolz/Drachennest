@@ -413,32 +413,33 @@ TEST_CASE("Strtod - syntax")
         return (res.status == ec) && (res.next == next + consumed);
     };
 
-    CHECK(check("0", StrtodStatus::ok));
-    CHECK(check("-0", StrtodStatus::ok));
-    CHECK(check("123e65", StrtodStatus::ok));
-    CHECK(check("0e+1", StrtodStatus::ok));
-    CHECK(check("0e1", StrtodStatus::ok));
-    CHECK(check("4", StrtodStatus::ok));
-    CHECK(check("-0.0000000000000000000000000000001", StrtodStatus::ok));
-    CHECK(check("20e1", StrtodStatus::ok));
-    CHECK(check("-123", StrtodStatus::ok));
-    CHECK(check("-1", StrtodStatus::ok));
-    CHECK(check("1E22", StrtodStatus::ok));
-    CHECK(check("1E-2", StrtodStatus::ok));
-    CHECK(check("1E+2", StrtodStatus::ok));
-    CHECK(check("123e45", StrtodStatus::ok));
-    CHECK(check("123.456e78", StrtodStatus::ok));
-    CHECK(check("1e-2", StrtodStatus::ok));
-    CHECK(check("1e+2", StrtodStatus::ok));
-    CHECK(check("123", StrtodStatus::ok));
-    CHECK(check("123.456789", StrtodStatus::ok));
-    CHECK(check("123.456e-789", StrtodStatus::ok));
-    CHECK(check("-1e+9999", StrtodStatus::ok));
-    CHECK(check("1.5e+9999", StrtodStatus::ok));
-    CHECK(check("-123123e999990", StrtodStatus::ok));
-    CHECK(check("123123e999999", StrtodStatus::ok));
-    CHECK(check("123123e-1000000", StrtodStatus::ok)); // 0
-    CHECK(check("123123e+1000000", StrtodStatus::ok)); // +inf
+    CHECK(check("0", StrtodStatus::integer));
+    CHECK(check("-0", StrtodStatus::integer));
+    CHECK(check("-.1", StrtodStatus::floating_point));
+    CHECK(check("123e65", StrtodStatus::floating_point));
+    CHECK(check("0e+1", StrtodStatus::floating_point));
+    CHECK(check("0e1", StrtodStatus::floating_point));
+    CHECK(check("4", StrtodStatus::integer));
+    CHECK(check("-0.0000000000000000000000000000001", StrtodStatus::floating_point));
+    CHECK(check("20e1", StrtodStatus::floating_point));
+    CHECK(check("-123", StrtodStatus::integer));
+    CHECK(check("-1", StrtodStatus::integer));
+    CHECK(check("1E22", StrtodStatus::floating_point));
+    CHECK(check("1E-2", StrtodStatus::floating_point));
+    CHECK(check("1E+2", StrtodStatus::floating_point));
+    CHECK(check("123e45", StrtodStatus::floating_point));
+    CHECK(check("123.456e78", StrtodStatus::floating_point));
+    CHECK(check("1e-2", StrtodStatus::floating_point));
+    CHECK(check("1e+2", StrtodStatus::floating_point));
+    CHECK(check("123", StrtodStatus::integer));
+    CHECK(check("123.456789", StrtodStatus::floating_point));
+    CHECK(check("123.456e-789", StrtodStatus::floating_point));
+    CHECK(check("-1e+9999", StrtodStatus::floating_point));
+    CHECK(check("1.5e+9999", StrtodStatus::floating_point));
+    CHECK(check("-123123e999990", StrtodStatus::floating_point));
+    CHECK(check("123123e999999", StrtodStatus::floating_point));
+    CHECK(check("123123e-1000000", StrtodStatus::floating_point)); // 0
+    CHECK(check("123123e+1000000", StrtodStatus::floating_point)); // +inf
 //#if TEST_LONG_INPUT()
 //    CHECK(check("-123123123123123123123123123123", StrtodStatus::ok));
 //    CHECK(check("100000000000000000000", StrtodStatus::ok));
@@ -449,70 +450,70 @@ TEST_CASE("Strtod - syntax")
 //    CHECK(check("-237462374673276894279832749832423479823246327846", StrtodStatus::input_too_long));
 //#endif
 
-    CHECK(check("Infinity", StrtodStatus::ok, 8));
-    CHECK(check("-Infinity", StrtodStatus::ok, 9));
-    CHECK(check("NaN", StrtodStatus::ok, 3));
-    CHECK(check("-NaN", StrtodStatus::ok, 4));
+    CHECK(check("Infinity", StrtodStatus::inf, 8));
+    CHECK(check("-Infinity", StrtodStatus::inf, 9));
+    CHECK(check("NaN", StrtodStatus::nan, 3));
+    CHECK(check("-NaN", StrtodStatus::nan, 4));
 
-    CHECK(check("-1.0.", StrtodStatus::ok, 4));
-    CHECK(check("0.1.2", StrtodStatus::ok, 3));
-    CHECK(check("1 000.0", StrtodStatus::ok, 1));
-    CHECK(check("1+2", StrtodStatus::ok, 1));
-    CHECK(check("0x1", StrtodStatus::ok, 1));
-    CHECK(check("0x42", StrtodStatus::ok, 1));
-    CHECK(check("-123.123foo", StrtodStatus::ok, 8));
-    CHECK(check("123\345", StrtodStatus::ok, 3));
-    CHECK(check("1e1\345", StrtodStatus::ok, 3));
-    CHECK(check("1.1e1\345", StrtodStatus::ok, 5));
-    CHECK(check("0\345", StrtodStatus::ok, 1));
-    CHECK(check("-1x", StrtodStatus::ok, 2));
-    CHECK(check("1.2a-3", StrtodStatus::ok, 3));
-    CHECK(check("1.8011670033376514H-308", StrtodStatus::ok, 18));
+    CHECK(check("-1.0.", StrtodStatus::floating_point, 4));
+    CHECK(check("0.1.2", StrtodStatus::floating_point, 3));
+    CHECK(check("1 000.0", StrtodStatus::integer, 1));
+    CHECK(check("1+2", StrtodStatus::integer, 1));
+    CHECK(check("0x1", StrtodStatus::integer, 1));
+    CHECK(check("0x42", StrtodStatus::integer, 1));
+    CHECK(check("-123.123foo", StrtodStatus::floating_point, 8));
+    CHECK(check("123\345", StrtodStatus::integer, 3));
+    CHECK(check("1e1\345", StrtodStatus::floating_point, 3));
+    CHECK(check("1.1e1\345", StrtodStatus::floating_point, 5));
+    CHECK(check("0\345", StrtodStatus::integer, 1));
+    CHECK(check("-1x", StrtodStatus::integer, 2));
+    CHECK(check("1.2a-3", StrtodStatus::floating_point, 3));
+    CHECK(check("1.8011670033376514H-308", StrtodStatus::floating_point, 18));
 
-    CHECK(check("Infinity1234", StrtodStatus::ok, 8));
-    CHECK(check("-Infinity1234", StrtodStatus::ok, 9));
-    CHECK(check("NaN1234", StrtodStatus::ok, 3));
-    CHECK(check("-NaN1234", StrtodStatus::ok, 4));
+    CHECK(check("Infinity1234", StrtodStatus::inf, 8));
+    CHECK(check("-Infinity1234", StrtodStatus::inf, 9));
+    CHECK(check("NaN1234", StrtodStatus::nan, 3));
+    CHECK(check("-NaN1234", StrtodStatus::nan, 4));
 
     CHECK(check("", StrtodStatus::invalid, 0));
     CHECK(check("-", StrtodStatus::invalid, 1));
     CHECK(check("++1234", StrtodStatus::invalid, 1));
-    CHECK(check("+1", StrtodStatus::ok));
-    CHECK(check("+Inf", StrtodStatus::ok));
-    CHECK(check("+Infinity", StrtodStatus::ok));
-    CHECK(check("+NaN", StrtodStatus::ok));
-    CHECK(check("-01", StrtodStatus::ok));
-    CHECK(check("-2.", StrtodStatus::ok));
+    CHECK(check("+1", StrtodStatus::integer));
+    CHECK(check("+Inf", StrtodStatus::inf));
+    CHECK(check("+Infinity", StrtodStatus::inf));
+    CHECK(check("+NaN", StrtodStatus::nan));
+    CHECK(check("-01", StrtodStatus::integer));
+    CHECK(check("-2.", StrtodStatus::floating_point));
     CHECK(check(".-1", StrtodStatus::invalid, 1));
-    CHECK(check(".2e-3", StrtodStatus::ok));
-    CHECK(check("0.e1", StrtodStatus::ok));
-    CHECK(check("2.e+3", StrtodStatus::ok));
-    CHECK(check("2.e-3", StrtodStatus::ok));
-    CHECK(check("2.e3", StrtodStatus::ok));
+    CHECK(check(".2e-3", StrtodStatus::floating_point));
+    CHECK(check("0.e1", StrtodStatus::floating_point));
+    CHECK(check("2.e+3", StrtodStatus::floating_point));
+    CHECK(check("2.e-3", StrtodStatus::floating_point));
+    CHECK(check("2.e3", StrtodStatus::floating_point));
 
-    CHECK(check("Inf", StrtodStatus::ok));
+    CHECK(check("Inf", StrtodStatus::inf));
 
     CHECK(check("-foo", StrtodStatus::invalid, 1));
     CHECK(check("- 1", StrtodStatus::invalid, 1));
-    CHECK(check("-012", StrtodStatus::ok));
-    CHECK(check("-.123", StrtodStatus::ok));
-    CHECK(check("1.", StrtodStatus::ok));
+    CHECK(check("-012", StrtodStatus::integer));
+    CHECK(check("-.123", StrtodStatus::floating_point));
+    CHECK(check("1.", StrtodStatus::floating_point));
 
-    CHECK(check(".123", StrtodStatus::ok));
+    CHECK(check(".123", StrtodStatus::floating_point));
     CHECK(check("\357\274\221", StrtodStatus::invalid, 0));
-    CHECK(check("012", StrtodStatus::ok));
+    CHECK(check("012", StrtodStatus::integer));
 
-    CHECK(check("+Infinity", StrtodStatus::ok));
-    CHECK(check("+NaN", StrtodStatus::ok));
-    CHECK(check("+Infinity1234", StrtodStatus::ok, 9));
-    CHECK(check("+NaN1234", StrtodStatus::ok, 4));
+    CHECK(check("+Infinity", StrtodStatus::inf));
+    CHECK(check("+NaN", StrtodStatus::nan));
+    CHECK(check("+Infinity1234", StrtodStatus::inf, 9));
+    CHECK(check("+NaN1234", StrtodStatus::nan, 4));
 
-    CHECK(check("123.000000456", StrtodStatus::ok));
-    CHECK(check("0123.000000456", StrtodStatus::ok));
-    CHECK(check("00000123.000000456", StrtodStatus::ok));
-    CHECK(check("123.000000456", StrtodStatus::ok));
-    CHECK(check("0123.000000456", StrtodStatus::ok));
-    CHECK(check("00000123.000000456", StrtodStatus::ok));
+    CHECK(check("123.000000456", StrtodStatus::floating_point));
+    CHECK(check("0123.000000456", StrtodStatus::floating_point));
+    CHECK(check("00000123.000000456", StrtodStatus::floating_point));
+    CHECK(check("123.000000456", StrtodStatus::floating_point));
+    CHECK(check("0123.000000456", StrtodStatus::floating_point));
+    CHECK(check("00000123.000000456", StrtodStatus::floating_point));
 
 #if 1
     CHECK(Strtod("123123e-1000000") == +0.0);
@@ -528,20 +529,20 @@ TEST_CASE("Strtod - syntax")
 #endif
 
 #if 1
-    CHECK(check("0.3e+", StrtodStatus::ok, 3));
-    CHECK(check("0.3e", StrtodStatus::ok, 3));
-    CHECK(check("0e+", StrtodStatus::ok, 1));
-    CHECK(check("0e", StrtodStatus::ok, 1));
-    CHECK(check("0E+", StrtodStatus::ok, 1));
-    CHECK(check("0E", StrtodStatus::ok, 1));
-    CHECK(check("1.0e+", StrtodStatus::ok, 3));
-    CHECK(check("1.0e-", StrtodStatus::ok, 3));
-    CHECK(check("1.0e", StrtodStatus::ok, 3));
-    CHECK(check("1eE2", StrtodStatus::ok, 1));
-    CHECK(check("9.e+", StrtodStatus::ok, 2));
-    CHECK(check("0e+-1", StrtodStatus::ok, 1));
-    CHECK(check("1ea", StrtodStatus::ok, 1));
-    CHECK(check("1e\345", StrtodStatus::ok, 1));
+    CHECK(check("0.3e+", StrtodStatus::floating_point, 3));
+    CHECK(check("0.3e", StrtodStatus::floating_point, 3));
+    CHECK(check("0e+", StrtodStatus::integer, 1));
+    CHECK(check("0e", StrtodStatus::integer, 1));
+    CHECK(check("0E+", StrtodStatus::integer, 1));
+    CHECK(check("0E", StrtodStatus::integer, 1));
+    CHECK(check("1.0e+", StrtodStatus::floating_point, 3));
+    CHECK(check("1.0e-", StrtodStatus::floating_point, 3));
+    CHECK(check("1.0e", StrtodStatus::floating_point, 3));
+    CHECK(check("1eE2", StrtodStatus::integer, 1));
+    CHECK(check("9.e+", StrtodStatus::floating_point, 2));
+    CHECK(check("0e+-1", StrtodStatus::integer, 1));
+    CHECK(check("1ea", StrtodStatus::integer, 1));
+    CHECK(check("1e\345", StrtodStatus::integer, 1));
 #else
     CHECK(check("0.3e+", StrtodStatus::invalid, 5));
     CHECK(check("0.3e", StrtodStatus::invalid, 4));

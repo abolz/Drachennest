@@ -6,6 +6,8 @@
 
 #pragma once
 
+#define RYU_STRTOD_FALLBACK() 1
+
 namespace ryu {
 
 // char* output_end = Ftoa(buffer, value);
@@ -44,14 +46,30 @@ char* Ftoa(char* buffer, float value);
 // floating-point number.
 
 enum class StrtofStatus {
-    ok,
     invalid,
+    integer,
+    floating_point,
+    inf,
+    nan,
+#if !RYU_STRTOD_FALLBACK()
     input_too_long,
+#endif
 };
 
-struct StrtofResult {
+struct StrtofResult
+{
     const char* next;
     StrtofStatus status;
+
+    // Test for success.
+    explicit operator bool() const noexcept
+    {
+#if !RYU_STRTOD_FALLBACK()
+        return status != StrtofStatus::invalid && status != StrtofStatus::input_too_long;
+#else
+        return status != StrtofStatus::invalid;
+#endif
+    }
 };
 
 StrtofResult Strtof(const char* first, const char* last, float& value);

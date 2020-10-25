@@ -55,6 +55,8 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last)
         assert(next != last);
         assert(IsDigit(*next));
 
+        const char* fraction_start = next;
+
         if (digits.empty())
         {
             // Number is of the form 0.xxx[e+nnn].
@@ -75,6 +77,17 @@ inline ScanNumberResult ScanNumber(char const* next, char const* last)
             ++next;
             if (next == last)
                 break;
+        }
+
+        const char* fraction_end = next;
+        for (;;)
+        {
+            if (fraction_end == fraction_start)
+                break;
+            --fraction_end;
+            if (*fraction_end == '0')
+                return {digits + " --- trailing zeros detected", INT32_MIN};
+            break;
         }
     }
 

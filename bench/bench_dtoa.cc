@@ -23,6 +23,7 @@
 #define BENCH_GRISU2()          0
 #define BENCH_GRISU2B()         0
 #define BENCH_GRISU3()          0
+#define BENCH_DRAGONBOX()       0
 
 #define BENCH_SINGLE()          0
 #define BENCH_DOUBLE()          1
@@ -78,9 +79,6 @@ struct D2S
     static char const* Name() { return "schubfach"; }
     char* operator()(char* buf, int /*buflen*/, float f) const { return schubfach::Ftoa(buf, f); }
     char* operator()(char* buf, int /*buflen*/, double f) const { return schubfach::Dtoa(buf, f); }
-#if BENCH_TO_DECIMAL()
-    static schubfach::FloatingDecimal64 ToDec(double value) { return schubfach::ToDecimal(value); }
-#endif
 };
 #endif
 
@@ -108,6 +106,15 @@ struct D2S
 {
     static char const* Name() { return "grisu3"; }
     char* operator()(char* buf, int /*buflen*/, double f) const { return grisu3::Dtoa(buf, f); }
+};
+#endif
+
+#if BENCH_DRAGONBOX()
+#include "dragonbox.h"
+struct D2S
+{
+    static char const* Name() { return "dragonbox"; }
+    char* operator()(char* buf, int /*buflen*/, double f) const { return dragonbox::Dtoa(buf, f); }
 };
 #endif
 
@@ -433,7 +440,7 @@ static inline std::vector<double> GenRandomDigitData_double(int digits, int coun
 
         double converted;
         const auto res = ryu::Strtod(buffer, end, converted);
-        assert(res.status == ryu::StrtodStatus::ok);
+        assert(res.status != ryu::StrtodStatus::invalid);
 
         result[i] = converted;
     }
@@ -468,7 +475,7 @@ static inline std::vector<float> GenRandomDigitData_float(int digits, int count)
 
         float converted;
         const auto res = ryu::Strtof(buffer, end, converted);
-        assert(res.status == ryu::StrtofStatus::ok);
+        assert(res.status != ryu::StrtofStatus::invalid);
 
         result[i] = converted;
     }
@@ -508,7 +515,7 @@ int main(int argc, char** argv)
     //    Register_Uniform(std::pow(10.0, e), std::pow(10.0, e+1));
     //}
 
-#if 1
+#if 0
 #if 0
     for (int d = 1; d <= 15; ++d) {
 //  for (int d = 15; d >= 1; --d) {
@@ -536,6 +543,8 @@ int main(int argc, char** argv)
 #else
     for (int d = 1; d <= 17; ++d)
         Register_RandomDigits_double(StrPrintf("%d-digits", d), d);
+        //Register_RandomDigits_double(StrPrintf("%d-digits", 8), 8);
+        //Register_Uniform(0.0, 1.0);
 #endif
 #endif
 
