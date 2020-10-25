@@ -920,7 +920,7 @@ static inline uint32_t Hi32(uint64_t x)
     return static_cast<uint32_t>(x >> 32);
 }
 
-static inline uint64x2 Mul128(uint64_t x, uint64_t y)
+static inline uint64x2 Mul128(uint64_t a, uint64_t b)
 {
     const uint64_t b00 = uint64_t{Lo32(a)} * Lo32(b);
     const uint64_t b01 = uint64_t{Lo32(a)} * Hi32(b);
