@@ -121,12 +121,14 @@ struct D2S_Schubfach
     char* operator()(char* buf, int /*buflen*/, double f) { return schubfach::Dtoa(buf, f); }
 };
 
+#if WITH_DRAGONBOX()
 struct D2S_Dragonbox
 {
     bool Optimal() const { return true; }
     const char* Name() const { return "dragonbox"; }
     char* operator()(char* buf, int /*buflen*/, double f) { return dragonbox::Dtoa(buf, f); }
 };
+#endif
 
 //==================================================================================================
 //
@@ -397,7 +399,9 @@ static void CheckDouble(double f)
     CheckDouble(D2S_Grisu3{}, f);
     CheckDouble(D2S_Ryu{}, f);
     CheckDouble(D2S_Schubfach{}, f);
+#if WITH_DRAGONBOX()
     CheckDouble(D2S_Dragonbox{}, f);
+#endif
 }
 
 inline void CheckDoubleBits(uint64_t bits)
@@ -435,7 +439,9 @@ static void CheckDouble(double value, const std::string& expected)
     CheckDouble(D2S_Grisu3{}, value, expected);
     CheckDouble(D2S_Ryu{}, value, expected);
     CheckDouble(D2S_Schubfach{}, value, expected);
+#if WITH_DRAGONBOX()
     CheckDouble(D2S_Dragonbox{}, value, expected);
+#endif
 }
 
 static void CheckDoubleBits(uint64_t bits, const std::string& expected)

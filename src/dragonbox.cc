@@ -5,6 +5,8 @@
 
 #include "dragonbox.h"
 
+#if WITH_DRAGONBOX()
+
 #if 0
 
 #include "jkj_dragonbox_to_chars.h"
@@ -498,3 +500,5 @@ char* dragonbox::Dtoa(char* buffer, double value)
 }
 
 #endif
+
+#endif // WITH_DRAGONBOX
