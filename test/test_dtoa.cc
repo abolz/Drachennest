@@ -121,14 +121,12 @@ struct D2S_Schubfach
     char* operator()(char* buf, int /*buflen*/, double f) { return schubfach::Dtoa(buf, f); }
 };
 
-#if WITH_DRAGONBOX()
 struct D2S_Dragonbox
 {
     bool Optimal() const { return true; }
     const char* Name() const { return "dragonbox"; }
     char* operator()(char* buf, int /*buflen*/, double f) { return dragonbox::Dtoa(buf, f); }
 };
-#endif
 
 //==================================================================================================
 //
@@ -399,9 +397,7 @@ static void CheckDouble(double f)
     CheckDouble(D2S_Grisu3{}, f);
     CheckDouble(D2S_Ryu{}, f);
     CheckDouble(D2S_Schubfach{}, f);
-#if WITH_DRAGONBOX()
     CheckDouble(D2S_Dragonbox{}, f);
-#endif
 }
 
 inline void CheckDoubleBits(uint64_t bits)
@@ -439,9 +435,7 @@ static void CheckDouble(double value, const std::string& expected)
     CheckDouble(D2S_Grisu3{}, value, expected);
     CheckDouble(D2S_Ryu{}, value, expected);
     CheckDouble(D2S_Schubfach{}, value, expected);
-#if WITH_DRAGONBOX()
     CheckDouble(D2S_Dragonbox{}, value, expected);
-#endif
 }
 
 static void CheckDoubleBits(uint64_t bits, const std::string& expected)
@@ -860,3 +854,142 @@ TEST_CASE("Double - Looks like pow5")
     CheckDoubleBits(0x4840F0CF064DD592, "1.152921504606847e+40");
     CheckDoubleBits(0x4850F0CF064DD592, "2.305843009213694e+40");
 }
+
+TEST_CASE("Double - Dragonbox regression")
+{
+    CheckDouble(6.1734402962680736e+199);
+    CheckDouble(2.4400113864427797e-153);
+    CheckDouble(5.2632699518024996e+199);
+    CheckDouble(5.0806205262434145e+252);
+    CheckDouble(6.7785205636751565e+118);
+    CheckDouble(1.1240911411101675e-251);
+    CheckDouble(8.139240250313929e+194);
+    CheckDouble(4.8614002257993364e+178);
+    CheckDouble(2.752696193128505e+129);
+    CheckDouble(3.1770556126883376e-271);
+    CheckDouble(2.242759017628732e-248);
+    CheckDouble(1.7802970329193148e-77);
+    CheckDouble(3.806109028477244e+187);
+    CheckDouble(1.1848198569896827e+213);
+    CheckDouble(2.9391656381652973e-100);
+    CheckDouble(6.424228912347e+278);
+    CheckDouble(1.2645752114230544e+236);
+    CheckDouble(8.42515920555967e-234);
+    CheckDouble(2.7329003323103567e+46);
+    CheckDouble(1.3794281777002848e+132);
+    CheckDouble(1.7142202471499735e+280);
+    CheckDouble(9.634269789762257e+200);
+    CheckDouble(8.083700236068939e-82);
+    CheckDouble(1.5588992945750237e+163);
+    CheckDouble(1.0074862449311154e-133);
+    CheckDouble(3.1674528983750413e+156);
+    CheckDouble(1.8663368017075642e+168);
+    CheckDouble(2.7789467828287196e-24);
+    CheckDouble(1.3816831617696479e+116);
+    CheckDouble(8.197561614832019e-114);
+    CheckDouble(1.7020441232782313e-247);
+    CheckDouble(4.1401971003386077e-194);
+    CheckDouble(1.5769408597238478e-194);
+    CheckDouble(3.3471805328331117e+299);
+    CheckDouble(5.529329422375565e-66);
+    CheckDouble(1.6103234499457023e-135);
+    CheckDouble(2.9198565218330256e-280);
+    CheckDouble(8.038156131293134e+163);
+    CheckDouble(1.3920716328733164e-171);
+    CheckDouble(6.827324062276435e-27);
+    CheckDouble(8.807592735347699e-71);
+    CheckDouble(3.3728552641313123e-123);
+    CheckDouble(2.4122679021903798e+236);
+    CheckDouble(8.266944620606866e-263);
+    CheckDouble(2.7137385859318285e+105);
+    CheckDouble(1.863720230324117e+232);
+    CheckDouble(7.972905225864674e-54);
+    CheckDouble(2.2844314792315022e+125);
+    CheckDouble(9.70790738880233e-169);
+    CheckDouble(1.2665834799024419e+44);
+    CheckDouble(3.3484409434495807e+284);
+    CheckDouble(1.3582268200372764e+84);
+    CheckDouble(3.4534664118884534e-136);
+    CheckDouble(9.035819340849007e+181);
+    CheckDouble(2.0437259151405597e+174);
+    CheckDouble(9.859326049199017e-251);
+    CheckDouble(1.3201219024272826e+162);
+    CheckDouble(1.3893748715780833e+65);
+    CheckDouble(6.447847606411378e+49);
+    CheckDouble(5.465125341473931e+80);
+}
+
+TEST_CASE("Double - Dragonbox regression (2)")
+{
+    CheckDouble(ReinterpretBits<double>(0x38FB2D4A60898DAB));
+    CheckDouble(ReinterpretBits<double>(0x453F265980DCB674));
+    CheckDouble(ReinterpretBits<double>(0x0A4FB5016FF839C0));
+    CheckDouble(ReinterpretBits<double>(0x38F1C98B4F73D69C));
+    CheckDouble(ReinterpretBits<double>(0x1F8D0A0A25B8C46D));
+    CheckDouble(ReinterpretBits<double>(0x4361B4CCC78673FD));
+    CheckDouble(ReinterpretBits<double>(0x43C3F516F5C2AE90));
+    CheckDouble(ReinterpretBits<double>(0x4386C73EFAE567DA));
+    CheckDouble(ReinterpretBits<double>(0x471F25D5F53ACB9B));
+    CheckDouble(ReinterpretBits<double>(0x459AF3D7E7CDDDFF));
+    CheckDouble(ReinterpretBits<double>(0x465D1C534CC2368F));
+    CheckDouble(ReinterpretBits<double>(0x455FCEB5B44D932F));
+    CheckDouble(ReinterpretBits<double>(0x45B5C534DA985042));
+}
+
+#if 0
+#include <random>
+
+class JenkinsRandom
+{
+    // A small noncryptographic PRNG
+    // http://burtleburtle.net/bob/rand/smallprng.html
+
+    uint32_t a;
+    uint32_t b;
+    uint32_t c;
+    uint32_t d;
+
+    static uint32_t Rotate(uint32_t value, int n) {
+        return (value << n) | (value >> (32 - n));
+    }
+
+    uint32_t Gen() {
+        const uint32_t e = a - Rotate(b, 27);
+        a = b ^ Rotate(c, 17);
+        b = c + d;
+        c = d + e;
+        d = e + a;
+        return d;
+    }
+
+public:
+    using result_type = uint32_t;
+
+    static constexpr uint32_t min() { return 0; }
+    static constexpr uint32_t max() { return UINT32_MAX; }
+
+    explicit JenkinsRandom(uint32_t seed = 0) {
+        a = 0xF1EA5EED;
+        b = seed;
+        c = seed;
+        d = seed;
+        for (int i = 0; i < 20; ++i) {
+            static_cast<void>(Gen());
+        }
+    }
+
+    uint32_t operator()() { return Gen(); }
+};
+
+static JenkinsRandom random;
+
+TEST_CASE("Double - random numbers")
+{
+    std::uniform_int_distribution<uint64_t> gen(1, 0x7FF0000000000000ull - 1);
+    for (;;)
+    {
+        const double flt = ReinterpretBits<double>(gen(random));
+        CheckDouble(flt);
+    }
+}
+#endif

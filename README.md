@@ -80,7 +80,6 @@ numbers to decimal.
 
 `Dragonbox` is Junekey Jeon's [Dragonbox](https://github.com/jk-jeon/dragonbox)
 algorithm using the `to_chars` method provided along with the reference
-implementation. `Dragonbox*` uses the same algorithm to convert from binary
-to decimal, but uses a different formatting procedure.
+implementation. `Dragonbox*` uses the implementation in from this repository.
 
 Benchmarks were run on an Intel Core i7-9750H, using Visual Studio 2019 16.6.2, Clang 10.0, 64-bit. Timings are in ns.

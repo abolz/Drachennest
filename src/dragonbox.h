@@ -5,8 +5,6 @@
 
 #pragma once
 
-#define WITH_DRAGONBOX() 0
-
 namespace dragonbox {
 
 // char* output_end = Dtoa(buffer, value);
@@ -28,8 +26,6 @@ namespace dragonbox {
 
 constexpr int DtoaMinBufferLength = 64;
 
-#if WITH_DRAGONBOX()
 char* Dtoa(char* buffer, double value);
-#endif
 
 } // namespace dragonbox
