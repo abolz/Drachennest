@@ -892,7 +892,7 @@ static inline uint32_t ComputeDelta(uint64x2 pow10, int32_t beta_minus_1)
 }
 
 #if defined(__SIZEOF_INT128__)
-static inline uint64x2 Mul128(uint64_t x, uint64_t y)
+static inline uint64x2 Mul128(uint64_t x, uint64_t y) // 1 mulx
 {
     __extension__ using uint128_t = unsigned __int128;
 
@@ -936,7 +936,8 @@ static inline uint64x2 Mul128(uint64_t a, uint64_t b)
 }
 #endif
 
-static inline uint64_t MulHigh64(uint64_t x, uint64x2 y)
+// Returns (x * y) / 2^128
+static inline uint64_t MulShift(uint64_t x, uint64x2 y) // 2 mulx
 {
     uint64x2 p1 = Mul128(x, y.hi);
     uint64x2 p0 = Mul128(x, y.lo);
@@ -945,7 +946,7 @@ static inline uint64_t MulHigh64(uint64_t x, uint64x2 y)
     return p1.hi;
 }
 
-static inline bool MulParity(uint64_t two_f, uint64x2 pow10, int32_t beta_minus_1)
+static inline bool MulParity(uint64_t two_f, uint64x2 pow10, int32_t beta_minus_1) // 1 mulx, 1 mul
 {
     DRAGONBOX_ASSERT(beta_minus_1 >= 1);
     DRAGONBOX_ASSERT(beta_minus_1 <= 63);
@@ -999,16 +1000,16 @@ static inline FloatingDecimal64 ToDecimal64(const uint64_t ieee_significand, con
         m2 = Double::HiddenBit | ieee_significand;
         e2 = static_cast<int32_t>(ieee_exponent) - Double::ExponentBias;
 
-        if /*[[unlikely ??]]*/ (ieee_significand == 0)
-        {
-            // Shorter interval case; proceed like Schubfach.
-            return ToDecimal64_asymmetric_interval(e2);
-        }
-
-        if (0 <= -e2 && -e2 < Double::SignificandSize && MultipleOfPow2(m2, -e2))
+        if /*unlikely*/ (0 <= -e2 && -e2 < Double::SignificandSize && MultipleOfPow2(m2, -e2))
         {
             // Small integer.
             return {m2 >> -e2, 0};
+        }
+
+        if /*unlikely*/ (ieee_significand == 0 && ieee_exponent > 1)
+        {
+            // Shorter interval case; proceed like Schubfach.
+            return ToDecimal64_asymmetric_interval(e2);
         }
     }
     else
@@ -1019,25 +1020,31 @@ static inline FloatingDecimal64 ToDecimal64(const uint64_t ieee_significand, con
     }
 
     const bool is_even = (m2 % 2 == 0);
-    const bool accept_lower_endpoint = is_even;
-    const bool accept_upper_endpoint = is_even;
+    const bool accept_lower = is_even;
+    const bool accept_upper = is_even;
 
     // Compute k and beta.
     const int32_t minus_k = FloorLog10Pow2(e2) - Kappa;
     const int32_t beta_minus_1 = e2 + FloorLog2Pow10(-minus_k);
-
-    // Compute zi and deltai
-    // 10^kappa <= deltai < 10^(kappa + 1)
-    const uint64_t two_fl = 2 * m2 - 1;
-    const uint64_t two_fc = 2 * m2;
-    const uint64_t two_fr = 2 * m2 + 1;
+    DRAGONBOX_ASSERT(beta_minus_1 >= 6);
+    DRAGONBOX_ASSERT(beta_minus_1 <= 9);
 
     const uint64x2 pow10 = ComputePow10(-minus_k);
-    const uint64_t zi = MulHigh64(two_fr << beta_minus_1, pow10);
 
-    const uint32_t deltai = ComputeDelta(pow10, beta_minus_1);
-    DRAGONBOX_ASSERT(deltai >= SmallDivisor);
-    DRAGONBOX_ASSERT(deltai < BigDivisor);
+    // Compute delta
+    // 10^kappa <= delta < 10^(kappa + 1)
+    //      100 <= delta < 1000
+    const uint32_t delta = ComputeDelta(pow10, beta_minus_1);
+    DRAGONBOX_ASSERT(delta >= SmallDivisor);
+    DRAGONBOX_ASSERT(delta <  BigDivisor  );
+
+    const uint64_t two_fl = 2 * m2 - 1;
+    const uint64_t two_fc = 2 * m2;
+    const uint64_t two_fr = 2 * m2 + 1; // (54 bits)
+
+    // Compute zi
+    //  (54 + 9 = 63 bits)
+    const uint64_t zi = MulShift(two_fr << beta_minus_1, pow10); // 2 mulx
 
     //
     // Step 2:
@@ -1045,30 +1052,34 @@ static inline FloatingDecimal64 ToDecimal64(const uint64_t ieee_significand, con
     //
 
     uint64_t q = zi / BigDivisor;
+//  uint64_t q = Mul128(zi, 0x83126E978D4FDF3Cu).hi >> 9; // 1 mulx
     uint32_t r = static_cast<uint32_t>(zi) - BigDivisor * static_cast<uint32_t>(q); // r = zi % BigDivisor
+    // 0 <= r < 1000
 
-    if (r < deltai)
+    if /*likely ~50% ?!*/ (r < delta)
     {
         // Exclude the right endpoint if necessary
-        if (r == 0 && !accept_upper_endpoint && IsIntegralEndpoint(two_fr, e2, minus_k))
-        {
-            --q;
-            r = BigDivisor;
-        }
-        else
+        if /*likely*/ (r != 0 || accept_upper || !IsIntegralEndpoint(two_fr, e2, minus_k))
         {
             return {q, minus_k + Kappa + 1};
         }
+
+        DRAGONBOX_ASSERT(q != 0);
+        --q;
+        r = BigDivisor;
     }
-    else if (r == deltai)
+    else if /*unlikely*/ (r == delta)
     {
         // Compare fractional parts.
         // Check conditions in the order different from the paper
         // to take advantage of short-circuiting
-        if ((accept_lower_endpoint && IsIntegralEndpoint(two_fl, e2, minus_k)) || MulParity(two_fl, pow10, beta_minus_1))
+        if ((accept_lower && IsIntegralEndpoint(two_fl, e2, minus_k)) || MulParity(two_fl, pow10, beta_minus_1)) // 1 mulx, 1 mul
         {
             return {q, minus_k + Kappa + 1};
         }
+    }
+    else /*likely ~50% ?!*/ // (r > deltai)
+    {
     }
 
     //
@@ -1076,18 +1087,21 @@ static inline FloatingDecimal64 ToDecimal64(const uint64_t ieee_significand, con
     // Find the significand with the smaller divisor
     //
 
-    q *= 10; // q := zi / SmallDivisor
+    q *= 10; // 1 hmul
 
-    const uint32_t dist = r - (deltai / 2) + (SmallDivisor / 2);
+    // 0 <= r <= 1000
 
-    const uint32_t dist_q = dist / 100;
+    const uint32_t dist = r - (delta / 2) + (SmallDivisor / 2);
+
+    const uint32_t dist_q = dist / 100; // 1 mul
 //  const uint32_t dist_r = dist % 100;
     q += dist_q;
 
-//  if (dist_r == 0)
-    if (dist == dist_q * 100)
+//  if /*likely*/ (dist_r == 0)
+    if /*likely*/ (dist == dist_q * 100) // 1 mul32
     {
-        const bool approx_y_parity = ((dist ^ (SmallDivisor / 2)) & 1) != 0;
+//      const bool approx_y_parity = ((dist ^ (SmallDivisor / 2)) & 1) != 0;
+        const bool approx_y_parity = (dist & 1) != 0;
 
         // Check z^(f) >= epsilon^(f)
         // We have either yi == zi - epsiloni or yi == (zi - epsiloni) - 1,
@@ -1095,7 +1109,7 @@ static inline FloatingDecimal64 ToDecimal64(const uint64_t ieee_significand, con
         // Since there are only 2 possibilities, we only need to care about the
         // parity. Also, zi and r should have the same parity since the divisor
         // is an even number
-        if (MulParity(two_fc, pow10, beta_minus_1) != approx_y_parity)
+        if /*likely*/ (MulParity(two_fc, pow10, beta_minus_1) != approx_y_parity) // 1 mulx, 1 mul
         {
             --q;
         }
