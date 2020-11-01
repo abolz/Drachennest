@@ -21,7 +21,6 @@
 //#undef NDEBUG
 #include <cassert>
 #include <climits>
-#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
