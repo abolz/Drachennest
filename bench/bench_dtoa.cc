@@ -19,10 +19,10 @@
 #define BENCH_RYU()             0
 #define BENCH_STD_PRINTF()      0
 #define BENCH_STD_CHARCONV()    0
-#define BENCH_SCHUBFACH()       1
+#define BENCH_SCHUBFACH()       0
 #define BENCH_GRISU2()          0
 #define BENCH_GRISU2B()         0
-#define BENCH_GRISU3()          0
+#define BENCH_GRISU3()          1
 #define BENCH_DRAGONBOX()       0
 
 #define BENCH_SINGLE()          0
@@ -181,7 +181,7 @@ static JenkinsRandom random;
 //==================================================================================================
 
 static constexpr int BufSize = 64;
-static constexpr int NumFloats = 1 << 13;
+static constexpr int NumFloats = 1 << 14;
 
 //template <typename Float>
 //static inline void PrintFloat(Float v)
@@ -246,7 +246,8 @@ static inline void RegisterBenchmarks(char const* name, std::vector<Float> const
     bench->ComputeStatistics("min", [](const std::vector<double>& v) -> double {
         return *(std::min_element(std::begin(v), std::end(v)));
     });
-    bench->Repetitions(3);
+//  bench->Repetitions(8);
+    bench->Repetitions(1);
     bench->ReportAggregatesOnly();
 }
 
@@ -311,31 +312,6 @@ static constexpr int64_t kPow10_i64[] = {
     100000000000000000,
     1000000000000000000,
 };
-static constexpr double kPow10_f64[] = {
-    1.0e+00,
-    1.0e+01,
-    1.0e+02,
-    1.0e+03,
-    1.0e+04,
-    1.0e+05,
-    1.0e+06,
-    1.0e+07,
-    1.0e+08,
-    1.0e+09,
-    1.0e+10,
-    1.0e+11,
-    1.0e+12,
-    1.0e+13,
-    1.0e+14,
-    1.0e+15,
-    1.0e+16,
-    1.0e+17,
-    1.0e+18,
-    1.0e+19,
-    1.0e+20,
-    1.0e+21,
-    1.0e+22,
-};
 
 static inline void Register_Digits_double(const char* name, int digits, int e10)
 {
@@ -351,12 +327,16 @@ static inline void Register_Digits_double(const char* name, int digits, int e10)
     std::generate(numbers.begin(), numbers.end(), [&] {
         int64_t n = gen(random);
         if (n % 10 == 0)
-            n |= 1;
-        double v = static_cast<double>(n);
-        if (e10 < 0)
-            v /= kPow10_f64[-e10];
-        else
-            v *= kPow10_f64[e10];
+            n += 1;
+        std::string s;
+        s += std::to_string(n);
+        s += "e";
+        s += std::to_string(e10);
+
+        double v;
+        const auto res = ryu::Strtod(s.data(), s.data() + s.size(), v);
+        assert(res);
+
         //PrintFloat(v);
         return v;
     });
@@ -376,19 +356,6 @@ static constexpr int32_t kPow10_i32[] = {
     100000000,
     1000000000,
 };
-static constexpr float kPow10_f32[] = {
-    1.0e+00f,
-    1.0e+01f,
-    1.0e+02f,
-    1.0e+03f,
-    1.0e+04f,
-    1.0e+05f,
-    1.0e+06f,
-    1.0e+07f,
-    1.0e+08f,
-    1.0e+09f,
-    1.0e+10f,
-};
 
 static inline void Register_Digits_single(const char* name, int digits, int e10)
 {
@@ -404,12 +371,16 @@ static inline void Register_Digits_single(const char* name, int digits, int e10)
     std::generate(numbers.begin(), numbers.end(), [&] {
         int32_t n = gen(random);
         if (n % 10 == 0)
-            n |= 1;
-        float v = static_cast<float>(n);
-        if (e10 < 0)
-            v /= kPow10_f32[-e10];
-        else
-            v *= kPow10_f32[e10];
+            n += 1;
+        std::string s;
+        s += std::to_string(n);
+        s += "e";
+        s += std::to_string(e10);
+
+        float v;
+        const auto res = ryu::Strtof(s.data(), s.data() + s.size(), v);
+        assert(res);
+
         //PrintFloat(v);
         return v;
     });
@@ -421,7 +392,7 @@ static inline void Register_Digits_single(const char* name, int digits, int e10)
 //
 //--------------------------------------------------------------------------------------------------
 
-static inline std::vector<double> GenRandomDigitData_double(int digits, int count)
+static inline std::vector<double> GenRandomDigitData_double(int num_digits, int e10, int count)
 {
     std::uniform_real_distribution<double> gen(1, 2);
 
@@ -431,16 +402,16 @@ static inline std::vector<double> GenRandomDigitData_double(int digits, int coun
     for (int i = 0; i < count; ++i)
     {
         const double d = gen(random);
-        const double rounded = ryu::Round10(d, -digits);
+        const double rounded = ryu::Round10(d, -num_digits);
         result[i] = rounded;
     }
 
     return result;
 }
 
-static inline void Register_RandomDigits_double(const char* name, int digits)
+static inline void Register_RandomDigits_double(const char* name, int num_digits, int e10)
 {
-    RegisterBenchmarks(name, GenRandomDigitData_double(digits, NumFloats));
+    RegisterBenchmarks(name, GenRandomDigitData_double(num_digits, e10, NumFloats));
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -486,28 +457,30 @@ int main(int argc, char** argv)
     printf("Preparing benchmarks...\n");
 
 #if BENCH_DOUBLE()
+
     Register_RandomBits_double();
     Register_RandomBits_double();
     Register_RandomBits_double();
     Register_Uniform(0.0, 1.0);
     Register_Uniform(0.0, 1.0e+308);
-    Register_Uniform(1.0, 2.0);
 
 #if 0
     for (int d = 1; d <= 18; ++d) {
-        for (int e = -10; e <= 10; e += 1) {
+        for (int e = -20; e <= 20; e += 1) {
             Register_Digits_double(StrPrintf("%2d,%3d", d, e), d, e);
         }
     }
 #else
     for (int d = 0; d <= 16; ++d)
     {
-        Register_RandomDigits_double(StrPrintf("1.%d-digits", d), d);
+        Register_RandomDigits_double(StrPrintf("1.%d-digits", d), d, -d);
     }
 #endif
-#endif
+
+#endif // BENCH_DOUBLE()
 
 #if BENCH_SINGLE()
+
     Register_RandomBits_single();
     Register_RandomBits_single();
     Register_RandomBits_single();
@@ -527,7 +500,8 @@ int main(int argc, char** argv)
         Register_RandomDigits_float(StrPrintf("1.%d-digits", d), d);
     }
 #endif
-#endif
+
+#endif // BENCH_SINGLE()
 
     printf("Benchmarking %s\n", D2S::Name());
 
