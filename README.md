@@ -46,8 +46,8 @@ The name of this algorithm "deliberately departs from a long lineage of fabulous
 Dragonbox
 --------------------------------------------------------------------------------
 
-Contains the reference implementation of Junekey Jeon's
-[Dragonbox](https://github.com/jk-jeon/dragonbox) algorithm.
+Contains a slightly modified version the reference implementation of
+Junekey Jeon's [Dragonbox](https://github.com/jk-jeon/dragonbox) algorithm.
 
 ---
 
@@ -66,20 +66,35 @@ inputs, _regardless of how the input rounding mode breaks ties_.
 Benchmarks
 --------------------------------------------------------------------------------
 
-For this benchmarks a number of uniformly distributed random `double`s in the
-range (0,1) have been generated. These numbers were then converted to decimal
-with `printf("%.*g")` using a precision of N=1,2,...,17 (number of significant
-digits) and then read back in. The final timings were obtained using Google's
-benchmark library by running the different algorithms to convert the rounded
-numbers to decimal.
+Benchmarks were run on an Intel Core i7-9750H, using Visual Studio 2019 16.7.7, Clang 10.0, 64-bit.
 
-![Benchmark](/resources/bench.png)
+Timings are in ns.
 
-`Grisu2*` is the Grisu2 implementation without the optional rounding step,
-`Grisu2**` includes the rounding step.
+---
 
-`Dragonbox` is Junekey Jeon's [Dragonbox](https://github.com/jk-jeon/dragonbox)
-algorithm using the `to_chars` method provided along with the reference
-implementation. `Dragonbox*` uses the implementation in from this repository.
+For this benchmark uniformly distributed random `double`s in the
+range `[1,2]` have been generated. These numbers were then rounded to `N`
+significant digits and converted to decimal using the given algorithm.
 
-Benchmarks were run on an Intel Core i7-9750H, using Visual Studio 2019 16.6.2, Clang 10.0, 64-bit. Timings are in ns.
+![BenchDigits](/resources/bench_digits.png)
+
+---
+
+Uniformly distributed random numbers in the range `[10^i, 10^(i+1)]` for
+`i=-12,...,12`.
+
+![BenchUniform](/resources/bench_uniform.png)
+
+---
+
+Uniformly distributed random numbers in the range `[0, 10^10]`. Each benchmark
+is run 10 times (using different numbers each run).
+
+![BenchUniformE10](/resources/bench_uniform_e10.png)
+
+---
+
+Random bit patterns. Each benchmark is run 10 times (using different numbers
+each run).
+
+![BenchRandom](/resources/bench_random_bits.png)
