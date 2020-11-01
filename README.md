@@ -66,9 +66,9 @@ inputs, _regardless of how the input rounding mode breaks ties_.
 Benchmarks
 --------------------------------------------------------------------------------
 
-Benchmarks were run on an Intel Core i7-9750H, using Visual Studio 2019 16.7.7, Clang 10.0, 64-bit.
+> Benchmarks were run on an Intel Core i7-9750H, using Visual Studio 2019 16.7.7, Clang 10.0, 64-bit.
 
-Timings are in ns.
+> Timings are in ns.
 
 ---
 
