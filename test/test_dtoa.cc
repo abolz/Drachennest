@@ -20,7 +20,7 @@
 
 #include "scan_number.h"
 
-#define TEST_OPTIMAL 0
+#define TEST_OPTIMAL() 0
 
 constexpr int BufSize = 64;
 
@@ -277,16 +277,16 @@ static void CheckSingle(Converter d2s, float f0)
     }
     else
     {
-#if TEST_OPTIMAL
+#if TEST_OPTIMAL()
         const auto num0 = ScanNumber(buf0, end0);
         const auto num1 = ScanNumber(buf1, end1);
         if (num0.digits.size() != num1.digits.size())
         {
-            printf("%s: not short [0x%08X]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, num0.digits.c_str(), num1.digits.c_str());
+            printf("%s: not short [0x%08X]\n  actual:   %s\n  expected: %s\n", d2s.Name(), bits0, num0.digits.c_str(), num1.digits.c_str());
         }
         else if (num0.digits != num1.digits)
         {
-            printf("%s: not optimal [0x%08X]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, num0.digits.c_str(), num1.digits.c_str());
+            printf("%s: not optimal [0x%08X]\n  actual:   %s\n  expected: %s\n", d2s.Name(), bits0, num0.digits.c_str(), num1.digits.c_str());
         }
 #endif
     }
@@ -374,16 +374,16 @@ static void CheckDouble(Converter d2s, double f0)
     }
     else
     {
-#if TEST_OPTIMAL
+#if TEST_OPTIMAL()
         const auto num0 = ScanNumber(buf0, end0);
         const auto num1 = ScanNumber(buf1, end1);
         if (num0.digits.size() != num1.digits.size())
         {
-            printf("%s: not short [0x%016llX]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, num0.digits.c_str(), num1.digits.c_str());
+            printf("%s: not short [0x%016llX]\n  actual:   %s\n  expected: %s\n", d2s.Name(), bits0, num0.digits.c_str(), num1.digits.c_str());
         }
         else if (num0.digits != num1.digits)
         {
-            printf("%s: not optimal [0x%016llX]\n  actual:   %s\n  expected: %s\n", Converter::Name(), bits0, num0.digits.c_str(), num1.digits.c_str());
+            printf("%s: not optimal [0x%016llX]\n  actual:   %s\n  expected: %s\n", d2s.Name(), bits0, num0.digits.c_str(), num1.digits.c_str());
         }
 #endif
     }
@@ -446,10 +446,122 @@ static void CheckDoubleBits(uint64_t bits, const std::string& expected)
 //==================================================================================================
 //
 //==================================================================================================
-TEST_CASE("000")
+TEST_CASE("Round10")
 {
-    //schubfach::DumpG();
-    //std::exit(0);
+    using ryu::Round10;
+
+    CHECK( Round10(55.55, -1) == 55.6 );
+    CHECK( Round10(55.549999999999997, -1) == 55.6 ); // 55.549999999999997 == 55.55 !!
+    CHECK( Round10(55.549, -1) == 55.5 );
+    CHECK( Round10(-55.55, -1) == -55.6 );
+    CHECK( Round10(-55.551, -1) == -55.6 );
+    CHECK( Round10(1.005, -2) == 1.01 );
+    CHECK( Round10(3544.5249, -2) == 3544.52 );
+    CHECK( Round10(-0.0, -0) == -0.0 );
+    CHECK( Round10(-0.0, -2) == -0.0 );
+    CHECK( Round10(+0.0, -2) == +0.0 );
+    CHECK( Round10(0.1, -1) == 0.1 );
+    CHECK( Round10(0.2, -1) == 0.2 );
+    CHECK( Round10(0.1 + 0.2, -1) == 0.3 );
+    CHECK( Round10(1.7777777, -2) == 1.78 );
+    CHECK( Round10(std::nextafter(0.015, 0.0), -2) == 0.01 );
+    CHECK( Round10(std::nextafter(0.015, 1.0), -2) == 0.02 );
+    CHECK( Round10(0.015, -2) == 0.02 );
+    CHECK( Round10(0.014999999999999999, -2) == 0.02 ); // 0.014999999999999999 == 0.015 !!
+    CHECK( Round10(0.545, -2) == 0.55 );
+
+    CHECK( Round10(55.5, -0) == 56.0 );
+    CHECK( Round10(55.55, -1) == 55.6 );
+    CHECK( Round10(55.555, -2) == 55.56 );
+    CHECK( Round10(55.5555, -3) == 55.556 );
+    CHECK( Round10(55.55555, -4) == 55.5556 );
+    CHECK( Round10(55.555555, -5) == 55.55556 );
+    CHECK( Round10(55.5555555, -6) == 55.555556 );
+    CHECK( Round10(55.55555555, -7) == 55.5555556 );
+    CHECK( Round10(55.555555555, -8) == 55.55555556 );
+    CHECK( Round10(55.5555555555, -9) == 55.555555556 );
+    CHECK( Round10(55.55555555555, -10) == 55.5555555556 );
+    CHECK( Round10(55.555555555555, -11) == 55.55555555556 );
+    CHECK( Round10(55.5555555555555, -12) == 55.555555555556 );
+    CHECK( Round10(55.55555555555555, -13) == 55.5555555555556 );
+    CHECK( Round10(55.555555555555555, -14) == 55.55555555555556 );
+    CHECK( Round10(55.5555555555555555, -15) == 55.555555555555556 );
+    CHECK( Round10(55.55555555555555555, -16) == 55.5555555555555556 );
+    CHECK( Round10(55.555555555555555555, -17) == 55.55555555555555556 );
+
+    CHECK( Round10(55.5e+200, -201) == 55.5e+200 );
+    CHECK( Round10(55.5e+200,  200) == 56.0e+200 );
+    CHECK( Round10(55.5e+200,  201) == 60.0e+200 );
+
+    CHECK( Round10(55.549f, -1) == 55.5f );
+    CHECK( Round10(-55.55f, -1) == -55.6f );
+    CHECK( Round10(1.005f, -2) == 1.01f );
+    CHECK( Round10(0.015f, -2) == 0.02f );
+    CHECK( Round10(0.545f, -2) == 0.55f );
+
+    CHECK( Round10(55.0, 1) == 60.0 );
+    CHECK( Round10(54.9, 1) == 50.0 );
+    CHECK( Round10(-55.0, 1) == -60.0 );
+    CHECK( Round10(-55.1, 1) == -60.0 );
+
+    CHECK( Round10(55.0f, 1) == 60.0f );
+    CHECK( Round10(54.9f, 1) == 50.0f );
+    CHECK( Round10(-55.0f, 1) == -60.0f );
+    CHECK( Round10(-55.1f, 1) == -60.0f );
+
+    CHECK( Round10(54.0f, 2) == 100.0f );
+    CHECK( Round10(54.0f, 3) == 0.0f );
+    CHECK( Round10(55.0, 2) == 100.0 );
+    CHECK( Round10(54.0, 3) == 0.0 );
+    CHECK( Round10(50.000000001, 2) == 100.0 );
+
+    CHECK( Round10(54.0f, 18) == 0.0f );
+    CHECK( Round10(54.0, 18) == 0.0 );
+
+    CHECK( Round10( 4'9999'9999'9999'9992.0, 17) == 0.0 );
+    CHECK( Round10( 4'9999'9999'9999'9996.0, 17) == 1e+17 );
+    CHECK( Round10( 5'0000'0000'0000'0000.0, 17) == 1e+17 );
+    CHECK( Round10( 5'0000'0000'0000'0001.0, 17) == 1e+17 );
+    CHECK( Round10(10'0000'0000'0000'0000.0, 17) == 1e+17 );
+    CHECK( Round10(14'9999'9999'9999'9968.0, 17) == 1e+17 );
+    CHECK( Round10(14'9999'9999'9999'9984.0, 17) == 2e+17 );
+    CHECK( Round10(15'0000'0000'0000'0000.0, 17) == 2e+17 );
+
+    CHECK( Round10( 4'9999'9999'9999'9992.0, 18) == 0.0 );
+    CHECK( Round10( 4'9999'9999'9999'9996.0, 18) == 0.0 );
+    CHECK( Round10( 5'0000'0000'0000'0000.0, 18) == 0.0 );
+    CHECK( Round10( 5'0000'0000'0000'0001.0, 18) == 0.0 );
+    CHECK( Round10(10'0000'0000'0000'0000.0, 18) == 0.0 );
+    CHECK( Round10(14'9999'9999'9999'9968.0, 18) == 0.0 );
+    CHECK( Round10(14'9999'9999'9999'9984.0, 18) == 0.0 );
+    CHECK( Round10(15'0000'0000'0000'0000.0, 18) == 0.0 );
+    CHECK( Round10(49'9999'9999'9999'9967.0, 18) == 0.0 );
+    CHECK( Round10(50'0000'0000'0000'0000.0, 18) == 1e+18 );
+
+    CHECK( Round10(1e+17, 17) == 1e+17 );
+    CHECK( Round10(1e+18, 17) == 1e+18 );
+    CHECK( Round10(1e+19, 17) == 1e+19 );
+
+    CHECK( Round10(1e+17, 18) == 0.0 );
+    CHECK( Round10(1e+18, 18) == 1e+18 );
+    CHECK( Round10(1e+19, 18) == 1e+19 );
+
+    CHECK( Round10(1e+17, 19) == 0.0 );
+    CHECK( Round10(1e+18, 19) == 0.0 );
+    CHECK( Round10(1e+19, 19) == 1e+19 );
+
+    CHECK( Round10(1e-20, -10) == 0.0 );
+    CHECK( Round10(1e-20, -20) == 1e-20 );
+    CHECK( Round10(1e-20, -30) == 1e-20 );
+
+    CHECK( Round10(1e-30, -20) == 0.0 );
+    CHECK( Round10(1e-30, -30) == 1e-30 );
+    CHECK( Round10(1e-30, -40) == 1e-30 );
+
+    CHECK( Round10(1e-40, -30) == 0.0 );
+    CHECK( Round10(1e-40, -39) == 0.0 );
+    CHECK( Round10(1e-40, -40) == 1e-40 );
+    CHECK( Round10(1e-40, -50) == 1e-40 );
 }
 
 //==================================================================================================

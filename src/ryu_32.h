@@ -74,4 +74,11 @@ struct StrtofResult
 
 StrtofResult Strtof(const char* first, const char* last, float& value);
 
+// Round10(x, n) returns: round(x * 10^-n) / 10^-n
+//
+// Use this function to round the given value to a specific number of decimal places.
+// E.g.: Round10(1.005f, -2) == 1.01f
+//       Round10(55.0f, 1) == 60.0f
+float Round10(float value, int n);
+
 } // namespace ryu

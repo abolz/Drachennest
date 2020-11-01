@@ -21,7 +21,6 @@
 //#undef NDEBUG
 #include <cassert>
 #include <climits>
-#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -2250,4 +2249,142 @@ StrtodResult ryu::Strtod(const char* next, const char* last, double& value)
 
     value = is_negative ? -flt : flt;
     return {next, status};
+}
+
+//==================================================================================================
+// Round10
+//==================================================================================================
+
+static inline uint64_t SmallPow10(int32_t e10)
+{
+    static constexpr uint64_t Pow10Table[] = {
+        1,
+        10,
+        100,
+        1000,
+        10000,
+        100000,
+        1000000,
+        10000000,
+        100000000,
+        1000000000,
+        10000000000,
+        100000000000,
+        1000000000000,
+        10000000000000,
+        100000000000000,
+        1000000000000000,
+        10000000000000000,
+        100000000000000000,
+    };
+
+    RYU_ASSERT(e10 >= 0);
+    RYU_ASSERT(e10 <= 17);
+    return Pow10Table[static_cast<uint32_t>(e10)];
+}
+
+static double MulRoundDiv(const double value, const int32_t mul_e10, const int32_t div_e10)
+{
+    const Double v(value);
+
+    const uint64_t F = v.PhysicalSignificand();
+    const uint64_t E = v.PhysicalExponent();
+
+    if (E == Double::MaxIeeeExponent || (E == 0 && F == 0))
+    {
+        // +-0, or Infinity, or NaN
+        // Multiplying by 10^n does not change the value.
+        return value;
+    }
+
+    // Convert to decimal
+    const FloatingDecimal64 dec = ToDecimal64(F, E);
+
+    uint64_t digits     = dec.digits;
+    int32_t  num_digits = DecimalLength(dec.digits);
+    int32_t  exponent   = dec.exponent; // (Using 64 bits to avoid checking for overflow.)
+
+    // Multiply by 10^mul_e10
+    exponent += mul_e10;
+
+    // Round x = digits * 10^exponent to the nearest integer.
+
+    // We have
+    // x = digits * 10^exponent
+    //   = digits / 10^e10
+    const int32_t e10 = -exponent;
+    if (e10 <= 0)
+    {
+        // x = digits * 10^exponent, where exponent >= 0.
+        // Nothing to do.
+    }
+    else if (e10 < num_digits)
+    {
+        // 1 <= x < D
+
+        const uint64_t pow10 = SmallPow10(e10);
+
+        RYU_ASSERT(digits >= pow10);
+        const uint64_t i = digits / pow10;
+        const uint64_t f = digits % pow10;
+
+        // Round to int (towards +inf)
+        digits      = i + (f >= pow10 / 2);
+        num_digits -= e10;
+        exponent    = 0;
+    }
+    else if (e10 == num_digits)
+    {
+        // 1/10 <= x < 1
+
+        // x < 1/2 <==> 10x < 5
+        //         <==> 10 (digits / 10^e10) < 5
+        //         <==> digits < 5 * 10^(e10 - 1)
+
+        digits      = (digits >= 5 * SmallPow10(e10 - 1)) ? 1 : 0;
+        num_digits  = 1;
+        exponent    = 0;
+    }
+    else
+    {
+        // x < 1/10
+        // This definitely rounds to 0.
+        digits      = 0;
+        num_digits  = 1;
+        exponent    = 0;
+    }
+
+    // Divide by 10^div_e10
+    exponent -= div_e10;
+
+    // And convert back to binary.
+    double flt;
+    if (digits == 0)
+    {
+        flt = 0;
+    }
+    else if (exponent + num_digits <= MinDecimalExponent)
+    {
+        // x * 10^-inf = 0
+        flt = 0;
+    }
+    else if (exponent + num_digits > MaxDecimalExponent)
+    {
+        // x * 10^+inf = +inf
+        flt = std::numeric_limits<double>::infinity();
+    }
+    else
+    {
+        flt = ToBinary64(digits, num_digits, exponent);
+    }
+
+    return value < 0 ? -flt : flt;
+}
+
+double ryu::Round10(const double value, const int n)
+{
+    if (n < -1000 || n > +1000) // (Not supported yet)
+        return value;
+
+    return MulRoundDiv(value, -n, -n);
 }
