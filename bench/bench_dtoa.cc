@@ -246,7 +246,7 @@ static inline void RegisterBenchmarks(char const* name, std::vector<Float> const
     bench->ComputeStatistics("min", [](const std::vector<double>& v) -> double {
         return *(std::min_element(std::begin(v), std::end(v)));
     });
-    //bench->Repetitions(3);
+    bench->Repetitions(3);
     bench->ReportAggregatesOnly();
 }
 
@@ -423,26 +423,16 @@ static inline void Register_Digits_single(const char* name, int digits, int e10)
 
 static inline std::vector<double> GenRandomDigitData_double(int digits, int count)
 {
-//  std::uniform_int_distribution<uint64_t> gen(0, 0x7FF0000000000000ull - 1);
-    std::uniform_real_distribution<double> gen(0, 1);
-    //std::uniform_real_distribution<double> gen(1, 2);
+    std::uniform_real_distribution<double> gen(1, 2);
 
     std::vector<double> result;
     result.resize(count);
 
     for (int i = 0; i < count; ++i)
     {
-//      const double d = ReinterpretBits<double>(gen(random));
         const double d = gen(random);
-
-        char buffer[128];
-        char* const end = buffer + snprintf(buffer, 128, "%.*g", digits, d);
-
-        double converted;
-        const auto res = ryu::Strtod(buffer, end, converted);
-        assert(res.status != ryu::StrtodStatus::invalid);
-
-        result[i] = converted;
+        const double rounded = ryu::Round10(d, -digits);
+        result[i] = rounded;
     }
 
     return result;
@@ -459,25 +449,16 @@ static inline void Register_RandomDigits_double(const char* name, int digits)
 
 static inline std::vector<float> GenRandomDigitData_float(int digits, int count)
 {
-    std::uniform_real_distribution<float> gen(0, 1);
-    //std::uniform_real_distribution<double> gen(1, 2);
+    std::uniform_real_distribution<float> gen(1, 2);
 
     std::vector<float> result;
     result.resize(count);
 
     for (int i = 0; i < count; ++i)
     {
-//      const double d = ReinterpretBits<double>(gen(random));
-        const double d = gen(random);
-
-        char buffer[128];
-        char* const end = buffer + snprintf(buffer, 128, "%.*g", digits, d);
-
-        float converted;
-        const auto res = ryu::Strtof(buffer, end, converted);
-        assert(res.status != ryu::StrtofStatus::invalid);
-
-        result[i] = converted;
+        const float d = gen(random);
+        const float rounded = ryu::Round10(d, -digits);
+        result[i] = rounded;
     }
 
     return result;
@@ -510,41 +491,19 @@ int main(int argc, char** argv)
     Register_RandomBits_double();
     Register_Uniform(0.0, 1.0);
     Register_Uniform(0.0, 1.0e+308);
-
-    //for (int e = 10; e < 20; ++e) {
-    //    Register_Uniform(std::pow(10.0, e), std::pow(10.0, e+1));
-    //}
+    Register_Uniform(1.0, 2.0);
 
 #if 0
-#if 0
-    for (int d = 1; d <= 15; ++d) {
-//  for (int d = 15; d >= 1; --d) {
-        Register_Digits_double(StrPrintf("1.%d-digits", d - 1), d, -(d - 1));
-    }
-    for (int d = 1; d <= 15; ++d) {
-        Register_Digits_double(StrPrintf("%d.1-digits", d - 1), d, -1);
-    }
-    for (int d = 1; d <= 15; ++d) {
-        Register_Digits_double(StrPrintf("%d-digits / 10^22", d), d, -22);
-    }
-    for (int d = 1; d <= 15; ++d) {
-        Register_Digits_double(StrPrintf("%d-digits * 10^22", d), d, 22);
-    }
-#else
     for (int d = 1; d <= 18; ++d) {
-//  for (int d = 16; d <= 18; ++d) {
-//  for (int d = 16; d <= 16; ++d) {
-//  for (int d = 1; d <= 3; ++d) {
-        for (int e = -11; e <= 11; e += 1) {
+        for (int e = -10; e <= 10; e += 1) {
             Register_Digits_double(StrPrintf("%2d,%3d", d, e), d, e);
         }
     }
-#endif
 #else
-    for (int d = 1; d <= 17; ++d)
-        Register_RandomDigits_double(StrPrintf("%d-digits", d), d);
-        //Register_RandomDigits_double(StrPrintf("%d-digits", 8), 8);
-        //Register_Uniform(0.0, 1.0);
+    for (int d = 0; d <= 16; ++d)
+    {
+        Register_RandomDigits_double(StrPrintf("1.%d-digits", d), d);
+    }
 #endif
 #endif
 
@@ -554,28 +513,18 @@ int main(int argc, char** argv)
     Register_RandomBits_single();
     Register_Uniform(0.0f, 1.0f);
     Register_Uniform(0.0f, 1.0e+38f);
-
-    for (int d = 1; d <= 9; ++d)
-        Register_RandomDigits_float(StrPrintf("%d-digits", d), d);
+    Register_Uniform(1.0f, 2.0f);
 
 #if 0
-    for (int d = 1; d <= 7; ++d) {
-        Register_Digits_single(StrPrintf("1.%d-digits", d - 1), d, -(d - 1));
-    }
-    for (int d = 1; d <= 7; ++d) {
-        Register_Digits_single(StrPrintf("%d.1-digits", d - 1), d, -1);
-    }
-    for (int d = 1; d <= 7; ++d) {
-        Register_Digits_single(StrPrintf("%d-digits / 10^10", d), d, -10);
-    }
-    for (int d = 1; d <= 7; ++d) {
-        Register_Digits_single(StrPrintf("%d-digits * 10^10", d), d, 10);
-    }
-#else
-    for (int d = 1; d <= 9; ++d) {
+    for (int d = 1; d <= 10; ++d) {
         for (int e = -10; e <= 10; e += 1) {
             Register_Digits_single(StrPrintf("%2d,%3d", d, e), d, e);
         }
+    }
+#else
+    for (int d = 0; d <= 8; ++d)
+    {
+        Register_RandomDigits_float(StrPrintf("1.%d-digits", d), d);
     }
 #endif
 #endif
