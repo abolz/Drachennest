@@ -12,8 +12,6 @@
 //     https://drive.google.com/open?id=1luHhyQF9zKlM8yJ1nebU0OgVYhfC6CBN
 //--------------------------------------------------------------------------------------------------
 
-#define SF_SMALL_INT_OPTIMIZATION() 1
-
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
@@ -116,22 +114,20 @@ static inline int32_t FloorDivPow2(int32_t x, int32_t n)
 }
 
 // Returns floor(log_10(2^e))
-//[[maybe_unused]]
-static inline int32_t FloorLog10Pow2(int32_t e)
-{
-    SF_ASSERT(e >= -1500);
-    SF_ASSERT(e <=  1500);
-    return FloorDivPow2(e * 1262611, 22);
-}
+// static inline int32_t FloorLog10Pow2(int32_t e)
+// {
+//     SF_ASSERT(e >= -1500);
+//     SF_ASSERT(e <=  1500);
+//     return FloorDivPow2(e * 1262611, 22);
+// }
 
 // Returns floor(log_10(3/4 2^e))
-//[[maybe_unused]]
-static inline int32_t FloorLog10ThreeQuartersPow2(int32_t e)
-{
-    SF_ASSERT(e >= -1500);
-    SF_ASSERT(e <=  1500);
-    return FloorDivPow2(e * 1262611 - 524031, 22);
-}
+// static inline int32_t FloorLog10ThreeQuartersPow2(int32_t e)
+// {
+//     SF_ASSERT(e >= -1500);
+//     SF_ASSERT(e <=  1500);
+//     return FloorDivPow2(e * 1262611 - 524031, 22);
+// }
 
 // Returns floor(log_2(10^e))
 static inline int32_t FloorLog2Pow10(int32_t e)
@@ -311,7 +307,7 @@ struct FloatingDecimal32 {
 };
 }
 
-static inline FloatingDecimal32 ToDecimal(uint32_t ieee_significand, uint32_t ieee_exponent)
+static inline FloatingDecimal32 ToDecimal32(uint32_t ieee_significand, uint32_t ieee_exponent)
 {
     uint32_t c;
     int32_t q;
@@ -320,12 +316,10 @@ static inline FloatingDecimal32 ToDecimal(uint32_t ieee_significand, uint32_t ie
         c = Single::HiddenBit | ieee_significand;
         q = static_cast<int32_t>(ieee_exponent) - Single::ExponentBias;
 
-#if SF_SMALL_INT_OPTIMIZATION()
         if (0 <= -q && -q < Single::SignificandSize && MultipleOfPow2(c, -q))
         {
             return {c >> -q, 0};
         }
-#endif
     }
     else
     {
@@ -478,31 +472,28 @@ static inline int PrintDecimalDigitsBackwards(char* buf, uint32_t output)
             tz += TrailingZeros_2Digits(r);
         }
         nd += 2;
+
+        if (output >= 100)
+        {
+            const uint32_t q = output / 100;
+            const uint32_t r = output % 100;
+            output = q;
+            buf -= 2;
+            Utoa_2Digits(buf, r);
+            if (tz == nd)
+            {
+                tz += TrailingZeros_2Digits(r);
+            }
+            nd += 2;
+        }
     }
 
-    // At most 3 digits remaining.
+    // At most 2 digits remaining.
 
     SF_ASSERT(output >= 1);
-    SF_ASSERT(output <= 999);
+    SF_ASSERT(output <= 99);
 
-    if (output >= 100)
-    {
-        const uint32_t q = output / 100;
-        const uint32_t r = output % 100;
-//      output2 = q;
-        buf -= 2;
-        Utoa_2Digits(buf, r);
-        if (tz == nd)
-        {
-            tz += TrailingZeros_2Digits(r);
-        }
-//      nd += 2;
-
-        SF_ASSERT(q >= 1);
-        SF_ASSERT(q <= 9);
-        *--buf = static_cast<char>('0' + q);
-    }
-    else if (output >= 10)
+    if (output >= 10)
     {
         const uint32_t q = output;
         buf -= 2;
@@ -672,7 +663,7 @@ static inline char* ToChars(char* buffer, float value, bool force_trailing_dot_z
         {
             // != 0
 
-            const auto dec = ToDecimal(significand, exponent);
+            const auto dec = ToDecimal32(significand, exponent);
             return FormatDigits(buffer, dec.digits, dec.exponent, force_trailing_dot_zero);
         }
         else

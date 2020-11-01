@@ -114,22 +114,20 @@ static inline int32_t FloorDivPow2(int32_t x, int32_t n)
 }
 
 // Returns floor(log_10(2^e))
-//[[maybe_unused]]
-static inline int32_t FloorLog10Pow2(int32_t e)
-{
-    SF_ASSERT(e >= -1500);
-    SF_ASSERT(e <=  1500);
-    return FloorDivPow2(e * 1262611, 22);
-}
+// static inline int32_t FloorLog10Pow2(int32_t e)
+// {
+//     SF_ASSERT(e >= -1500);
+//     SF_ASSERT(e <=  1500);
+//     return FloorDivPow2(e * 1262611, 22);
+// }
 
 // Returns floor(log_10(3/4 2^e))
-//[[maybe_unused]]
-static inline int32_t FloorLog10ThreeQuartersPow2(int32_t e)
-{
-    SF_ASSERT(e >= -1500);
-    SF_ASSERT(e <=  1500);
-    return FloorDivPow2(e * 1262611 - 524031, 22);
-}
+// static inline int32_t FloorLog10ThreeQuartersPow2(int32_t e)
+// {
+//     SF_ASSERT(e >= -1500);
+//     SF_ASSERT(e <=  1500);
+//     return FloorDivPow2(e * 1262611 - 524031, 22);
+// }
 
 // Returns floor(log_2(10^e))
 static inline int32_t FloorLog2Pow10(int32_t e)
