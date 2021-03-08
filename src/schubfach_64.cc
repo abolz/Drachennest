@@ -956,6 +956,24 @@ static inline FloatingDecimal64 ToDecimal64(uint64_t ieee_significand, uint64_t 
 // ToChars
 //==================================================================================================
 
+static inline uint32_t Div1e4_9Digits(uint32_t x) // Returns x/10000, where x < 10^9
+{
+    SF_ASSERT(x <= 999999999);
+    return static_cast<uint32_t>((x * uint64_t{1759218605}) >> 44);
+}
+
+static inline uint32_t Div1e2_5Digits(uint32_t x) // Returns x/100, where x < 10^5
+{
+    SF_ASSERT(x <= 99999);
+    return static_cast<uint32_t>((x * (uint64_t{167773} << (32 - 24))) >> 32);
+}
+
+static inline uint32_t Div1e2_4Digits(uint32_t x) // Returns x/100, where x < 10^4
+{
+    SF_ASSERT(x <= 9999);
+    return (x * 10486) >> 20;
+}
+
 static inline void Utoa_2Digits(char* buf, uint32_t digits)
 {
     static constexpr char Digits100[200] = {
@@ -975,7 +993,7 @@ static inline void Utoa_2Digits(char* buf, uint32_t digits)
     std::memcpy(buf, &Digits100[2 * digits], 2 * sizeof(char));
 }
 
-static inline int TrailingZeros_2Digits(uint32_t digits)
+static inline int32_t TrailingZeros_2Digits(uint32_t digits)
 {
     static constexpr int8_t TrailingZeros100[100] = {
         2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -994,16 +1012,16 @@ static inline int TrailingZeros_2Digits(uint32_t digits)
     return TrailingZeros100[digits];
 }
 
-static inline int Utoa_8Digits_skip_trailing_zeros(char* buf, uint32_t digits)
+static inline int32_t Utoa_8Digits_skip_trailing_zeros(char* buf, uint32_t digits)
 {
     SF_ASSERT(digits >= 1);
     SF_ASSERT(digits <= 99999999);
 
-    const uint32_t q = digits / 10000;
-    const uint32_t r = digits % 10000;
+    const uint32_t q = Div1e4_9Digits(digits);
+    const uint32_t r = digits - 10000 * q;
 
-    const uint32_t qH = q / 100;
-    const uint32_t qL = q % 100;
+    const uint32_t qH = Div1e2_4Digits(q);
+    const uint32_t qL = q - 100 * qH;
     Utoa_2Digits(buf + 0, qH);
     Utoa_2Digits(buf + 2, qL);
 
@@ -1013,8 +1031,8 @@ static inline int Utoa_8Digits_skip_trailing_zeros(char* buf, uint32_t digits)
     }
     else
     {
-        const uint32_t rH = r / 100;
-        const uint32_t rL = r % 100;
+        const uint32_t rH = Div1e2_4Digits(r);
+        const uint32_t rL = r - 100 * rH;
         Utoa_2Digits(buf + 4, rH);
         Utoa_2Digits(buf + 6, rL);
 
@@ -1022,10 +1040,10 @@ static inline int Utoa_8Digits_skip_trailing_zeros(char* buf, uint32_t digits)
     }
 }
 
-static inline int PrintDecimalDigitsBackwards(char* buf, uint64_t output64)
+static inline int32_t PrintDecimalDigitsBackwards(char* buf, uint64_t output64)
 {
-    int tz = 0; // number of trailing zeros removed.
-    int nd = 0; // number of decimal digits processed.
+    int32_t tz = 0; // number of trailing zeros removed.
+    int32_t nd = 0; // number of decimal digits processed.
 
     // At most 17 digits remaining
 
@@ -1054,14 +1072,14 @@ static inline int PrintDecimalDigitsBackwards(char* buf, uint64_t output64)
 
     if (output >= 10000)
     {
-        const uint32_t q = output / 10000;
-        const uint32_t r = output % 10000;
+        const uint32_t q = Div1e4_9Digits(output);
+        const uint32_t r = output - 10000 * q;
         output = q;
         buf -= 4;
         if (r != 0)
         {
-            const uint32_t rH = r / 100;
-            const uint32_t rL = r % 100;
+            const uint32_t rH = Div1e2_4Digits(r);
+            const uint32_t rL = r - 100 * rH;
             Utoa_2Digits(buf + 0, rH);
             Utoa_2Digits(buf + 2, rL);
             if (tz == nd)
@@ -1083,8 +1101,8 @@ static inline int PrintDecimalDigitsBackwards(char* buf, uint64_t output64)
 
     if (output >= 100)
     {
-        const uint32_t q = output / 100;
-        const uint32_t r = output % 100;
+        const uint32_t q = Div1e2_5Digits(output);
+        const uint32_t r = output - 100 * q;
         output = q;
         buf -= 2;
         Utoa_2Digits(buf, r);
@@ -1096,8 +1114,8 @@ static inline int PrintDecimalDigitsBackwards(char* buf, uint64_t output64)
 
         if (output >= 100)
         {
-            const uint32_t q2 = output / 100;
-            const uint32_t r2 = output % 100;
+            const uint32_t q2 = Div1e2_4Digits(output);
+            const uint32_t r2 = output - 100 * q2;
             output = q2;
             buf -= 2;
             Utoa_2Digits(buf, r2);
@@ -1214,7 +1232,7 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
 
     char* digits_end = buffer + decimal_digits_position + num_digits;
 
-    const int tz = PrintDecimalDigitsBackwards(digits_end, digits);
+    const int32_t tz = PrintDecimalDigitsBackwards(digits_end, digits);
     digits_end -= tz;
     num_digits -= tz;
 //  decimal_exponent += tz; // => decimal_point unchanged.

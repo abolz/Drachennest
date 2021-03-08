@@ -141,7 +141,7 @@ static inline int32_t FloorLog2Pow10(int32_t e)
 //
 //==================================================================================================
 
-static inline uint64_t ComputePow10(int32_t k)
+static inline uint64_t ComputePow10_Single(int32_t k)
 {
     // There are unique beta and r such that 10^k = beta 2^r and
     // 2^63 <= beta < 2^64, namely r = floor(log_2 10^k) - 63 and
@@ -348,7 +348,7 @@ static inline FloatingDecimal32 ToDecimal32(uint32_t ieee_significand, uint32_t 
     SF_ASSERT(h >= 1);
     SF_ASSERT(h <= 4);
 
-    const uint64_t pow10 = ComputePow10(-k);
+    const uint64_t pow10 = ComputePow10_Single(-k);
     const uint32_t vbl = RoundToOdd(pow10, cbl << h);
     const uint32_t vb  = RoundToOdd(pow10, cb  << h);
     const uint32_t vbr = RoundToOdd(pow10, cbr << h);
@@ -391,6 +391,24 @@ static inline FloatingDecimal32 ToDecimal32(uint32_t ieee_significand, uint32_t 
 // ToChars
 //==================================================================================================
 
+static inline uint32_t Div1e4_9Digits(uint32_t x) // Returns x/10000, where x < 10^9
+{
+    SF_ASSERT(x <= 999999999);
+    return static_cast<uint32_t>((x * uint64_t{1759218605}) >> 44);
+}
+
+static inline uint32_t Div1e2_5Digits(uint32_t x) // Returns x/100, where x < 10^5
+{
+    SF_ASSERT(x <= 99999);
+    return static_cast<uint32_t>((x * (uint64_t{167773} << (32 - 24))) >> 32);
+}
+
+static inline uint32_t Div1e2_4Digits(uint32_t x) // Returns x/100, where x < 10^4
+{
+    SF_ASSERT(x <= 9999);
+    return (x * 10486) >> 20;
+}
+
 static inline void Utoa_2Digits(char* buf, uint32_t digits)
 {
     static constexpr char Digits100[200] = {
@@ -410,7 +428,7 @@ static inline void Utoa_2Digits(char* buf, uint32_t digits)
     std::memcpy(buf, &Digits100[2 * digits], 2 * sizeof(char));
 }
 
-static inline int TrailingZeros_2Digits(uint32_t digits)
+static inline int32_t TrailingZeros_2Digits(uint32_t digits)
 {
     static constexpr int8_t TrailingZeros100[100] = {
         2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -429,23 +447,23 @@ static inline int TrailingZeros_2Digits(uint32_t digits)
     return TrailingZeros100[digits];
 }
 
-static inline int PrintDecimalDigitsBackwards(char* buf, uint32_t output)
+static inline int32_t PrintDecimalDigitsBackwards(char* buf, uint32_t output)
 {
-    int tz = 0; // number of trailing zeros removed.
-    int nd = 0; // number of decimal digits processed.
+    int32_t tz = 0; // number of trailing zeros removed.
+    int32_t nd = 0; // number of decimal digits processed.
 
     // At most 9 digits remaining
 
     if (output >= 10000)
     {
-        const uint32_t q = output / 10000;
-        const uint32_t r = output % 10000;
+        const uint32_t q = Div1e4_9Digits(output);
+        const uint32_t r = output - 10000 * q;
         output = q;
         buf -= 4;
         if (r != 0)
         {
-            const uint32_t rH = r / 100;
-            const uint32_t rL = r % 100;
+            const uint32_t rH = Div1e2_4Digits(r);
+            const uint32_t rL = r - 100 * rH;
             Utoa_2Digits(buf + 0, rH);
             Utoa_2Digits(buf + 2, rL);
 
@@ -462,8 +480,8 @@ static inline int PrintDecimalDigitsBackwards(char* buf, uint32_t output)
 
     if (output >= 100)
     {
-        const uint32_t q = output / 100;
-        const uint32_t r = output % 100;
+        const uint32_t q = Div1e2_5Digits(output);
+        const uint32_t r = output - 100 * q;
         output = q;
         buf -= 2;
         Utoa_2Digits(buf, r);
@@ -475,8 +493,8 @@ static inline int PrintDecimalDigitsBackwards(char* buf, uint32_t output)
 
         if (output >= 100)
         {
-            const uint32_t q2 = output / 100;
-            const uint32_t r2 = output % 100;
+            const uint32_t q2 = Div1e2_4Digits(output);
+            const uint32_t r2 = output - 100 * q2;
             output = q2;
             buf -= 2;
             Utoa_2Digits(buf, r2);
@@ -578,7 +596,7 @@ static inline char* FormatDigits(char* buffer, uint32_t digits, int32_t decimal_
 
     char* digits_end = buffer + decimal_digits_position + num_digits;
 
-    const int tz = PrintDecimalDigitsBackwards(digits_end, digits);
+    const int32_t tz = PrintDecimalDigitsBackwards(digits_end, digits);
     digits_end -= tz;
     num_digits -= tz;
 //  decimal_exponent += tz; // => decimal_point unchanged.

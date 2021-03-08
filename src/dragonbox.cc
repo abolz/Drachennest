@@ -902,12 +902,24 @@ static inline uint64x2 Mul128(uint64_t x, uint64_t y) // 1 mulx
     const uint64_t lo = static_cast<uint64_t>(p);
     return {hi, lo};
 }
+
+static inline uint64_t MulHigh(uint64_t x, uint64_t y)
+{
+    __extension__ using uint128_t = unsigned __int128;
+
+    return static_cast<uint64_t>((uint128_t{x} * y) >> 64);
+}
 #elif defined(_MSC_VER) && defined(_M_X64)
 static inline uint64x2 Mul128(uint64_t x, uint64_t y)
 {
     uint64_t hi = 0;
     uint64_t lo = _umul128(x, y, &hi);
     return {hi, lo};
+}
+
+static inline uint64_t MulHigh(uint64_t x, uint64_t y)
+{
+    return __umulh(x, y);
 }
 #else
 static inline uint32_t Lo32(uint64_t x)
@@ -934,7 +946,40 @@ static inline uint64x2 Mul128(uint64_t a, uint64_t b)
     const uint64_t lo = Lo32(b00) | uint64_t{Lo32(mid2)} << 32;
     return {hi, lo};
 }
+
+static inline uint64_t MulHigh(uint64_t x, uint64_t y)
+{
+    return Mul128(x, y).hi;
+}
 #endif
+
+// Returns x/10^8, where x < 10^17
+static inline uint32_t Div1e8_17Digits(uint64_t x)
+{
+    DRAGONBOX_ASSERT(x <= 99999999999999999);
+    return static_cast<uint32_t>(MulHigh(x, 193428131138340668) >> (84 - 64));
+}
+
+// Returns x/10000, where x < 10^9
+static inline uint32_t Div1e4_9Digits(uint32_t x)
+{
+    DRAGONBOX_ASSERT(x <= 999999999);
+    return static_cast<uint32_t>((x * uint64_t{1759218605}) >> 44);
+}
+
+// Returns x/100, where x < 10^5
+static inline uint32_t Div1e2_5Digits(uint32_t x)
+{
+    DRAGONBOX_ASSERT(x <= 99999);
+    return static_cast<uint32_t>((x * (uint64_t{167773} << (32 - 24))) >> 32);
+}
+
+// Returns x/100, where x < 10^4
+static inline uint32_t Div1e2_4Digits(uint32_t x)
+{
+    DRAGONBOX_ASSERT(x <= 9999);
+    return (x * 10486) >> 20;
+}
 
 // Returns (x * y) / 2^128
 static inline uint64_t MulShift(uint64_t x, uint64x2 y) // 2 mulx
@@ -1051,8 +1096,8 @@ static inline FloatingDecimal64 ToDecimal64(const uint64_t ieee_significand, con
     // Try larger divisor.
     //
 
-    uint64_t q = zi / BigDivisor;
-//  uint64_t q = Mul128(zi, 0x83126E978D4FDF3Cu).hi >> 9; // 1 mulx
+//  uint64_t q = zi / BigDivisor;
+    uint64_t q = Mul128(zi, 0x83126E978D4FDF3Cu).hi >> 9; // 1 mulx
     uint32_t r = static_cast<uint32_t>(zi) - BigDivisor * static_cast<uint32_t>(q); // r = zi % BigDivisor
     // 0 <= r < 1000
 
@@ -1093,7 +1138,7 @@ static inline FloatingDecimal64 ToDecimal64(const uint64_t ieee_significand, con
 
     const uint32_t dist = r - (delta / 2) + (SmallDivisor / 2);
 
-    const uint32_t dist_q = dist / 100; // 1 mul
+    const uint32_t dist_q = Div1e2_4Digits(dist); // dist / 100; // 1 mul
 //  const uint32_t dist_r = dist % 100;
     q += dist_q;
 
@@ -1171,11 +1216,11 @@ static inline int32_t Utoa_8Digits_skip_trailing_zeros(char* buf, uint32_t digit
     DRAGONBOX_ASSERT(digits >= 1);
     DRAGONBOX_ASSERT(digits <= 99999999);
 
-    const uint32_t q = digits / 10000;
-    const uint32_t r = digits % 10000;
+    const uint32_t q = Div1e4_9Digits(digits);
+    const uint32_t r = digits - 10000 * q;
 
-    const uint32_t qH = q / 100;
-    const uint32_t qL = q % 100;
+    const uint32_t qH = Div1e2_4Digits(q);
+    const uint32_t qL = q - 100 * qH;
     Utoa_2Digits(buf + 0, qH);
     Utoa_2Digits(buf + 2, qL);
 
@@ -1185,8 +1230,8 @@ static inline int32_t Utoa_8Digits_skip_trailing_zeros(char* buf, uint32_t digit
     }
     else
     {
-        const uint32_t rH = r / 100;
-        const uint32_t rL = r % 100;
+        const uint32_t rH = Div1e2_4Digits(r);
+        const uint32_t rL = r - 100 * rH;
         Utoa_2Digits(buf + 4, rH);
         Utoa_2Digits(buf + 6, rL);
 
@@ -1203,8 +1248,8 @@ static inline int32_t PrintDecimalDigitsBackwards(char* buf, uint64_t output64)
 
     if (output64 >= 100000000)
     {
-        const uint64_t q = output64 / 100000000;
-        const uint32_t r = static_cast<uint32_t>(output64 % 100000000);
+        const uint32_t q = Div1e8_17Digits(output64);
+        const uint32_t r = static_cast<uint32_t>(output64) - 100000000 * q;
         output64 = q;
         buf -= 8;
         if (r != 0)
@@ -1226,14 +1271,14 @@ static inline int32_t PrintDecimalDigitsBackwards(char* buf, uint64_t output64)
 
     if (output >= 10000)
     {
-        const uint32_t q = output / 10000;
-        const uint32_t r = output % 10000;
+        const uint32_t q = Div1e4_9Digits(output);
+        const uint32_t r = output - 10000 * q;
         output = q;
         buf -= 4;
         if (r != 0)
         {
-            const uint32_t rH = r / 100;
-            const uint32_t rL = r % 100;
+            const uint32_t rH = Div1e2_4Digits(r);
+            const uint32_t rL = r - 100 * rH;
             Utoa_2Digits(buf + 0, rH);
             Utoa_2Digits(buf + 2, rL);
             if (tz == nd)
@@ -1255,8 +1300,8 @@ static inline int32_t PrintDecimalDigitsBackwards(char* buf, uint64_t output64)
 
     if (output >= 100)
     {
-        const uint32_t q = output / 100;
-        const uint32_t r = output % 100;
+        const uint32_t q = Div1e2_5Digits(output);
+        const uint32_t r = output - 100 * q;
         output = q;
         buf -= 2;
         Utoa_2Digits(buf, r);
@@ -1268,8 +1313,8 @@ static inline int32_t PrintDecimalDigitsBackwards(char* buf, uint64_t output64)
 
         if (output >= 100)
         {
-            const uint32_t q2 = output / 100;
-            const uint32_t r2 = output % 100;
+            const uint32_t q2 = Div1e2_4Digits(output);
+            const uint32_t r2 = output - 100 * q2;
             output = q2;
             buf -= 2;
             Utoa_2Digits(buf, r2);
