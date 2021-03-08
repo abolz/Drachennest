@@ -78,10 +78,10 @@ struct Double
     static constexpr int32_t   ExponentBias    = std::numeric_limits<value_type>::max_exponent - 1 + (SignificandSize - 1);
 //  static constexpr int32_t   MaxExponent     = std::numeric_limits<value_type>::max_exponent - 1 - (SignificandSize - 1);
 //  static constexpr int32_t   MinExponent     = std::numeric_limits<value_type>::min_exponent - 1 - (SignificandSize - 1);
-    static constexpr bits_type MaxIeeeExponent = bits_type{2 * std::numeric_limits<value_type>::max_exponent - 1};
+    static constexpr int32_t   MaxIeeeExponent = 2 * std::numeric_limits<value_type>::max_exponent - 1;
     static constexpr bits_type HiddenBit       = bits_type{1} << (SignificandSize - 1);   // = 2^(p-1)
     static constexpr bits_type SignificandMask = HiddenBit - 1;                           // = 2^(p-1) - 1
-    static constexpr bits_type ExponentMask    = MaxIeeeExponent << (SignificandSize - 1);
+    static constexpr bits_type ExponentMask    = bits_type{MaxIeeeExponent} << (SignificandSize - 1);
     static constexpr bits_type SignMask        = ~(~bits_type{0} >> 1);
 
     bits_type bits;
@@ -1863,7 +1863,7 @@ static inline double ToBinary64(uint64_t m10, int32_t m10_digits, int32_t e10)
 
     // Compute the final IEEE exponent.
     int32_t ieee_e2 = Max(0, log2_m2 + e2 + ExponentBias);
-    if (ieee_e2 >= 2 * std::numeric_limits<double>::max_exponent - 1)
+    if (ieee_e2 >= Double::MaxIeeeExponent)
     {
         // Overflow:
         // Final IEEE exponent is larger than the maximum representable.
@@ -1875,6 +1875,7 @@ static inline double ToBinary64(uint64_t m10, int32_t m10_digits, int32_t e10)
     // reverse the bias and also special-case the value 0.
     const int32_t shift = (ieee_e2 == 0 ? 1 : ieee_e2) - e2 - (ExponentBias + MantissaBits);
     RYU_ASSERT(shift > 0);
+    RYU_ASSERT(shift < 64);
 
     // We need to round up if the exact value is more than 0.5 above the value we computed. That's
     // equivalent to checking if the last removed bit was 1 and either the value was not just
@@ -1887,7 +1888,7 @@ static inline double ToBinary64(uint64_t m10, int32_t m10_digits, int32_t e10)
         = last_removed_bit != 0 && (!trailing_zeros || ExtractBit(m2, shift) != 0);
 
     uint64_t significand = (m2 >> shift) + round_up;
-    RYU_ASSERT(significand <= 2 * Double::HiddenBit); // significand <= 2^(p+1) = 2^54
+    RYU_ASSERT(significand <= 2 * Double::HiddenBit); // significand <= 2^p = 2^53
 
     significand &= Double::SignificandMask;
 
@@ -1900,7 +1901,7 @@ static inline double ToBinary64(uint64_t m10, int32_t m10_digits, int32_t e10)
         ++ieee_e2;
     }
 
-    RYU_ASSERT(ieee_e2 <= 2 * std::numeric_limits<double>::max_exponent - 1);
+    RYU_ASSERT(ieee_e2 <= Double::MaxIeeeExponent);
     const uint64_t ieee = static_cast<uint64_t>(ieee_e2) << MantissaBits | significand;
     return ReinterpretBits<double>(ieee);
 }
