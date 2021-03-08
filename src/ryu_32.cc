@@ -1535,7 +1535,7 @@ static float MulRoundDiv(const float value, const int32_t mul_e10, const int32_t
 
         // Round to int (towards +inf)
         digits      = i + (f >= pow10 / 2);
-        num_digits -= e10;
+        num_digits  = DecimalLength(digits);
         exponent    = 0;
     }
     else if (e10 == num_digits)
