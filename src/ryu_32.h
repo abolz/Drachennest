@@ -47,8 +47,9 @@ char* Ftoa(char* buffer, float value);
 
 enum class StrtofStatus {
     invalid,
-    integer,
-    floating_point,
+    integer,    // Add StrtofFormat ?
+    fixed,      // Add StrtofFormat ?
+    scientific, // Add StrtofFormat ?
     inf,
     nan,
 #if !RYU_STRTOD_FALLBACK()

@@ -163,7 +163,7 @@ static inline int32_t FloorLog10Pow5(int32_t e)
 
 static inline uint32_t Lo32(uint64_t x)
 {
-    return static_cast<uint32_t>(x);
+    return static_cast<uint32_t>(x & 0xFFFFFFFFu);
 }
 
 //[[maybe_unused]]
@@ -2116,7 +2116,7 @@ StrtodResult ryu::Strtod(const char* next, const char* last, double& value)
 
     if (has_leading_dot || (next != last && *next == '.'))
     {
-        status = StrtodStatus::floating_point;
+        status = StrtodStatus::fixed;
 
         ++next; // skip '.'
         if (next != last && IsDigit(*next))
@@ -2181,7 +2181,7 @@ StrtodResult ryu::Strtod(const char* next, const char* last, double& value)
             if (p != last && IsDigit(*p))
             {
                 // Found a valid exponent.
-                status = StrtodStatus::floating_point;
+                status = StrtodStatus::scientific;
                 next = p;
 
                 parsed_exponent = DigitValue(*next);

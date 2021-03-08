@@ -1333,7 +1333,7 @@ StrtofResult ryu::Strtof(const char* next, const char* last, float& value)
 
     if (has_leading_dot || (next != last && *next == '.'))
     {
-        status = StrtofStatus::floating_point;
+        status = StrtofStatus::fixed;
 
         ++next; // skip '.'
         if (next != last && IsDigit(*next))
@@ -1398,7 +1398,7 @@ StrtofResult ryu::Strtof(const char* next, const char* last, float& value)
             if (p != last && IsDigit(*p))
             {
                 // Found a valid exponent.
-                status = StrtofStatus::floating_point;
+                status = StrtofStatus::scientific;
                 next = p;
 
                 parsed_exponent = DigitValue(*next);

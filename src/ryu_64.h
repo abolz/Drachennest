@@ -47,8 +47,9 @@ char* Dtoa(char* buffer, double value);
 
 enum class StrtodStatus {
     invalid,
-    integer,
-    floating_point,
+    integer,    // Add StrtodFormat ?
+    fixed,      // Add StrtodFormat ?
+    scientific, // Add StrtodFormat ?
     inf,
     nan,
 #if !RYU_STRTOD_FALLBACK()
