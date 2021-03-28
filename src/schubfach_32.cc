@@ -475,14 +475,14 @@ static inline int PrintDecimalDigitsBackwards(char* buf, uint32_t output)
 
         if (output >= 100)
         {
-            const uint32_t q = output / 100;
-            const uint32_t r = output % 100;
-            output = q;
+            const uint32_t q2 = output / 100;
+            const uint32_t r2 = output % 100;
+            output = q2;
             buf -= 2;
-            Utoa_2Digits(buf, r);
+            Utoa_2Digits(buf, r2);
             if (tz == nd)
             {
-                tz += TrailingZeros_2Digits(r);
+                tz += TrailingZeros_2Digits(r2);
             }
             nd += 2;
         }
