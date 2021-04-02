@@ -975,7 +975,7 @@ static inline void Utoa_2Digits(char* buf, uint32_t digits)
     std::memcpy(buf, &Digits100[2 * digits], 2 * sizeof(char));
 }
 
-static inline int TrailingZeros_2Digits(uint32_t digits)
+static inline int32_t TrailingZeros_2Digits(uint32_t digits)
 {
     static constexpr int8_t TrailingZeros100[100] = {
         2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -994,7 +994,7 @@ static inline int TrailingZeros_2Digits(uint32_t digits)
     return TrailingZeros100[digits];
 }
 
-static inline int Utoa_8Digits_skip_trailing_zeros(char* buf, uint32_t digits)
+static inline int32_t Utoa_8Digits_skip_trailing_zeros(char* buf, uint32_t digits)
 {
     SF_ASSERT(digits >= 1);
     SF_ASSERT(digits <= 99999999);
@@ -1022,10 +1022,10 @@ static inline int Utoa_8Digits_skip_trailing_zeros(char* buf, uint32_t digits)
     }
 }
 
-static inline int PrintDecimalDigitsBackwards(char* buf, uint64_t output64)
+static inline int32_t PrintDecimalDigitsBackwards(char* buf, uint64_t output64)
 {
-    int tz = 0; // number of trailing zeros removed.
-    int nd = 0; // number of decimal digits processed.
+    int32_t tz = 0; // number of trailing zeros removed.
+    int32_t nd = 0; // number of decimal digits processed.
 
     // At most 17 digits remaining
 
@@ -1214,7 +1214,7 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
 
     char* digits_end = buffer + decimal_digits_position + num_digits;
 
-    const int tz = PrintDecimalDigitsBackwards(digits_end, digits);
+    const int32_t tz = PrintDecimalDigitsBackwards(digits_end, digits);
     digits_end -= tz;
     num_digits -= tz;
 //  decimal_exponent += tz; // => decimal_point unchanged.
