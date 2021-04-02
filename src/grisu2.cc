@@ -1033,7 +1033,7 @@ static inline char* Utoa_2Digits(char* buf, uint32_t digits)
     };
 
     GRISU_ASSERT(digits <= 99);
-    std::memcpy(buf, &Digits100[2 * digits], 2 * sizeof(char));
+    std::memcpy(buf, &Digits100[2 * digits], 2);
     return buf + 2;
 }
 

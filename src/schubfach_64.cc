@@ -972,7 +972,7 @@ static inline void Utoa_2Digits(char* buf, uint32_t digits)
     };
 
     SF_ASSERT(digits <= 99);
-    std::memcpy(buf, &Digits100[2 * digits], 2 * sizeof(char));
+    std::memcpy(buf, &Digits100[2 * digits], 2);
 }
 
 static inline int32_t TrailingZeros_2Digits(uint32_t digits)
