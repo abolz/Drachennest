@@ -1488,7 +1488,7 @@ static inline uint32_t SmallPow10(const int32_t e10)
     return Pow10Table[static_cast<uint32_t>(e10)];
 }
 
-static float MulRoundDiv(const float value, const int32_t mul_e10, const int32_t div_e10)
+static inline float MulRoundDiv(const float value, const int32_t mul_e10, const int32_t div_e10)
 {
     const Single v(value);
 
