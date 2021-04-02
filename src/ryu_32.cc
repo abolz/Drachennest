@@ -662,7 +662,7 @@ static inline FloatingDecimal32 ToDecimal32(uint32_t ieee_significand, uint32_t 
 // ToChars
 //==================================================================================================
 
-static inline char* Utoa_2Digits(char* buf, uint32_t digits)
+static inline void Utoa_2Digits(char* buf, uint32_t digits)
 {
     static constexpr char Digits100[200] = {
         '0','0','0','1','0','2','0','3','0','4','0','5','0','6','0','7','0','8','0','9',
@@ -679,7 +679,6 @@ static inline char* Utoa_2Digits(char* buf, uint32_t digits)
 
     RYU_ASSERT(digits <= 99);
     std::memcpy(buf, &Digits100[2 * digits], 2);
-    return buf + 2;
 }
 
 static inline char* PrintDecimalDigitsBackwards(char* buf, uint32_t output)
@@ -827,7 +826,8 @@ static inline char* FormatDigits(char* buffer, uint32_t digits, int32_t decimal_
         }
         else
         {
-            buffer = Utoa_2Digits(buffer, k);
+            Utoa_2Digits(buffer, k);
+            buffer += 2;
         }
     }
 

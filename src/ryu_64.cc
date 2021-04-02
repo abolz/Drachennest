@@ -1325,7 +1325,7 @@ static inline FloatingDecimal64 ToDecimal64(uint64_t ieee_significand, uint64_t 
 // ToChars
 //==================================================================================================
 
-static inline char* Utoa_2Digits(char* buf, uint32_t digits)
+static inline void Utoa_2Digits(char* buf, uint32_t digits)
 {
     static constexpr char Digits100[200] = {
         '0','0','0','1','0','2','0','3','0','4','0','5','0','6','0','7','0','8','0','9',
@@ -1342,27 +1342,24 @@ static inline char* Utoa_2Digits(char* buf, uint32_t digits)
 
     RYU_ASSERT(digits <= 99);
     std::memcpy(buf, &Digits100[2 * digits], 2);
-    return buf + 2;
 }
 
-static inline char* Utoa_4Digits(char* buf, uint32_t digits)
+static inline void Utoa_4Digits(char* buf, uint32_t digits)
 {
     RYU_ASSERT(digits <= 9999);
     const uint32_t q = digits / 100;
     const uint32_t r = digits % 100;
     Utoa_2Digits(buf + 0, q);
     Utoa_2Digits(buf + 2, r);
-    return buf + 4;
 }
 
-static inline char* Utoa_8Digits(char* buf, uint32_t digits)
+static inline void Utoa_8Digits(char* buf, uint32_t digits)
 {
     RYU_ASSERT(digits <= 99999999);
     const uint32_t q = digits / 10000;
     const uint32_t r = digits % 10000;
     Utoa_4Digits(buf + 0, q);
     Utoa_4Digits(buf + 4, r);
-    return buf + 8;
 }
 
 static inline char* PrintDecimalDigitsBackwards(char* buf, uint64_t output)
@@ -1411,22 +1408,28 @@ static inline int32_t DecimalLength(uint64_t v)
     RYU_ASSERT(v >= 1);
     RYU_ASSERT(v <= 99999999999999999ull);
 
-    if (v >= 10000000000000000ull) { return 17; }
-    if (v >= 1000000000000000ull) { return 16; }
-    if (v >= 100000000000000ull) { return 15; }
-    if (v >= 10000000000000ull) { return 14; }
-    if (v >= 1000000000000ull) { return 13; }
-    if (v >= 100000000000ull) { return 12; }
-    if (v >= 10000000000ull) { return 11; }
-    if (v >= 1000000000ull) { return 10; }
-    if (v >= 100000000ull) { return 9; }
-    if (v >= 10000000ull) { return 8; }
-    if (v >= 1000000ull) { return 7; }
-    if (v >= 100000ull) { return 6; }
-    if (v >= 10000ull) { return 5; }
-    if (v >= 1000ull) { return 4; }
-    if (v >= 100ull) { return 3; }
-    if (v >= 10ull) { return 2; }
+    if (static_cast<uint32_t>(v >> 32) != 0)
+    {
+        if (v >= 10000000000000000ull) { return 17; }
+        if (v >= 1000000000000000ull) { return 16; }
+        if (v >= 100000000000000ull) { return 15; }
+        if (v >= 10000000000000ull) { return 14; }
+        if (v >= 1000000000000ull) { return 13; }
+        if (v >= 100000000000ull) { return 12; }
+        if (v >= 10000000000ull) { return 11; }
+        return 10;
+    }
+
+    const uint32_t v32 = static_cast<uint32_t>(v);
+    if (v32 >= 1000000000u) { return 10; }
+    if (v32 >= 100000000u) { return 9; }
+    if (v32 >= 10000000u) { return 8; }
+    if (v32 >= 1000000u) { return 7; }
+    if (v32 >= 100000u) { return 6; }
+    if (v32 >= 10000u) { return 5; }
+    if (v32 >= 1000u) { return 4; }
+    if (v32 >= 100u) { return 3; }
+    if (v32 >= 10u) { return 2; }
     return 1;
 }
 
@@ -1547,14 +1550,16 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
         }
         else if (k < 100)
         {
-            buffer = Utoa_2Digits(buffer, k);
+            Utoa_2Digits(buffer, k);
+            buffer += 2;
         }
         else
         {
             const uint32_t q = k / 100;
             const uint32_t r = k % 100;
             *buffer++ = static_cast<char>('0' + q);
-            buffer = Utoa_2Digits(buffer, r);
+            Utoa_2Digits(buffer, r);
+            buffer += 2;
         }
     }
 
