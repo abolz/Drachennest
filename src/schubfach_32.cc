@@ -141,7 +141,7 @@ static inline int32_t FloorLog2Pow10(int32_t e)
 //
 //==================================================================================================
 
-static inline uint64_t ComputePow10(int32_t k)
+static inline uint64_t ComputePow10_Single(int32_t k)
 {
     // There are unique beta and r such that 10^k = beta 2^r and
     // 2^63 <= beta < 2^64, namely r = floor(log_2 10^k) - 63 and
@@ -348,7 +348,7 @@ static inline FloatingDecimal32 ToDecimal32(uint32_t ieee_significand, uint32_t 
     SF_ASSERT(h >= 1);
     SF_ASSERT(h <= 4);
 
-    const uint64_t pow10 = ComputePow10(-k);
+    const uint64_t pow10 = ComputePow10_Single(-k);
     const uint32_t vbl = RoundToOdd(pow10, cbl << h);
     const uint32_t vb  = RoundToOdd(pow10, cb  << h);
     const uint32_t vbr = RoundToOdd(pow10, cbr << h);
