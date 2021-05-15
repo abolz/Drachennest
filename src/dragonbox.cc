@@ -148,7 +148,7 @@ struct uint64x2 {
 };
 }
 
-static inline uint64x2 ComputePow10(int32_t k)
+static inline uint64x2 ComputePow10_Double(int32_t k)
 {
     static constexpr int32_t kMin = -292;
     static constexpr int32_t kMax =  326;
@@ -849,7 +849,7 @@ static inline FloatingDecimal64 ToDecimal64_asymmetric_interval(int32_t e2)
     const int32_t beta_minus_1 = e2 + FloorLog2Pow10(-minus_k);
 
     // Compute xi and zi
-    const uint64x2 pow10 = ComputePow10(-minus_k);
+    const uint64x2 pow10 = ComputePow10_Double(-minus_k);
 
     const uint64_t lower_endpoint = (pow10.hi - (pow10.hi >> (P + 1))) >> (64 - P - beta_minus_1);
     const uint64_t upper_endpoint = (pow10.hi + (pow10.hi >> (P + 0))) >> (64 - P - beta_minus_1);
@@ -1029,7 +1029,7 @@ static inline FloatingDecimal64 ToDecimal64(const uint64_t ieee_significand, con
     DRAGONBOX_ASSERT(beta_minus_1 >= 6);
     DRAGONBOX_ASSERT(beta_minus_1 <= 9);
 
-    const uint64x2 pow10 = ComputePow10(-minus_k);
+    const uint64x2 pow10 = ComputePow10_Double(-minus_k);
 
     // Compute delta
     // 10^kappa <= delta < 10^(kappa + 1)
