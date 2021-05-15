@@ -536,7 +536,7 @@ static inline char* FormatDigits(char* buffer, uint32_t digits, int32_t decimal_
     static constexpr int32_t MinFixedDecimalPoint = -4;
     static constexpr int32_t MaxFixedDecimalPoint =  9;
     static_assert(MinFixedDecimalPoint <= -1, "internal error");
-    static_assert(MaxFixedDecimalPoint >=  9, "internal error");
+    static_assert(MaxFixedDecimalPoint >=  1, "internal error");
 
     SF_ASSERT(digits >= 1);
     SF_ASSERT(digits <= 999999999u);
@@ -551,9 +551,10 @@ static inline char* FormatDigits(char* buffer, uint32_t digits, int32_t decimal_
     // Prepare the buffer.
     // Avoid calling memset/memcpy with variable arguments below...
 
-    std::memset(buffer, '0', 16);
-    static_assert(MinFixedDecimalPoint >= -14, "internal error");
-    static_assert(MaxFixedDecimalPoint <=  16, "internal error");
+    std::memset(buffer +  0, '0', 16);
+    std::memset(buffer + 16, '0', 16);
+    static_assert(MinFixedDecimalPoint >= -30, "internal error");
+    static_assert(MaxFixedDecimalPoint <=  32, "internal error");
 
     int32_t decimal_digits_position;
     if (use_fixed)

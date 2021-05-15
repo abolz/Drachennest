@@ -1171,7 +1171,7 @@ static inline char* FormatDigits(char* buffer, uint64_t digits, int32_t decimal_
     static constexpr int32_t MinFixedDecimalPoint = -6;
     static constexpr int32_t MaxFixedDecimalPoint =  17;
     static_assert(MinFixedDecimalPoint <= -1, "internal error");
-    static_assert(MaxFixedDecimalPoint >= 17, "internal error");
+    static_assert(MaxFixedDecimalPoint >=  1, "internal error");
 
     SF_ASSERT(digits >= 1);
     SF_ASSERT(digits <= 99999999999999999ull);
