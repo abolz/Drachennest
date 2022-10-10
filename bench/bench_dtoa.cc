@@ -174,7 +174,7 @@ public:
     uint32_t operator()() { return Gen(); }
 };
 
-static JenkinsRandom random;
+static JenkinsRandom _random;
 
 //==================================================================================================
 //
@@ -259,7 +259,7 @@ static inline void Register_RandomBits_double()
     std::vector<double> numbers(NumFloats);
 
     std::uniform_int_distribution<uint64_t> gen(1, 0x7FF0000000000000ull - 1);
-    std::generate(numbers.begin(), numbers.end(), [&] { return ReinterpretBits<double>(gen(random)); });
+    std::generate(numbers.begin(), numbers.end(), [&] { return ReinterpretBits<double>(gen(_random)); });
 
     RegisterBenchmarks("Random-bits", numbers);
 }
@@ -269,7 +269,7 @@ static inline void Register_RandomBits_single()
     std::vector<float> numbers(NumFloats);
 
     std::uniform_int_distribution<uint32_t> gen(1, 0x7F800000u - 1);
-    std::generate(numbers.begin(), numbers.end(), [&] { return ReinterpretBits<float>(gen(random)); });
+    std::generate(numbers.begin(), numbers.end(), [&] { return ReinterpretBits<float>(gen(_random)); });
 
     RegisterBenchmarks("Random-bits", numbers);
 }
@@ -283,7 +283,7 @@ static inline void Register_Uniform(Float low, Float high)
     std::vector<Float> numbers(NumFloats);
 
     std::uniform_real_distribution<Float> gen(low, high);
-    std::generate(numbers.begin(), numbers.end(), [&] { return gen(random); });
+    std::generate(numbers.begin(), numbers.end(), [&] { return gen(_random); });
 
     RegisterBenchmarks(StrPrintf("Uniform %.1g/%.1g", low, high), numbers);
 }
@@ -325,7 +325,7 @@ static inline void Register_Digits_double(const char* name, int digits, int e10)
     std::uniform_int_distribution<int64_t> gen(kPow10_i64[digits - 1], kPow10_i64[digits] - 1);
 
     std::generate(numbers.begin(), numbers.end(), [&] {
-        int64_t n = gen(random);
+        int64_t n = gen(_random);
         if (n % 10 == 0)
             n += 1;
         std::string s;
@@ -369,7 +369,7 @@ static inline void Register_Digits_single(const char* name, int digits, int e10)
     std::uniform_int_distribution<int32_t> gen(kPow10_i32[digits - 1], kPow10_i32[digits] - 1);
 
     std::generate(numbers.begin(), numbers.end(), [&] {
-        int32_t n = gen(random);
+        int32_t n = gen(_random);
         if (n % 10 == 0)
             n += 1;
         std::string s;
@@ -401,7 +401,7 @@ static inline std::vector<double> GenRandomDigitData_double(int num_digits, int 
 
     for (int i = 0; i < count; ++i)
     {
-        const double d = gen(random);
+        const double d = gen(_random);
         const double rounded = ryu::Round10(d, -num_digits);
         result[i] = rounded;
     }
@@ -427,7 +427,7 @@ static inline std::vector<float> GenRandomDigitData_float(int digits, int count)
 
     for (int i = 0; i < count; ++i)
     {
-        const float d = gen(random);
+        const float d = gen(_random);
         const float rounded = ryu::Round10(d, -digits);
         result[i] = rounded;
     }
