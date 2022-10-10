@@ -141,7 +141,7 @@ public:
     uint32_t operator()() { return Gen(); }
 };
 
-static JenkinsRandom random;
+static JenkinsRandom _random;
 
 template <typename ...Args>
 static inline char const* StrPrintf(char const* format, Args&&... args)
@@ -164,10 +164,10 @@ static inline void RegisterUniform_double(char const* name, double min, double m
     std::generate(numbers.begin(), numbers.end(), [&] {
         char buf[128];
 
-        char* const end = ryu::Dtoa(buf, gen(random));
-        //char* const end = buf + std::snprintf(buf, 128, "%.17g", gen(random));
-        //char* const end = buf + std::snprintf(buf, 128, "%.19g", gen(random));
-        //char* const end = buf + std::snprintf(buf, 128, "%.20g", gen(random));
+        char* const end = ryu::Dtoa(buf, gen(_random));
+        //char* const end = buf + std::snprintf(buf, 128, "%.17g", gen(_random));
+        //char* const end = buf + std::snprintf(buf, 128, "%.19g", gen(_random));
+        //char* const end = buf + std::snprintf(buf, 128, "%.20g", gen(_random));
 
         return std::string(buf, end);
     });
